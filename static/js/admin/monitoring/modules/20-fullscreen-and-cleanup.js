@@ -6,6 +6,7 @@
         let fmSoundEnabled = true;
         let fmDataRefreshInterval = null;
         let fmPingIntervals = {};
+        let fmRefreshInFlight = false;
 
         function startFmRefreshLoop() {
             if (fmDataRefreshInterval) {
@@ -694,79 +695,86 @@
 
         // Refresh fullscreen monitor data
         async function refreshFmData() {
-            const examIds = Array.from(fmSelectedExams);
-            if (examIds.length === 0) {
-                fmStudentsData = {};
-                renderFmStudentGrid();
-                updateFmStats();
-                return;
-            }
+            if (fmRefreshInFlight) return;
+            fmRefreshInFlight = true;
 
-            const seenKeys = new Set();
-            const changedKeys = new Set();
-            let hasStructuralChange = false;
+            try {
+                const examIds = Array.from(fmSelectedExams);
+                if (examIds.length === 0) {
+                    fmStudentsData = {};
+                    renderFmStudentGrid();
+                    updateFmStats();
+                    return;
+                }
 
-            const responses = await Promise.all(
-                examIds.map(async (examId) => {
-                    try {
-                        const sessions = await api.getExamSessions(examId);
-                        return { examId, sessions };
-                    } catch (error) {
-                        console.error(`Failed to refresh exam ${examId}:`, error);
-                        return null;
-                    }
-                })
-            );
+                const seenKeys = new Set();
+                const changedKeys = new Set();
+                let hasStructuralChange = false;
 
-            responses
-                .filter(Boolean)
-                .forEach(({ examId, sessions }) => {
-                    const rows = Array.isArray(sessions?.sessions) ? sessions.sessions : [];
-                    rows.forEach((s) => {
-                        const studentKey = getMonitorStudentKey(examId, s.user_id);
-                        seenKeys.add(studentKey);
-                        const existing = fmStudentsData[studentKey];
-                        const existingOnline = existing?.is_online ?? existing?.isOnline;
-                        const merged = {
-                            ...s,
-                            examId: examId,
-                            examTitle: sessions?.exam_title,
-                            is_online: existingOnline !== undefined ? existingOnline : (s.is_online ?? false)
-                        };
+                const responses = await Promise.all(
+                    examIds.map(async (examId) => {
+                        try {
+                            const sessions = await api.getExamSessions(examId);
+                            return { examId, sessions };
+                        } catch (error) {
+                            console.error(`Failed to refresh exam ${examId}:`, error);
+                            return null;
+                        }
+                    })
+                );
 
-                        if (!existing) {
-                            hasStructuralChange = true;
+                responses
+                    .filter(Boolean)
+                    .forEach(({ examId, sessions }) => {
+                        const rows = Array.isArray(sessions?.sessions) ? sessions.sessions : [];
+                        rows.forEach((s) => {
+                            const studentKey = getMonitorStudentKey(examId, s.user_id);
+                            seenKeys.add(studentKey);
+                            const existing = fmStudentsData[studentKey];
+                            const existingOnline = existing?.is_online ?? existing?.isOnline;
+                            const merged = {
+                                ...s,
+                                examId: examId,
+                                examTitle: sessions?.exam_title,
+                                is_online: existingOnline !== undefined ? existingOnline : (s.is_online ?? false)
+                            };
+
+                            if (!existing) {
+                                hasStructuralChange = true;
+                                fmStudentsData[studentKey] = merged;
+                                return;
+                            }
+
                             fmStudentsData[studentKey] = merged;
-                            return;
-                        }
-
-                        fmStudentsData[studentKey] = merged;
-                        if (
-                            existing.progress !== merged.progress ||
-                            existing.violation_count !== merged.violation_count ||
-                            existing.status !== merged.status ||
-                            (existing.is_online ?? existing.isOnline) !== merged.is_online
-                        ) {
-                            changedKeys.add(studentKey);
-                        }
+                            if (
+                                existing.progress !== merged.progress ||
+                                existing.violation_count !== merged.violation_count ||
+                                existing.status !== merged.status ||
+                                (existing.is_online ?? existing.isOnline) !== merged.is_online
+                            ) {
+                                changedKeys.add(studentKey);
+                            }
+                        });
                     });
+
+                Object.keys(fmStudentsData).forEach((studentKey) => {
+                    const [rawExamId] = String(studentKey).split(':');
+                    const examId = Number(rawExamId);
+                    if (!fmSelectedExams.has(examId) || !seenKeys.has(studentKey)) {
+                        delete fmStudentsData[studentKey];
+                        hasStructuralChange = true;
+                    }
                 });
 
-            Object.keys(fmStudentsData).forEach((studentKey) => {
-                const [rawExamId] = String(studentKey).split(':');
-                const examId = Number(rawExamId);
-                if (!fmSelectedExams.has(examId) || !seenKeys.has(studentKey)) {
-                    delete fmStudentsData[studentKey];
-                    hasStructuralChange = true;
+                if (hasStructuralChange) {
+                    renderFmStudentGrid();
+                } else {
+                    changedKeys.forEach((studentKey) => updateFmStudentCard(studentKey));
                 }
-            });
-
-            if (hasStructuralChange) {
-                renderFmStudentGrid();
-            } else {
-                changedKeys.forEach((studentKey) => updateFmStudentCard(studentKey));
+                updateFmStats();
+            } finally {
+                fmRefreshInFlight = false;
             }
-            updateFmStats();
         }
 
         // Override renderSessions to add checkbox

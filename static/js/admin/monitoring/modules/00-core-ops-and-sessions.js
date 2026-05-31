@@ -30,6 +30,9 @@
         let opsAutoHealRunInFlight = false;
         let opsRestartInFlight = false;
         let opsAutoRestartDraftRows = [];
+        let opsSummaryInFlight = false;
+        let opsSummaryForceQueued = false;
+        let refreshDataInFlight = false;
 
         function applyRoleScopedVisibility() {
             const opsCardEl = document.getElementById('ops-summary-card');
@@ -593,6 +596,12 @@
         }
 
         async function loadOpsSummary(force = false) {
+            if (opsSummaryInFlight) {
+                opsSummaryForceQueued = opsSummaryForceQueued || !!force;
+                return;
+            }
+            opsSummaryInFlight = true;
+
             const cardEl = document.getElementById('ops-summary-card');
             const messageEl = document.getElementById('ops-summary-message');
             const autoRestartToggleBtn = document.getElementById('ops-toggle-auto-restart-btn');
@@ -630,6 +639,12 @@
                 }
                 if (cardEl) {
                     cardEl.style.borderColor = 'rgba(239, 68, 68, 0.35)';
+                }
+            } finally {
+                opsSummaryInFlight = false;
+                if (opsSummaryForceQueued) {
+                    opsSummaryForceQueued = false;
+                    loadOpsSummary(true);
                 }
             }
         }
@@ -1270,12 +1285,18 @@
         }
 
         async function refreshData() {
-            if (isTeacher) {
-                await loadActiveExams();
-                return;
+            if (refreshDataInFlight) return;
+            refreshDataInFlight = true;
+            try {
+                if (isTeacher) {
+                    await loadActiveExams();
+                    return;
+                }
+                await Promise.all([
+                    loadActiveExams(),
+                    loadOpsSummary()
+                ]);
+            } finally {
+                refreshDataInFlight = false;
             }
-            await Promise.all([
-                loadActiveExams(),
-                loadOpsSummary()
-            ]);
         }
