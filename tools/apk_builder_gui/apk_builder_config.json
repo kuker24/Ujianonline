@@ -1,0 +1,11 @@
+{
+  "app_name": "Ujian Online SEB",
+  "package_name": "com.school.examapp",
+  "server_url": "http://192.168.18.120:8000",
+  "enable_kiosk": true,
+  "block_screenshot": true,
+  "detect_root": true,
+  "block_task_switch": true,
+  "icon_path": "",
+  "flutter_project_path": "C:/Users/Administrator/Documents/UJIAN/Beta v2.2.1/ujian_online/flutter_client_code"
+}

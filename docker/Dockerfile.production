@@ -1,0 +1,78 @@
+# Dockerfile.production
+# Multi-stage build for Python FastAPI application with Code Protection
+
+FROM python:3.11-slim as base
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_DEFAULT_TIMEOUT=300
+
+WORKDIR /app
+
+# Install system dependencies (GCC required for Cython compilation)
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libpq-dev \
+    postgresql-client \
+    redis-tools \
+    curl \
+    gcc \
+    python3-dev \
+    # SECURITY HARDENING: Explicitly remove vulnerable packages if present
+    && apt-get remove -y --purge telnet inetutils-telnetd netcat-openbsd netcat-traditional \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements and install
+COPY requirements.txt .
+
+# Optimize pip settings for slow connections and split installation
+# 1. Upgrade pip first (enforce version with GHSA-6vgw-5pg2-w6jp fix)
+RUN pip install --no-cache-dir --upgrade "pip>=26.0.1"
+
+# 2. Install heavy dependencies individually (Step-by-step caching)
+#    Installing them one by one ensures that if one fails, we don't lose progress on others.
+RUN pip install --no-cache-dir --timeout 2000 --retries 20 "numpy>=1.24.0"
+RUN pip install --no-cache-dir --timeout 2000 --retries 20 "pandas>=2.0.0"
+RUN pip install --no-cache-dir --timeout 2000 --retries 20 "scipy>=1.11.0"
+RUN pip install --no-cache-dir --timeout 2000 --retries 20 "cryptography>=41.0.0"
+RUN pip install --no-cache-dir --timeout 2000 --retries 20 "SQLAlchemy>=2.0.0"
+
+# 3. Install remaining requirements
+#    Using a custom PyPI mirror (optional, commented out) or standard with high timeout
+RUN pip install --no-cache-dir --timeout 2000 --retries 20 -r requirements.txt && \
+    pip install Cython setuptools
+
+# Copy application code
+COPY . .
+
+# Create necessary directories for uploads, logs, and generated files
+RUN mkdir -p /app/uploads /app/logs /app/seb_configs \
+    /app/static/apk/builds /app/static/apk/uploads \
+    /app/static/seb/builds
+
+# Copy and configure entrypoint
+COPY docker/docker-entrypoint.sh /docker-entrypoint.sh
+COPY docker/healthcheck.py /app/healthcheck.py
+RUN chmod +x /docker-entrypoint.sh
+
+# Create non-root user for security
+RUN adduser --disabled-password --gecos '' appuser && \
+    chown -R appuser:appuser /app
+USER appuser
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+EXPOSE 8000
+
+# Set entrypoint for initialization
+ENTRYPOINT ["/docker-entrypoint.sh"]
+
+# Run with Uvicorn
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "8", "--limit-concurrency", "800", "--backlog", "4096", "--timeout-keep-alive", "15", "--limit-max-requests", "20000", "--no-access-log"]
