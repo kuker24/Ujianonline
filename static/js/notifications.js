@@ -18,6 +18,7 @@ class NotificationManager {
         this.pollingInterval = options.pollingInterval || 30000; // 30 seconds
         this.pollingTimer = null;
         this.isDropdownOpen = false;
+        this.isLoadingUnreadCount = false;
     }
 
     /**
@@ -33,8 +34,11 @@ class NotificationManager {
      * Start polling for new notifications
      */
     startPolling() {
+        this.stopPolling();
         this.pollingTimer = setInterval(() => {
-            this.loadUnreadCount();
+            if (!document.hidden) {
+                this.loadUnreadCount();
+            }
         }, this.pollingInterval);
     }
 
@@ -44,6 +48,7 @@ class NotificationManager {
     stopPolling() {
         if (this.pollingTimer) {
             clearInterval(this.pollingTimer);
+            this.pollingTimer = null;
         }
     }
 
@@ -51,6 +56,11 @@ class NotificationManager {
      * Load unread count
      */
     async loadUnreadCount() {
+        if (document.hidden || this.isLoadingUnreadCount) {
+            return this.unreadCount;
+        }
+        this.isLoadingUnreadCount = true;
+
         try {
             const response = await api.get('/notifications/unread-count');
             this.unreadCount = response.unread_count;
@@ -59,6 +69,8 @@ class NotificationManager {
         } catch (error) {
             console.error('Failed to load unread count:', error);
             return 0;
+        } finally {
+            this.isLoadingUnreadCount = false;
         }
     }
 
@@ -329,5 +341,3 @@ if (document.readyState === 'complete') {
         }
     });
 }
-
-

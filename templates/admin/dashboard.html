@@ -256,7 +256,12 @@
         }
 
         // Load dashboard data
+        let dashboardLoading = false;
+
         async function loadDashboard() {
+            if (dashboardLoading) return;
+            dashboardLoading = true;
+
             const user = auth.getUser();
             const isAdmin = user && (user.role === 'admin' || user.role === 'developer');
 
@@ -293,6 +298,8 @@
                 const message = typeof error === 'string' ? error :
                     (error.message || error.detail || 'Gagal memuat data dashboard');
                 showAlert(message, 'danger');
+            } finally {
+                dashboardLoading = false;
             }
         }
 
