@@ -4,6 +4,7 @@ import re
 
 EXAMS_SOURCE = Path("app/api/exams.py").read_text(encoding="utf-8")
 EXAM_ANSWER_SYNC_SOURCE = Path("app/api/exam_answer_sync.py").read_text(encoding="utf-8")
+EXAM_OFFLINE_PACKAGE_SOURCE = Path("app/api/exam_offline_package.py").read_text(encoding="utf-8")
 ANSWER_SYNC_SERVICE_SOURCE = Path("app/services/answer_sync_service.py").read_text(encoding="utf-8")
 SCHEMA_SOURCE = Path("app/schemas/answer.py").read_text(encoding="utf-8")
 
@@ -38,7 +39,7 @@ def test_sync_answer_journal_has_idempotency_ack_logic() -> None:
 
 
 def test_offline_package_endpoint_exists_and_signed() -> None:
-    fn = _extract_async_function(EXAMS_SOURCE, "get_offline_exam_package")
+    fn = _extract_async_function(EXAM_OFFLINE_PACKAGE_SOURCE, "get_offline_exam_package")
     assert "current_user: AuthenticatedUser = Depends(get_current_user_hot_path)" in fn
     assert "signature_algorithm" in fn
     assert "_sign_offline_package_payload" in fn
