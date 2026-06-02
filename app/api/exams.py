@@ -128,6 +128,7 @@ from app.core.feature_flags import require_feature_enabled
 from app.core.rate_limiter import RateLimiters, check_rate_limit
 from app.services.exam_service import ExamService
 from app.services.exam_submission_service import finalize_exam_session_submission
+from app.services.violation_event_service import enqueue_violation_event
 from app.tasks.answer_processor import drain_answer_queue, enqueue_answer_payload
 import json
 
@@ -5171,13 +5172,17 @@ def _ignored_violation_response(violation_count: int) -> ViolationResponse:
     )
 
 
-@router.post("/log-violation", response_model=ViolationResponse)
+@router.post("/log-violation", response_model=ViolationResponse, status_code=status.HTTP_202_ACCEPTED)
 async def log_violation(
     violation_data: ViolationLog,
     current_user: AuthenticatedUser = Depends(get_current_user_hot_path),
     db: AsyncSession = Depends(get_db)
 ):
     """Log a cheating violation."""
+    if settings.violation_async_enabled:
+        enqueue_result = await enqueue_violation_event(db, violation_data, current_user)
+        return enqueue_result.to_response()
+
     active_session_statuses = ("in_progress", "active", "paused")
     terminal_session_statuses = {"submitted", "completed", "abandoned", "terminated", "kicked"}
 

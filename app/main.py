@@ -86,6 +86,24 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("Telegram startup notification disabled by feature flag")
 
+    # Start async violation event drain loop (best-effort, non-critical path)
+    app.state.violation_event_task = None
+    app.state.violation_event_stop = None
+    try:
+        import asyncio
+        if settings.violation_async_enabled:
+            from app.services.violation_event_service import violation_event_drain_loop
+
+            app.state.violation_event_stop = asyncio.Event()
+            app.state.violation_event_task = asyncio.create_task(
+                violation_event_drain_loop(app.state.violation_event_stop)
+            )
+            logger.info("Async violation event drain loop scheduled")
+        else:
+            logger.info("Async violation event drain loop disabled by feature flag")
+    except Exception as violation_task_err:
+        logger.warning(f"Could not start violation event drain loop: {violation_task_err}")
+
     # Start background alerting system
     app.state.alerting_task = None
     app.state.alerting_lock_owner = False
@@ -119,6 +137,24 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("Shutting down application...")
+
+    # Stop async violation event drain loop
+    try:
+        violation_stop = getattr(app.state, "violation_event_stop", None)
+        violation_task = getattr(app.state, "violation_event_task", None)
+        if violation_stop:
+            violation_stop.set()
+        if violation_task and not violation_task.done():
+            violation_task.cancel()
+            try:
+                await violation_task
+            except asyncio.CancelledError:
+                pass
+            except Exception:
+                pass
+        logger.info("Violation event drain loop stopped")
+    except Exception:
+        logger.exception("Failed to stop violation event drain loop cleanly")
 
     # Stop alerting system
     try:
