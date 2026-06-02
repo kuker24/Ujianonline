@@ -15,7 +15,7 @@ import logging
 from app.config import settings
 from app.database import init_db
 from app.core.redis_pubsub import init_redis, close_redis
-from app.api import auth, users, exams, questions, websocket, stats, sxb, seb_autoconfig, runtime
+from app.api import auth, users, exams, exam_answer_sync, questions, websocket, stats, sxb, seb_autoconfig, runtime
 from app.api import grading, analytics, monitoring
 from app.api import exam_seb, exam_admin
 
@@ -314,6 +314,7 @@ jinja_templates = Jinja2Templates(directory="templates")
 # Include routers
 app.include_router(exams.public_router)
 app.include_router(exams.router)
+app.include_router(exam_answer_sync.router)
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(questions.router)

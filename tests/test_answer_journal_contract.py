@@ -3,6 +3,8 @@ import re
 
 
 EXAMS_SOURCE = Path("app/api/exams.py").read_text(encoding="utf-8")
+EXAM_ANSWER_SYNC_SOURCE = Path("app/api/exam_answer_sync.py").read_text(encoding="utf-8")
+ANSWER_SYNC_SERVICE_SOURCE = Path("app/services/answer_sync_service.py").read_text(encoding="utf-8")
 SCHEMA_SOURCE = Path("app/schemas/answer.py").read_text(encoding="utf-8")
 
 
@@ -23,17 +25,16 @@ def test_answer_journal_schema_exists() -> None:
 
 
 def test_sync_answer_journal_uses_hot_path_auth_dependency() -> None:
-    fn = _extract_async_function(EXAMS_SOURCE, "sync_answer_journal")
+    fn = _extract_async_function(EXAM_ANSWER_SYNC_SOURCE, "sync_answer_journal")
     assert "current_user: AuthenticatedUser = Depends(get_current_user_hot_path)" in fn
     assert "get_db" in fn
 
 
 def test_sync_answer_journal_has_idempotency_ack_logic() -> None:
-    fn = _extract_async_function(EXAMS_SOURCE, "sync_answer_journal")
-    assert "already_acked" in fn
-    assert "duplicate_in_payload" in fn
-    assert "await redis.sadd" in fn
-    assert "AnswerJournalAck" in fn
+    assert "already_acked" in ANSWER_SYNC_SERVICE_SOURCE
+    assert "duplicate_in_payload" in ANSWER_SYNC_SERVICE_SOURCE
+    assert "await redis.sadd" in ANSWER_SYNC_SERVICE_SOURCE
+    assert "AnswerJournalAck" in ANSWER_SYNC_SERVICE_SOURCE
 
 
 def test_offline_package_endpoint_exists_and_signed() -> None:

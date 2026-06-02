@@ -3,6 +3,7 @@ import re
 
 
 EXAMS_SOURCE = Path("app/api/exams.py").read_text(encoding="utf-8")
+EXAM_ANSWER_SYNC_SOURCE = Path("app/api/exam_answer_sync.py").read_text(encoding="utf-8")
 SECURITY_SOURCE = Path("app/core/security.py").read_text(encoding="utf-8")
 AUTH_SOURCE = Path("app/api/auth.py").read_text(encoding="utf-8")
 WEBSOCKET_SOURCE = Path("app/api/websocket.py").read_text(encoding="utf-8")
@@ -44,17 +45,17 @@ def test_remaining_time_uses_hot_path_auth_dependency() -> None:
 
 
 def test_auto_save_batch_uses_hot_path_auth_dependency() -> None:
-    fn = _extract_async_function(EXAMS_SOURCE, "auto_save_batch")
+    fn = _extract_async_function(EXAM_ANSWER_SYNC_SOURCE, "auto_save_batch")
     assert "current_user: AuthenticatedUser = Depends(get_current_user_hot_path)" in fn
 
 
 def test_auto_save_uses_hot_path_auth_dependency() -> None:
-    fn = _extract_async_function(EXAMS_SOURCE, "auto_save_answers")
+    fn = _extract_async_function(EXAM_ANSWER_SYNC_SOURCE, "auto_save_answers")
     assert "current_user: AuthenticatedUser = Depends(get_current_user_hot_path)" in fn
 
 
 def test_get_session_answers_uses_hot_path_auth_dependency() -> None:
-    fn = _extract_async_function(EXAMS_SOURCE, "get_session_answers")
+    fn = _extract_async_function(EXAM_ANSWER_SYNC_SOURCE, "get_session_answers")
     assert "current_user: AuthenticatedUser = Depends(get_current_user_hot_path)" in fn
 
 

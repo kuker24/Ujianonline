@@ -3,13 +3,14 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.api import exams
+from app.api import exam_answer_sync
 from app.schemas.answer import (
     AnswerJournalSyncRequest,
     AnswerJournalSyncResponse,
     AutoSaveRequest,
     AutoSaveResponse,
 )
+from app.schemas.answer_sync import BatchAnswerItem, BatchAutoSaveRequest
 
 
 class _FakeAnswerSyncService:
@@ -49,9 +50,9 @@ class _FakeAnswerSyncService:
 @pytest.mark.asyncio
 async def test_legacy_autosave_endpoint_routes_to_answer_sync_service(monkeypatch) -> None:
     fake_service = _FakeAnswerSyncService()
-    monkeypatch.setattr(exams, "get_answer_sync_service", lambda db, user: fake_service)
+    monkeypatch.setattr(exam_answer_sync, "get_answer_sync_service", lambda db, user: fake_service)
 
-    response = await exams.auto_save_answers(
+    response = await exam_answer_sync.auto_save_answers(
         AutoSaveRequest(
             session_id=123,
             answers={1: "A"},
@@ -69,12 +70,12 @@ async def test_legacy_autosave_endpoint_routes_to_answer_sync_service(monkeypatc
 @pytest.mark.asyncio
 async def test_batch_autosave_endpoint_routes_to_answer_sync_service(monkeypatch) -> None:
     fake_service = _FakeAnswerSyncService()
-    monkeypatch.setattr(exams, "get_answer_sync_service", lambda db, user: fake_service)
+    monkeypatch.setattr(exam_answer_sync, "get_answer_sync_service", lambda db, user: fake_service)
 
-    response = await exams.auto_save_batch(
-        exams.BatchAutoSaveRequest(
+    response = await exam_answer_sync.auto_save_batch(
+        BatchAutoSaveRequest(
             session_id=123,
-            answers=[exams.BatchAnswerItem(question_id=1, selected_option_id=2)],
+            answers=[BatchAnswerItem(question_id=1, selected_option_id=2)],
         ),
         request=None,
         current_user=SimpleNamespace(id=7),
@@ -88,9 +89,9 @@ async def test_batch_autosave_endpoint_routes_to_answer_sync_service(monkeypatch
 @pytest.mark.asyncio
 async def test_answer_journal_endpoint_routes_to_answer_sync_service(monkeypatch) -> None:
     fake_service = _FakeAnswerSyncService()
-    monkeypatch.setattr(exams, "get_answer_sync_service", lambda db, user: fake_service)
+    monkeypatch.setattr(exam_answer_sync, "get_answer_sync_service", lambda db, user: fake_service)
 
-    response = await exams.sync_answer_journal(
+    response = await exam_answer_sync.sync_answer_journal(
         AnswerJournalSyncRequest(session_id=123, events=[]),
         current_user=SimpleNamespace(id=7),
         db=None,
