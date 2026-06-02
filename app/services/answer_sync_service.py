@@ -47,7 +47,7 @@ from app.core.redis_pubsub import (
 from app.middleware.seb_validation import validate_seb_headers
 from app.services.answer_runtime_buffer import (
     AnswerRuntimeBufferService,
-    is_runtime_answer_buffer_enabled,
+    is_runtime_answer_buffer_enabled_for_session,
 )
 from app.models.question import Question
 from app.models.session import Answer, ExamSession
@@ -256,7 +256,11 @@ class AnswerSyncService:
                         str(queue_exc),
                     )
 
-            if mode == "hybrid" and is_runtime_answer_buffer_enabled():
+            if mode == "hybrid" and is_runtime_answer_buffer_enabled_for_session(
+                session_id=session_id,
+                user_id=int(self.current_user.id),
+                exam_id=exam_id,
+            ):
                 await AnswerRuntimeBufferService(self.db, self.current_user).accept_single_answer(
                     session=locked_session,
                     answer_data=answer_data,
@@ -593,9 +597,6 @@ class AnswerSyncService:
 
     async def accept_batch(self, batch_data: Any) -> Dict[str, Any]:
         """Persist batch autosave in direct DB mode with no-op update skip."""
-        if is_runtime_answer_buffer_enabled():
-            return await AnswerRuntimeBufferService(self.db, self.current_user).accept_batch(batch_data)
-
         result = await self.db.execute(
             select(ExamSession).where(
                 ExamSession.id == batch_data.session_id,
@@ -606,6 +607,13 @@ class AnswerSyncService:
         session = result.scalar_one_or_none()
         if not session:
             raise HTTPException(status_code=404, detail="Sesi ujian tidak ditemukan atau sudah berakhir")
+
+        if is_runtime_answer_buffer_enabled_for_session(
+            session_id=int(session.id),
+            user_id=int(self.current_user.id),
+            exam_id=int(session.exam_id),
+        ):
+            return await AnswerRuntimeBufferService(self.db, self.current_user).accept_batch(batch_data)
 
         if not batch_data.answers:
             return {
@@ -863,7 +871,11 @@ class AnswerSyncService:
                 server_time=datetime.now(timezone.utc),
             )
 
-        if is_runtime_answer_buffer_enabled():
+        if is_runtime_answer_buffer_enabled_for_session(
+            session_id=session_id_value,
+            user_id=int(self.current_user.id),
+            exam_id=int(session.exam_id),
+        ):
             buffered_count = await AnswerRuntimeBufferService(
                 self.db,
                 self.current_user,

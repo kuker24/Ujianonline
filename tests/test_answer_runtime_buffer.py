@@ -1,10 +1,8 @@
 from datetime import datetime, timezone
-from types import SimpleNamespace
 
 import pytest
 
 from app.services import answer_runtime_buffer as buffer
-from app.services import answer_sync_service
 
 
 def test_runtime_answer_buffer_keys_match_phase6_spec() -> None:
@@ -19,38 +17,94 @@ def test_runtime_answer_buffer_disabled_by_default() -> None:
     assert buffer.is_runtime_answer_buffer_enabled() is False
 
 
-class _FakeRuntimeBufferService:
-    def __init__(self, db, current_user):
-        self.db = db
-        self.current_user = current_user
-
-    async def accept_batch(self, batch_data):
-        return {
-            "status": "buffered",
-            "queued_count": len(batch_data.answers),
-            "queue_id": "redis-test",
-            "timestamp": datetime.now(timezone.utc),
-        }
-
-    async def accept_journal_events(self, sync_data, accepted_events):
-        return len(accepted_events)
+def _enable_queue(monkeypatch, *, mode="hybrid", enabled=True, percentage=10) -> None:
+    monkeypatch.setattr(buffer.settings, "answer_write_mode", mode)
+    monkeypatch.setattr(buffer.settings, "answer_queue_enabled", enabled)
+    monkeypatch.setattr(buffer.settings, "answer_queue_percentage", percentage)
 
 
-@pytest.mark.asyncio
-async def test_answer_sync_service_routes_batch_to_runtime_buffer_when_enabled(monkeypatch) -> None:
-    monkeypatch.setattr(answer_sync_service, "is_runtime_answer_buffer_enabled", lambda: True)
-    monkeypatch.setattr(answer_sync_service, "AnswerRuntimeBufferService", _FakeRuntimeBufferService)
+def test_runtime_answer_buffer_percentage_zero_disables_all_sessions(monkeypatch) -> None:
+    _enable_queue(monkeypatch, percentage=0)
 
-    service = answer_sync_service.AnswerSyncService(db=None, current_user=SimpleNamespace(id=7))
-    batch_data = SimpleNamespace(
-        session_id=123,
-        answers=[SimpleNamespace(question_id=1)],
-    )
+    assert buffer.is_runtime_answer_buffer_enabled() is False
+    assert buffer.is_runtime_answer_buffer_enabled_for_session(123, user_id=7, exam_id=55) is False
 
-    result = await service.accept_batch(batch_data)
 
-    assert result["status"] == "buffered"
-    assert result["queued_count"] == 1
+def test_runtime_answer_buffer_percentage_hundred_enables_all_eligible_sessions(monkeypatch) -> None:
+    _enable_queue(monkeypatch, percentage=100)
+
+    assert buffer.is_runtime_answer_buffer_enabled() is True
+    assert buffer.is_runtime_answer_buffer_enabled_for_session(123, user_id=7, exam_id=55) is True
+    assert buffer.is_runtime_answer_buffer_enabled_for_session(999, user_id=77, exam_id=88) is True
+
+
+def test_runtime_answer_buffer_percentage_ten_is_deterministic_subset(monkeypatch) -> None:
+    _enable_queue(monkeypatch, percentage=10)
+
+    eligible = [
+        session_id
+        for session_id in range(1, 1001)
+        if buffer.is_runtime_answer_buffer_enabled_for_session(
+            session_id,
+            user_id=7,
+            exam_id=55,
+        )
+    ]
+
+    assert 50 <= len(eligible) <= 150
+    assert len(eligible) < 1000
+
+
+def test_runtime_answer_buffer_same_session_is_sticky(monkeypatch) -> None:
+    _enable_queue(monkeypatch, percentage=10)
+
+    decisions = [
+        buffer.is_runtime_answer_buffer_enabled_for_session(123, user_id=7, exam_id=55)
+        for _ in range(20)
+    ]
+
+    assert len(set(decisions)) == 1
+
+
+def test_runtime_answer_buffer_different_sessions_distribute_to_different_buckets(monkeypatch) -> None:
+    _enable_queue(monkeypatch, percentage=10)
+
+    buckets = {
+        buffer._stable_answer_buffer_bucket(
+            buffer._answer_buffer_seed(session_id=session_id, user_id=7, exam_id=55)
+        )
+        for session_id in range(1, 50)
+    }
+
+    assert len(buckets) > 20
+
+
+def test_runtime_answer_buffer_disabled_when_queue_flag_false(monkeypatch) -> None:
+    _enable_queue(monkeypatch, enabled=False, percentage=100)
+
+    assert buffer.is_runtime_answer_buffer_enabled() is False
+    assert buffer.is_runtime_answer_buffer_enabled_for_session(123, user_id=7, exam_id=55) is False
+
+
+def test_runtime_answer_buffer_disabled_when_write_mode_direct(monkeypatch) -> None:
+    _enable_queue(monkeypatch, mode="direct", percentage=100)
+
+    assert buffer.is_runtime_answer_buffer_enabled() is False
+    assert buffer.is_runtime_answer_buffer_enabled_for_session(123, user_id=7, exam_id=55) is False
+
+
+def test_runtime_answer_buffer_invalid_and_out_of_range_percentage_clamped(monkeypatch) -> None:
+    _enable_queue(monkeypatch, percentage="invalid")
+    assert buffer._answer_queue_percentage() == 0
+    assert buffer.is_runtime_answer_buffer_enabled_for_session(123, user_id=7, exam_id=55) is False
+
+    _enable_queue(monkeypatch, percentage=-5)
+    assert buffer._answer_queue_percentage() == 0
+    assert buffer.is_runtime_answer_buffer_enabled_for_session(123, user_id=7, exam_id=55) is False
+
+    _enable_queue(monkeypatch, percentage=150)
+    assert buffer._answer_queue_percentage() == 100
+    assert buffer.is_runtime_answer_buffer_enabled_for_session(123, user_id=7, exam_id=55) is True
 
 
 class _BufferPipeline:

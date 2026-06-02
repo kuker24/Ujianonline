@@ -8,6 +8,7 @@ background drainer flush batches into PostgreSQL.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 from datetime import datetime, timezone
@@ -69,9 +70,64 @@ def _json_loads(raw: Any) -> Dict[str, Any]:
     return dict(decoded) if isinstance(decoded, dict) else {}
 
 
+def _answer_write_mode() -> str:
+    mode = str(getattr(settings, "answer_write_mode", "direct") or "direct").strip().lower()
+    return mode if mode in {"queue", "hybrid"} else "direct"
+
+
+def _answer_queue_percentage() -> int:
+    try:
+        percentage = int(getattr(settings, "answer_queue_percentage", 0) or 0)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, min(100, percentage))
+
+
 def is_runtime_answer_buffer_enabled() -> bool:
-    mode = str(getattr(settings, "answer_write_mode", "direct") or "direct").lower()
-    return bool(settings.answer_queue_enabled and mode in {"queue", "hybrid"})
+    """Return whether runtime buffering is globally available.
+
+    This is a capability check only. New per-session routing must use
+    is_runtime_answer_buffer_enabled_for_session() so percentage canaries are
+    deterministic and sticky per session.
+    """
+    return bool(
+        getattr(settings, "answer_queue_enabled", False)
+        and _answer_write_mode() in {"queue", "hybrid"}
+        and _answer_queue_percentage() > 0
+    )
+
+
+def _answer_buffer_seed(
+    *,
+    session_id: int,
+    user_id: int | None = None,
+    exam_id: int | None = None,
+) -> str:
+    if exam_id is not None and user_id is not None:
+        return f"{int(exam_id)}:{int(session_id)}:{int(user_id)}"
+    return str(int(session_id))
+
+
+def _stable_answer_buffer_bucket(seed: str) -> int:
+    digest = hashlib.sha256(seed.encode("utf-8")).hexdigest()
+    return int(digest[:8], 16) % 100
+
+
+def is_runtime_answer_buffer_enabled_for_session(
+    session_id: int,
+    user_id: int | None = None,
+    exam_id: int | None = None,
+) -> bool:
+    """Deterministically choose whether a session enters runtime buffering."""
+    if not is_runtime_answer_buffer_enabled():
+        return False
+
+    percentage = _answer_queue_percentage()
+    if percentage >= 100:
+        return True
+
+    seed = _answer_buffer_seed(session_id=session_id, user_id=user_id, exam_id=exam_id)
+    return _stable_answer_buffer_bucket(seed) < percentage
 
 
 async def _acquire_session_write_lock(db: AsyncSession, session_id: int) -> None:

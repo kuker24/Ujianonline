@@ -7,6 +7,7 @@ from fastapi import HTTPException
 
 from app.api import exam_answer_sync, exams
 from app.schemas.answer import (
+    AnswerJournalEvent,
     AnswerJournalSyncRequest,
     AnswerJournalSyncResponse,
     AnswerResponse,
@@ -145,6 +146,17 @@ class _ScalarResult:
     def scalar_one_or_none(self):
         return self._value
 
+    def scalars(self):
+        return SimpleNamespace(all=lambda: [self._value] if self._value is not None else [])
+
+
+class _RowsResult:
+    def __init__(self, rows):
+        self._rows = list(rows)
+
+    def all(self):
+        return self._rows
+
 
 class _FakeSingleAnswerDb:
     def __init__(self, results=None, exc=None):
@@ -206,7 +218,7 @@ def _patch_single_answer_common(monkeypatch, *, status="in_progress"):
     )
     monkeypatch.setattr(answer_sync_service, "should_publish_progress_update", lambda _session_id: False)
     monkeypatch.setattr(answer_sync_service, "_answer_write_mode", lambda: "direct")
-    monkeypatch.setattr(answer_sync_service, "is_runtime_answer_buffer_enabled", lambda: False)
+    monkeypatch.setattr(answer_sync_service, "is_runtime_answer_buffer_enabled_for_session", lambda **_kwargs: False)
     return status
 
 
@@ -333,7 +345,7 @@ async def test_single_answer_hybrid_buffer_path_does_not_call_direct_write(monke
         raise AssertionError("direct write should not run in hybrid buffer mode")
 
     monkeypatch.setattr(answer_sync_service, "_answer_write_mode", lambda: "hybrid")
-    monkeypatch.setattr(answer_sync_service, "is_runtime_answer_buffer_enabled", lambda: True)
+    monkeypatch.setattr(answer_sync_service, "is_runtime_answer_buffer_enabled_for_session", lambda **_kwargs: True)
     monkeypatch.setattr(answer_sync_service, "AnswerRuntimeBufferService", _FakeRuntimeBuffer)
     monkeypatch.setattr(answer_sync_service.AnswerSyncService, "_write_single_answer_direct", fail_direct)
     monkeypatch.setattr(answer_sync_service, "add_answered_questions_and_count", lambda *_args, **_kwargs: None)
@@ -359,3 +371,214 @@ async def test_single_answer_hybrid_buffer_path_does_not_call_direct_write(monke
 
     assert response.status == "saved"
     assert called["buffer"]["session"] is locked_session
+
+
+@pytest.mark.asyncio
+async def test_single_answer_hybrid_percentage_false_falls_back_to_direct_write(monkeypatch) -> None:
+    _patch_single_answer_common(monkeypatch)
+    wrote = {}
+
+    class _UnexpectedRuntimeBuffer:
+        def __init__(self, *_args, **_kwargs):
+            raise AssertionError("runtime buffer should not initialize when session is not selected")
+
+    async def fake_write(self, *, session_id, question_id, write_fields):
+        wrote["session_id"] = session_id
+        wrote["question_id"] = question_id
+
+    async def fake_update_session_answers(_session_id, _answers):
+        return None
+
+    monkeypatch.setattr(answer_sync_service, "_answer_write_mode", lambda: "hybrid")
+    monkeypatch.setattr(answer_sync_service, "is_runtime_answer_buffer_enabled_for_session", lambda **_kwargs: False)
+    monkeypatch.setattr(answer_sync_service, "AnswerRuntimeBufferService", _UnexpectedRuntimeBuffer)
+    monkeypatch.setattr(answer_sync_service.AnswerSyncService, "_write_single_answer_direct", fake_write)
+    monkeypatch.setattr(answer_sync_service, "update_session_answers", fake_update_session_answers)
+    monkeypatch.setattr(answer_sync_service, "add_answered_questions_and_count", lambda *_args, **_kwargs: None)
+
+    locked_session = SimpleNamespace(id=123, exam_id=55, status="in_progress")
+    db = _FakeSingleAnswerDb(
+        results=[
+            _FirstResult((123, 55, "in_progress")),
+            _ScalarResult(None),
+            _ScalarResult(locked_session),
+        ]
+    )
+
+    response = await _single_answer_service(db).accept_single_answer(
+        AnswerSubmit(session_id=123, question_id=9, selected_option_id=2),
+        request=None,
+    )
+
+    assert response.status == "saved"
+    assert wrote == {"session_id": 123, "question_id": 9}
+
+
+class _FakeRuntimeBufferService:
+    def __init__(self, db, current_user):
+        self.db = db
+        self.current_user = current_user
+
+    async def accept_batch(self, batch_data):
+        return {
+            "status": "buffered",
+            "queued_count": len(batch_data.answers),
+            "queue_id": "redis-test",
+            "timestamp": datetime.now(timezone.utc),
+        }
+
+    async def accept_journal_events(self, sync_data, accepted_events):
+        return len(accepted_events)
+
+
+class _FakeRedis:
+    def pipeline(self):
+        return self
+
+    def sismember(self, *_args, **_kwargs):
+        return self
+
+    async def execute(self):
+        return [False]
+
+    async def sadd(self, *_args, **_kwargs):
+        return 1
+
+    async def expire(self, *_args, **_kwargs):
+        return True
+
+
+@pytest.mark.asyncio
+async def test_batch_autosave_hybrid_percentage_true_routes_to_runtime_buffer(monkeypatch) -> None:
+    called = {}
+
+    class _RuntimeBuffer(_FakeRuntimeBufferService):
+        async def accept_batch(self, batch_data):
+            called["batch"] = batch_data.session_id
+            return await super().accept_batch(batch_data)
+
+    monkeypatch.setattr(answer_sync_service, "is_runtime_answer_buffer_enabled_for_session", lambda **_kwargs: True)
+    monkeypatch.setattr(answer_sync_service, "AnswerRuntimeBufferService", _RuntimeBuffer)
+
+    db = _FakeSingleAnswerDb(results=[_ScalarResult(SimpleNamespace(id=123, exam_id=55))])
+    service = _single_answer_service(db)
+    batch_data = BatchAutoSaveRequest(
+        session_id=123,
+        answers=[BatchAnswerItem(question_id=1, selected_option_id=2)],
+    )
+
+    result = await service.accept_batch(batch_data)
+
+    assert result["status"] == "buffered"
+    assert called["batch"] == 123
+    assert db.execute_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_batch_autosave_hybrid_percentage_false_uses_direct_empty_path(monkeypatch) -> None:
+    class _UnexpectedRuntimeBuffer:
+        def __init__(self, *_args, **_kwargs):
+            raise AssertionError("runtime buffer should not initialize when session is not selected")
+
+    monkeypatch.setattr(answer_sync_service, "is_runtime_answer_buffer_enabled_for_session", lambda **_kwargs: False)
+    monkeypatch.setattr(answer_sync_service, "AnswerRuntimeBufferService", _UnexpectedRuntimeBuffer)
+
+    db = _FakeSingleAnswerDb(results=[_ScalarResult(SimpleNamespace(id=123, exam_id=55))])
+    service = _single_answer_service(db)
+    batch_data = BatchAutoSaveRequest(session_id=123, answers=[])
+
+    result = await service.accept_batch(batch_data)
+
+    assert result["status"] == "no_changes"
+    assert result["queued_count"] == 0
+
+
+def _journal_request() -> AnswerJournalSyncRequest:
+    return AnswerJournalSyncRequest(
+        session_id=123,
+        events=[
+            AnswerJournalEvent(
+                event_id="event000001",
+                sequence=1,
+                question_id=1,
+                local_timestamp_ms=1000,
+                selected_option_id=2,
+            )
+        ],
+    )
+
+
+@pytest.mark.asyncio
+async def test_answer_journal_hybrid_percentage_true_routes_to_runtime_buffer(monkeypatch) -> None:
+    called = {}
+
+    class _RuntimeBuffer(_FakeRuntimeBufferService):
+        async def accept_journal_events(self, sync_data, accepted_events):
+            called["journal"] = (sync_data.session_id, len(accepted_events))
+            return await super().accept_journal_events(sync_data, accepted_events)
+
+    async def fake_get_redis():
+        return _FakeRedis()
+
+    monkeypatch.setattr(answer_sync_service, "get_redis", fake_get_redis)
+    monkeypatch.setattr(answer_sync_service, "is_runtime_answer_buffer_enabled_for_session", lambda **_kwargs: True)
+    monkeypatch.setattr(answer_sync_service, "AnswerRuntimeBufferService", _RuntimeBuffer)
+
+    db = _FakeSingleAnswerDb(
+        results=[
+            _ScalarResult(SimpleNamespace(id=123, exam_id=55)),
+            _RowsResult([(1,)]),
+        ]
+    )
+    response = await _single_answer_service(db).accept_journal_events(_journal_request())
+
+    assert response.status == "ok"
+    assert response.applied_question_count == 1
+    assert called["journal"] == (123, 1)
+
+
+@pytest.mark.asyncio
+async def test_answer_journal_hybrid_percentage_false_uses_direct_path(monkeypatch) -> None:
+    class _UnexpectedRuntimeBuffer:
+        def __init__(self, *_args, **_kwargs):
+            raise AssertionError("runtime buffer should not initialize when session is not selected")
+
+    async def fake_get_redis():
+        return _FakeRedis()
+
+    async def fake_lock(_db, _session_id):
+        return None
+
+    async def fake_ensure(_db, *, session_id, user_id, lock_row=False):
+        return SimpleNamespace(id=session_id, user_id=user_id, exam_id=55, status="in_progress")
+
+    async def fake_update_session_answers(_session_id, _answers):
+        return None
+
+    async def fake_update_runtime_count(self, session_id, question_ids, log_prefix):
+        return len(question_ids)
+
+    monkeypatch.setattr(answer_sync_service, "get_redis", fake_get_redis)
+    monkeypatch.setattr(answer_sync_service, "is_runtime_answer_buffer_enabled_for_session", lambda **_kwargs: False)
+    monkeypatch.setattr(answer_sync_service, "AnswerRuntimeBufferService", _UnexpectedRuntimeBuffer)
+    monkeypatch.setattr(answer_sync_service, "_acquire_session_write_lock", fake_lock)
+    monkeypatch.setattr(answer_sync_service, "_ensure_session_in_progress_for_user", fake_ensure)
+    monkeypatch.setattr(answer_sync_service, "update_session_answers", fake_update_session_answers)
+    async def fake_load_existing_answers(*_args, **_kwargs):
+        return {}
+
+    monkeypatch.setattr(answer_sync_service.AnswerSyncService, "_load_existing_answers", fake_load_existing_answers)
+    monkeypatch.setattr(answer_sync_service.AnswerSyncService, "_update_runtime_answered_count", fake_update_runtime_count)
+
+    db = _FakeSingleAnswerDb(
+        results=[
+            _ScalarResult(SimpleNamespace(id=123, exam_id=55)),
+            _RowsResult([(1,)]),
+        ]
+    )
+    response = await _single_answer_service(db).accept_journal_events(_journal_request())
+
+    assert response.status == "ok"
+    assert response.accepted == 1
+    assert response.applied_question_count == 1
+    assert db.commits == 1

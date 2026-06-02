@@ -478,7 +478,7 @@ Makna operasional:
 
 ### 12.2 Staged rollout runtime answer buffer
 
-Runtime answer buffer tidak boleh langsung 100% di production tanpa pembuktian final submit flush.
+Runtime answer buffer tidak boleh langsung 100% di production tanpa pembuktian final submit flush. `ANSWER_QUEUE_PERCENTAGE` bersifat deterministik per session: session yang sama akan sticky ke jalur direct atau buffer selama nilai env tidak berubah. Gunakan canary bertahap 10% → 50% → 100% setelah test dan monitoring stabil.
 
 #### Stage 0 — direct mode only
 
@@ -491,6 +491,7 @@ ANSWER_QUEUE_PERCENTAGE=0
 Tujuan:
 
 - Baseline production aman.
+- Tidak ada session yang masuk runtime buffer karena percentage 0%.
 - Semua single answer, autosave, journal, dan final submit tetap kompatibel dengan behavior existing.
 
 #### Stage 1 — hybrid canary 10%
@@ -504,6 +505,7 @@ ANSWER_QUEUE_PERCENTAGE=10
 Syarat:
 
 - Jalankan di staging lebih dulu.
+- Hanya deterministic subset sekitar 10% session yang masuk runtime buffer.
 - Verifikasi final submit selalu flush runtime buffer sebelum grading.
 - Pantau error 503 submit dan ukuran pending Redis.
 
@@ -518,6 +520,7 @@ ANSWER_QUEUE_PERCENTAGE=50
 Syarat:
 
 - Stage 1 stabil.
+- Deterministic subset sekitar 50% session masuk runtime buffer.
 - Tidak ada penurunan answered_count/dashboard.
 - Tidak ada kehilangan jawaban pada refresh/final submit.
 
@@ -531,6 +534,7 @@ ANSWER_QUEUE_PERCENTAGE=100
 
 Syarat keras:
 
+- Semua eligible session masuk runtime buffer.
 - Load test sudah melewati target concurrency production.
 - Final submit flush terbukti aman.
 - Redis, DB, worker drain, dan observability sudah stabil.
