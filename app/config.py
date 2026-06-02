@@ -87,6 +87,29 @@ class Settings(BaseSettings):
     seb_challenge_enabled: bool = True  # Enable challenge-response anti-spoofing
     seb_challenge_redis_prefix: str = "seb:challenge:"  # Redis key prefix for challenges
 
+    # Mobile-first simplification feature flags
+    mobile_apk_primary: bool = os.getenv("MOBILE_APK_PRIMARY", "true").lower() == "true"
+    seb_desktop_legacy_enabled: bool = (
+        os.getenv("SEB_DESKTOP_LEGACY_ENABLED", "false").lower() == "true"
+    )
+    seb_qr_enabled: bool = os.getenv("SEB_QR_ENABLED", "false").lower() == "true"
+    seb_debug_endpoints_enabled: bool = (
+        os.getenv("SEB_DEBUG_ENDPOINTS_ENABLED", "false").lower() == "true"
+    )
+    apk_build_endpoint_enabled: bool = (
+        os.getenv("APK_BUILD_ENDPOINT_ENABLED", "false").lower() == "true"
+    )
+    telegram_alerting_enabled: bool = (
+        os.getenv("TELEGRAM_ALERTING_ENABLED", "false").lower() == "true"
+    )
+    heavy_export_enabled: bool = os.getenv("HEAVY_EXPORT_ENABLED", "true").lower() == "true"
+    exam_peak_mode: bool = os.getenv("EXAM_PEAK_MODE", "false").lower() == "true"
+    admin_monitoring_detail_level: str = os.getenv(
+        "ADMIN_MONITORING_DETAIL_LEVEL",
+        "summary",
+    ).lower()
+    violation_async_enabled: bool = os.getenv("VIOLATION_ASYNC_ENABLED", "true").lower() == "true"
+
     @property
     def sxb_master_key(self) -> str:
         """Alias for seb_default_config_key to ensure synchronization."""
@@ -167,6 +190,16 @@ class Settings(BaseSettings):
         return [chat_id.strip() for chat_id in self.telegram_chat_ids.split(",")]
 
     @property
+    def telegram_alerting_active(self) -> bool:
+        """Return True only when legacy Telegram config and mobile-first flag both allow it."""
+        return bool(self.telegram_enabled and self.telegram_alerting_enabled)
+
+    @property
+    def heavy_exports_active(self) -> bool:
+        """Return True when expensive exports are allowed for the current runtime mode."""
+        return bool(self.heavy_export_enabled and not self.exam_peak_mode)
+
+    @property
     def cors_origins_list(self) -> List[str]:
         """Parse CORS origins as list."""
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
@@ -183,6 +216,13 @@ class Settings(BaseSettings):
         if jwt_algorithm.startswith("ES"):
             raise ValueError(
                 "JWT_ALGORITHM berbasis ECDSA (ES*) dinonaktifkan karena risiko timing attack pada dependensi ecdsa."
+            )
+
+        allowed_monitoring_detail_levels = {"summary", "standard", "detail"}
+        if self.admin_monitoring_detail_level not in allowed_monitoring_detail_levels:
+            raise ValueError(
+                "ADMIN_MONITORING_DETAIL_LEVEL harus salah satu dari: "
+                "summary, standard, detail."
             )
 
         # Enforce secure keys in production - prevent deployment with defaults.

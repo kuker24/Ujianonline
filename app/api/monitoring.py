@@ -14,6 +14,8 @@ from sqlalchemy import case, func, select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
+from app.core.feature_flags import require_feature_enabled
 from app.database import get_db_read, get_db_write
 from app.models.user import User
 from app.models.exam import Exam
@@ -399,6 +401,12 @@ async def export_violations_dashboard(
     current_user: User = Depends(get_current_teacher),
     db: AsyncSession = Depends(get_db_read),
 ):
+    require_feature_enabled(
+        settings.heavy_exports_active,
+        "heavy_export",
+        status_code=503,
+        message="Ekspor berat sedang dinonaktifkan selama mode ujian/puncak.",
+    )
     effective_from, effective_to = _coerce_violations_date_range(date_from, date_to)
     include_warning_only = not bool(counted_only)
     result = await db.execute(

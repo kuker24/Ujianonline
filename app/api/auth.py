@@ -388,14 +388,15 @@ async def login(login_data: UserLogin, request: Request, db: AsyncSession = Depe
         is_locked, remaining_minutes = await lockout.is_locked(login_data.username)
         if is_locked:
             # Send Telegram lockout notification (fire and forget)
-            try:
-                from app.utils.telegram_alerts import send_lockout_alert
-                # Use ensure_future to properly schedule the coroutine
-                asyncio.ensure_future(send_lockout_alert(login_data.username, client_ip))
-                logger.info("Scheduled Telegram lockout notification for %s", login_data.username)
-            except Exception as e:
-                # Don't fail login check if notification fails
-                logger.error("Failed to schedule lockout Telegram alert: %s", e, exc_info=True)
+            if settings.telegram_alerting_active:
+                try:
+                    from app.utils.telegram_alerts import send_lockout_alert
+                    # Use ensure_future to properly schedule the coroutine
+                    asyncio.ensure_future(send_lockout_alert(login_data.username, client_ip))
+                    logger.info("Scheduled Telegram lockout notification for %s", login_data.username)
+                except Exception as e:
+                    # Don't fail login check if notification fails
+                    logger.error("Failed to schedule lockout Telegram alert: %s", e, exc_info=True)
 
             raise HTTPException(
                 status_code=423,  # Locked

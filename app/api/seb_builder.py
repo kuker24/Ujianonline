@@ -20,9 +20,19 @@ from app.models.seb_config_template import SebConfigTemplate
 from app.core.security import get_current_active_admin
 from app.core.roles import is_admin_scope_role
 from app.config import settings  # Fixed: was app.core.config
+from app.core.feature_flags import require_feature_enabled
 from app.core.seb import generate_seb_config
 
-router = APIRouter(prefix="/api/v1/seb-builder", tags=["SEB Builder"])
+
+def _require_seb_builder_enabled() -> None:
+    require_feature_enabled(settings.seb_desktop_legacy_enabled, "seb_desktop_legacy")
+
+
+router = APIRouter(
+    prefix="/api/v1/seb-builder",
+    tags=["SEB Builder"],
+    dependencies=[Depends(_require_seb_builder_enabled)],
+)
 logger = logging.getLogger(__name__)
 
 # Directories

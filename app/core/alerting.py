@@ -163,7 +163,7 @@ class AlertingSystem:
         self.register_handler(AlertChannel.LOG, self._log_alert)
         self.register_handler(AlertChannel.DATABASE, self._store_alert_in_db)
 
-        if settings.telegram_enabled and settings.telegram_bot_token and settings.telegram_chat_ids_list:
+        if settings.telegram_alerting_active and settings.telegram_bot_token and settings.telegram_chat_ids_list:
             self.register_handler(AlertChannel.WEBHOOK, self._send_webhook_alert)
 
     def add_rule(self, rule: AlertRule) -> None:

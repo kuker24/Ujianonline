@@ -73,7 +73,7 @@ async def send_custom_broadcast(
         - sent_by: Admin username
         - timestamp: Send time
     """
-    if not settings.telegram_enabled:
+    if not settings.telegram_alerting_active:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Telegram notifications are disabled"
@@ -134,7 +134,7 @@ async def get_telegram_status(current_user: User = Depends(get_current_active_ad
     Returns current configuration and connectivity status
     """
     return {
-        "enabled": settings.telegram_enabled,
+        "enabled": settings.telegram_alerting_active,
         "configured": bool(settings.telegram_bot_token and settings.telegram_chat_ids),
         "recipients": len(settings.telegram_chat_ids_list) if settings.telegram_chat_ids else 0,
         "bot_token_set": bool(settings.telegram_bot_token)

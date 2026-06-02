@@ -17,6 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.core.feature_flags import require_feature_enabled
 from app.database import get_db, get_db_write, async_session_write
 from app.core.apk_profiles import get_allowed_tokens, get_token_label
 from app.models.system_settings import SystemSettings
@@ -372,6 +373,12 @@ async def legacy_build_apk(
     Backward-compatible endpoint for old SEB builder UI.
     Creates a build record and runs scripts/build_apk.py asynchronously.
     """
+    require_feature_enabled(
+        settings.apk_build_endpoint_enabled,
+        "apk_build_endpoint",
+        status_code=503,
+        message="Build APK dari server production sedang dinonaktifkan. Gunakan build lokal/CI.",
+    )
     if build_mode not in {"universal_apk", "split_apk", "app_bundle"}:
         build_mode = "universal_apk"
 

@@ -126,10 +126,13 @@ class AccountLockout:
 
             # Send Telegram notification (fire and forget with proper scheduling)
             try:
-                from app.utils.telegram_alerts import send_lockout_alert
-                # Use ensure_future to schedule the coroutine
-                asyncio.ensure_future(send_lockout_alert(username, ip_address or "unknown", attempts))
-                logger.info(f"Scheduled Telegram lockout notification for {username}")
+                from app.config import settings
+
+                if settings.telegram_alerting_active:
+                    from app.utils.telegram_alerts import send_lockout_alert
+                    # Use ensure_future to schedule the coroutine
+                    asyncio.ensure_future(send_lockout_alert(username, ip_address or "unknown", attempts))
+                    logger.info(f"Scheduled Telegram lockout notification for {username}")
             except Exception as e:
                 logger.error(f"Failed to schedule lockout Telegram alert: {e}", exc_info=True)
 

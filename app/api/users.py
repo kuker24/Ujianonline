@@ -14,6 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, update, delete, or_
 from sqlalchemy.exc import IntegrityError
 
+from app.config import settings
+from app.core.feature_flags import require_feature_enabled
 from app.database import get_db, get_db_read
 from app.models.user import User
 from app.models.activity_log import UserActivityLog
@@ -747,6 +749,12 @@ async def export_users(
     """
     Export users to CSV based on filters (EXCLUDING ADMIN/DEVELOPER).
     """
+    require_feature_enabled(
+        settings.heavy_exports_active,
+        "heavy_export",
+        status_code=503,
+        message="Export pengguna sedang dinonaktifkan selama mode ujian/puncak.",
+    )
     # Reuse filter logic but explicitly exclude privileged control-plane accounts.
     query = select(User).where(User.role.notin_([ROLE_ADMIN, ROLE_DEVELOPER]))
 

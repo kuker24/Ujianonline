@@ -15,6 +15,7 @@ from app.core.security import (
     is_freeze_exempt_identity,
 )
 from app.models.user import User
+from app.config import settings as app_settings
 from app.models.system_settings import SystemSettings
 from app.core.cache import clear_developer_mode_cache
 from app.core.apk_profiles import (
@@ -309,19 +310,20 @@ async def update_system_settings(
         )
 
         # Send Telegram notification asynchronously (fire and forget)
-        async def send_notification():
-            try:
-                if update.maintenance_mode:
-                    # Maintenance mode activated
-                    await send_maintenance_start_notification(current_user.username)
-                else:
-                    # Maintenance mode deactivated
-                    await send_maintenance_end_notification(current_user.username)
-            except Exception:
-                logger.exception("Failed to send Telegram notification for maintenance mode")
+        if app_settings.telegram_alerting_active:
+            async def send_notification():
+                try:
+                    if update.maintenance_mode:
+                        # Maintenance mode activated
+                        await send_maintenance_start_notification(current_user.username)
+                    else:
+                        # Maintenance mode deactivated
+                        await send_maintenance_end_notification(current_user.username)
+                except Exception:
+                    logger.exception("Failed to send Telegram notification for maintenance mode")
 
-        # Create task to send notification without blocking response
-        asyncio.create_task(send_notification())
+            # Create task to send notification without blocking response
+            asyncio.create_task(send_notification())
 
     if update.freeze_mode is not None and old_freeze != update.freeze_mode:
         logger.critical(

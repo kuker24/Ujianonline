@@ -20,7 +20,7 @@ async def send_security_alert(event) -> bool:
     Returns:
         bool: True if sent successfully
     """
-    if not settings.telegram_enabled:
+    if not settings.telegram_alerting_active:
         logger.debug("Telegram alerts disabled")
         return False
 
@@ -126,7 +126,7 @@ async def send_lockout_alert(username: str, ip_address: str, attempts: int = 5) 
     Returns:
         bool: True if sent successfully
     """
-    if not settings.telegram_enabled:
+    if not settings.telegram_alerting_active:
         return False
 
     # Get current time in WIB
@@ -183,7 +183,7 @@ async def send_test_alert() -> tuple[bool, str]:
     Returns:
         Tuple of (success: bool, message: str)
     """
-    if not settings.telegram_enabled:
+    if not settings.telegram_alerting_active:
         return False, "Telegram alerts are disabled"
 
     if not settings.telegram_bot_token or not settings.telegram_chat_ids:

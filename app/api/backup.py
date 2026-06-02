@@ -19,6 +19,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from pydantic import BaseModel
 
+from app.config import settings
+from app.core.feature_flags import require_feature_enabled
 from app.database import get_db
 from app.models.user import User
 from app.models.exam import Exam
@@ -136,6 +138,12 @@ async def export_data(
     - exams: All exams with questions
     - results: Exam results (requires exam_id)
     """
+    require_feature_enabled(
+        settings.heavy_exports_active,
+        "heavy_export",
+        status_code=503,
+        message="Backup/export data sedang dinonaktifkan selama mode ujian/puncak.",
+    )
     export_data = {
         "exported_at": datetime.now(timezone.utc).isoformat(),
         "exported_by": current_user.username,

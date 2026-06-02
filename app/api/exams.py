@@ -124,6 +124,7 @@ from app.core.violation_scoring import (
 )
 from app.core.session_recovery import evaluate_session_recovery
 from app.config import settings
+from app.core.feature_flags import require_feature_enabled
 from app.core.rate_limiter import RateLimiters, check_rate_limit
 from app.services.exam_service import ExamService
 from app.services.exam_submission_service import finalize_exam_session_submission
@@ -1741,6 +1742,12 @@ async def export_exam_participation_summary(
     db: AsyncSession = Depends(get_db_read),
 ):
     """Export target-vs-submission participation rows as CSV, Excel, PDF, or Word."""
+    require_feature_enabled(
+        settings.heavy_exports_active,
+        "heavy_export",
+        status_code=503,
+        message="Ekspor partisipasi sedang dinonaktifkan selama mode ujian/puncak.",
+    )
     exam_result = await db.execute(
         select(
             Exam.id,
@@ -6122,6 +6129,12 @@ async def get_exam_analytics_pdf(
     """
     Export exam analytics (overview, analisis soal, performa siswa) as formal PDF.
     """
+    require_feature_enabled(
+        settings.heavy_exports_active,
+        "heavy_export",
+        status_code=503,
+        message="PDF analytics sedang dinonaktifkan selama mode ujian/puncak.",
+    )
     from app.api.analytics import (
         _build_class_performance_payload,
         get_question_difficulty_analysis,
@@ -6239,6 +6252,12 @@ async def get_exam_results_pdf(
     Export exam results as PDF document.
     Includes all student scores, pass/fail status, and summary statistics.
     """
+    require_feature_enabled(
+        settings.heavy_exports_active,
+        "heavy_export",
+        status_code=503,
+        message="PDF hasil ujian sedang dinonaktifkan selama mode ujian/puncak.",
+    )
     from app.core.pdf_generator import generate_exam_results_pdf, REPORTLAB_AVAILABLE
 
     if not REPORTLAB_AVAILABLE:
@@ -6353,6 +6372,12 @@ async def get_session_certificate(
     Peserta ujian (student/GuruPlus) dapat download sertifikat milik sendiri.
     Teachers/Admins can download any certificate.
     """
+    require_feature_enabled(
+        settings.heavy_exports_active,
+        "heavy_export",
+        status_code=503,
+        message="Sertifikat PDF sedang dinonaktifkan selama mode ujian/puncak.",
+    )
     from app.core.pdf_generator import generate_certificate_pdf, REPORTLAB_AVAILABLE
     import hashlib
 

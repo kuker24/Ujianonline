@@ -61,27 +61,30 @@ async def lifespan(app: FastAPI):
 
     # Send Telegram startup notification (fire and forget)
     # Use Redis lock to prevent duplicate notifications from multiple workers
-    try:
-        from app.utils.telegram_utils import send_system_startup_notification
-        from app.core.redis_pubsub import get_redis
-        import asyncio
+    if settings.telegram_alerting_active:
+        try:
+            from app.utils.telegram_utils import send_system_startup_notification
+            from app.core.redis_pubsub import get_redis
+            import asyncio
 
-        redis = await get_redis()
-        lock_key = "startup_notification_lock"
+            redis = await get_redis()
+            lock_key = "startup_notification_lock"
 
-        # Try to acquire lock (expires in 10 seconds)
-        lock_acquired = await redis.set(lock_key, "1", nx=True, ex=10)
+            # Try to acquire lock (expires in 10 seconds)
+            lock_acquired = await redis.set(lock_key, "1", nx=True, ex=10)
 
-        if lock_acquired:
-            # Schedule notification and give it time to complete
-            asyncio.ensure_future(send_system_startup_notification())
-            logger.info("Telegram startup notification scheduled (lock acquired)")
-            # Wait 2 seconds to ensure notification sends before startup completes
-            await asyncio.sleep(2)
-        else:
-            logger.info("Startup notification skipped (another worker already sent)")
-    except Exception as telegram_err:
-        logger.warning(f"Could not send startup notification: {telegram_err}")
+            if lock_acquired:
+                # Schedule notification and give it time to complete
+                asyncio.ensure_future(send_system_startup_notification())
+                logger.info("Telegram startup notification scheduled (lock acquired)")
+                # Wait 2 seconds to ensure notification sends before startup completes
+                await asyncio.sleep(2)
+            else:
+                logger.info("Startup notification skipped (another worker already sent)")
+        except Exception as telegram_err:
+            logger.warning(f"Could not send startup notification: {telegram_err}")
+    else:
+        logger.info("Telegram startup notification disabled by feature flag")
 
     # Start background alerting system
     app.state.alerting_task = None

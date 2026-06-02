@@ -23,6 +23,7 @@ from fastapi import APIRouter, Request, Query
 from fastapi.responses import Response, StreamingResponse, JSONResponse
 
 from app.config import settings
+from app.core.feature_flags import require_feature_enabled
 from app.core.seb import get_url_filter_rules
 
 
@@ -243,6 +244,7 @@ async def download_dynamic_seb_config(request: Request):
     Returns:
         .seb file (application/seb) for download
     """
+    require_feature_enabled(settings.seb_desktop_legacy_enabled, "seb_desktop_legacy")
     # Get dynamic base URL from request
     base_url = get_dynamic_base_url(request)
 
@@ -288,6 +290,7 @@ async def generate_seb_qr_code(
     Returns:
         PNG image of the QR code
     """
+    require_feature_enabled(settings.seb_qr_enabled, "seb_qr")
     # Build QR code content based on protocol
     if protocol == "http":
         # Direct HTTPS URL for browsers
@@ -344,6 +347,7 @@ async def get_config_info(request: Request):
     Returns:
         JSON with configuration URLs and metadata
     """
+    require_feature_enabled(settings.seb_desktop_legacy_enabled, "seb_desktop_legacy")
     base_url = get_dynamic_base_url(request)
 
     # Parse to get domain_host for filter rules preview
@@ -411,6 +415,7 @@ async def download_exam_specific_config(
     Returns:
         .seb file configured for the specific exam
     """
+    require_feature_enabled(settings.seb_desktop_legacy_enabled, "seb_desktop_legacy")
     base_url = get_dynamic_base_url(request)
 
     # Generate config pointing to exam start page
@@ -447,6 +452,7 @@ async def generate_exam_qr_code(
     Returns:
         PNG image of the QR code for this exam
     """
+    require_feature_enabled(settings.seb_qr_enabled, "seb_qr")
     # Build QR content with SEB protocol pointing to exam config
     qr_content = get_seb_protocol_url(
         request,
@@ -491,6 +497,7 @@ async def debug_url_rules(request: Request):
     Returns:
         JSON with all URL filter rules
     """
+    require_feature_enabled(settings.seb_debug_endpoints_enabled, "seb_debug_endpoints")
     base_url = get_dynamic_base_url(request)
 
     from urllib.parse import urlparse

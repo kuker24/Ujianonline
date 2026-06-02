@@ -16,6 +16,7 @@ from app.schemas.exam import SEBLaunchResponse
 from app.core.seb import generate_seb_config, get_mobile_launch_url
 from app.core.security import get_current_teacher
 from app.config import settings
+from app.core.feature_flags import require_feature_enabled
 from app.core.roles import is_developer_exam_hidden_for_viewer
 
 router = APIRouter(prefix="/api/exams", tags=["SEB Configuration"])
@@ -37,6 +38,7 @@ async def _assert_exam_owner_or_admin(db: AsyncSession, exam: Exam, current_user
 @public_router.get("/default-seb-config.seb")
 async def download_default_seb_config():
     """Download default/global SEB configuration file for student login."""
+    require_feature_enabled(settings.seb_desktop_legacy_enabled, "seb_desktop_legacy")
     # Generate config pointing to student login page
     login_url = f"{settings.base_url}/student/"
     seb_config = generate_seb_config(
@@ -59,6 +61,7 @@ async def download_default_seb_config():
 @public_router.get("/seb-qrcode")
 async def get_seb_qrcode(url: str = None):
     """Generate QR code for SEB config download URL."""
+    require_feature_enabled(settings.seb_qr_enabled, "seb_qr")
     if not url:
         url = f"{settings.base_url}/api/exams/default-seb-config.seb"
 
@@ -94,6 +97,7 @@ async def download_seb_config(
     db: AsyncSession = Depends(get_db)
 ):
     """Download SEB configuration file."""
+    require_feature_enabled(settings.seb_desktop_legacy_enabled, "seb_desktop_legacy")
     result = await db.execute(select(Exam).where(Exam.id == exam_id))
     exam = result.scalar_one_or_none()
 
@@ -128,6 +132,7 @@ async def get_mobile_launch(
     db: AsyncSession = Depends(get_db)
 ):
     """Get mobile SEB launch URL."""
+    require_feature_enabled(settings.seb_qr_enabled, "seb_qr")
     result = await db.execute(select(Exam).where(Exam.id == exam_id))
     exam = result.scalar_one_or_none()
 
@@ -146,6 +151,7 @@ async def generate_seb_qr(
     db: AsyncSession = Depends(get_db)
 ):
     """Generate QR code for SEB config download."""
+    require_feature_enabled(settings.seb_qr_enabled, "seb_qr")
     result = await db.execute(select(Exam).where(Exam.id == exam_id))
     exam = result.scalar_one_or_none()
 
