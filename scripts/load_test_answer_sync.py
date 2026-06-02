@@ -219,6 +219,8 @@ def parse_args() -> argparse.Namespace:
         help="Experimental: fraction of workers that submit /api/exams/submit at the end (0.0-1.0)",
     )
     parser.add_argument("--summary-json", default="", help="Write summary metrics JSON to this path")
+    parser.add_argument("--user-agent", default="load-test-answer-sync/1.0", help="User-Agent for load traffic")
+    parser.add_argument("--seb-config-key-hash", default="", help="Optional SEB config key hash for staging synthetic exams")
     parser.add_argument("--execute", action="store_true", help="Actually send HTTP traffic. Default is dry-run.")
     parser.add_argument(
         "--allow-production",
@@ -290,7 +292,9 @@ async def post_json(
     token: str,
 ) -> Sample:
     started = time.perf_counter()
-    headers = {"Authorization": f"Bearer {token}"} if token else None
+    headers = dict(client.headers)
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     try:
         response = await client.post(endpoint, json=payload, headers=headers)
         latency_ms = (time.perf_counter() - started) * 1000
@@ -383,7 +387,11 @@ async def run(args: argparse.Namespace, rows: list[SessionRow]) -> dict[str, obj
     samples: list[Sample] = []
     async with httpx.AsyncClient(
         base_url=args.base_url.rstrip("/"),
-        headers={"Content-Type": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            "User-Agent": args.user_agent,
+            **({"X-SafeExamBrowser-ConfigKeyHash": args.seb_config_key_hash} if args.seb_config_key_hash else {}),
+        },
         timeout=timeout,
         limits=limits,
     ) as client:
@@ -407,6 +415,8 @@ def print_plan(args: argparse.Namespace, rows: list[SessionRow]) -> None:
     print(f"  vus={args.vus} duration_seconds={args.duration_seconds}")
     print(f"  sessions_csv_used={bool(args.sessions_csv)} unique_sessions={len({row.session_id for row in rows})}")
     print(f"  endpoint={ANSWER_ENDPOINT}")
+    if args.seb_config_key_hash:
+        print("  seb_config_key_hash=<provided>")
     if args.include_violation_burst:
         print(f"  endpoint={VIOLATION_ENDPOINT} (light burst)")
     if args.final_submit_sample_rate > 0:
