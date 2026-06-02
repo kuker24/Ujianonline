@@ -4,6 +4,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import '../config.dart'; // Import hardcoded config
@@ -26,6 +27,10 @@ class ApiService {
   static const Duration _signatureCacheTtl = Duration(minutes: 10);
   static const String _violationQueueKey = 'sxb_violation_queue_v1';
   bool _isFlushingViolationQueue = false;
+  Map<String, dynamic>? _cachedRuntimePolicy;
+  DateTime? _runtimePolicyCachedAt;
+  int _lastRetryAfterSeconds = 0;
+  static const Duration _runtimePolicyCacheTtl = Duration(minutes: 2);
 
   ApiService._internal() {
     _dio = Dio(
@@ -175,6 +180,113 @@ class ApiService {
   String get serverUrl => _serverUrl ?? '';
   bool get isConfigured => _serverUrl != null && _serverUrl!.isNotEmpty;
 
+  Map<String, dynamic> get fallbackRuntimePolicy => const {
+        'mode': 'normal',
+        'answer_sync_interval_seconds': 15,
+        'answer_sync_batch_size': 30,
+        'command_poll_seconds': 25,
+        'violation_flush_seconds': 30,
+        'retry_after_seconds': 8,
+        'cheating_detection_enabled': true,
+        'cheating_detail_level': 'aggregate',
+        'final_submit_priority': true,
+      };
+
+  bool _isRetryableStatus(int? statusCode) {
+    return statusCode == 429 ||
+        statusCode == 502 ||
+        statusCode == 503 ||
+        statusCode == 504;
+  }
+
+  bool isRetryableDioError(DioException error) {
+    return _isRetryableStatus(error.response?.statusCode) ||
+        error.type == DioExceptionType.connectionTimeout ||
+        error.type == DioExceptionType.sendTimeout ||
+        error.type == DioExceptionType.receiveTimeout ||
+        error.type == DioExceptionType.connectionError ||
+        error.type == DioExceptionType.unknown;
+  }
+
+  int retryAfterSecondsFromResponse(Response<dynamic>? response) {
+    final headerValue = response?.headers.value('Retry-After');
+    if (headerValue == null || headerValue.trim().isEmpty) return 0;
+    final parsed = int.tryParse(headerValue.trim());
+    if (parsed != null && parsed > 0) return parsed;
+    return 0;
+  }
+
+  Duration computeBackoffDelay({
+    required int failureStreak,
+    int? retryAfterSeconds,
+    int? baseRetryAfterSeconds,
+    int maxSeconds = 60,
+  }) {
+    final baseSeconds = retryAfterSeconds != null && retryAfterSeconds > 0
+        ? retryAfterSeconds
+        : (baseRetryAfterSeconds != null && baseRetryAfterSeconds > 0
+            ? baseRetryAfterSeconds
+            : 8);
+    final streak = failureStreak < 0 ? 0 : failureStreak;
+    final multiplier = 1 << (streak > 6 ? 6 : streak);
+    final cappedSeconds = min(baseSeconds * multiplier, maxSeconds);
+    final jitterRatio = 0.2 + (Random().nextDouble() * 0.2);
+    final jitterMs = (cappedSeconds * 1000 * jitterRatio).round();
+    return Duration(milliseconds: (cappedSeconds * 1000) + jitterMs);
+  }
+
+  int _policyInt(String key, int fallback) {
+    final raw = (_cachedRuntimePolicy ?? fallbackRuntimePolicy)[key];
+    final parsed = int.tryParse('$raw');
+    return parsed != null && parsed > 0 ? parsed : fallback;
+  }
+
+  int get runtimeAnswerSyncIntervalSeconds =>
+      _policyInt('answer_sync_interval_seconds', 15);
+
+  int get runtimeAnswerSyncBatchSize => _policyInt('answer_sync_batch_size', 30);
+
+  int get runtimeCommandPollSeconds => _policyInt('command_poll_seconds', 25);
+
+  int get runtimeViolationFlushSeconds =>
+      _policyInt('violation_flush_seconds', 30);
+
+  int get runtimeRetryAfterSeconds => _policyInt('retry_after_seconds', 8);
+
+  int get lastRetryAfterSeconds => _lastRetryAfterSeconds;
+
+  Future<Map<String, dynamic>> getRuntimePolicy({bool forceRefresh = false}) async {
+    final now = DateTime.now();
+    if (!forceRefresh &&
+        _cachedRuntimePolicy != null &&
+        _runtimePolicyCachedAt != null &&
+        now.difference(_runtimePolicyCachedAt!) < _runtimePolicyCacheTtl) {
+      return Map<String, dynamic>.from(_cachedRuntimePolicy!);
+    }
+
+    try {
+      final response = await _dio.get(
+        '$_serverUrl/api/runtime/policy',
+        options: Options(
+          receiveTimeout: const Duration(seconds: 5),
+          validateStatus: (status) => status != null && status < 500,
+        ),
+      );
+      if (response.statusCode == 200 && response.data is Map) {
+        _cachedRuntimePolicy = Map<String, dynamic>.from(response.data as Map);
+        _runtimePolicyCachedAt = now;
+        return Map<String, dynamic>.from(_cachedRuntimePolicy!);
+      }
+      debugPrint('⚠️ Runtime policy failed: status=${response.statusCode}');
+    } catch (e) {
+      debugPrint('Runtime policy fetch failed, using fallback: $e');
+    }
+
+    _cachedRuntimePolicy = Map<String, dynamic>.from(fallbackRuntimePolicy);
+    _runtimePolicyCachedAt = now;
+    return Map<String, dynamic>.from(_cachedRuntimePolicy!);
+  }
+
   /// Get SEB configuration info from server
   Future<Map<String, dynamic>?> getConfigInfo() async {
     try {
@@ -278,7 +390,7 @@ class ApiService {
   Future<bool> _sendViolationPayload({
     required Map<String, dynamic> payload,
     required String token,
-    int maxAttempts = 3,
+    int maxAttempts = 1,
   }) async {
     DioException? lastError;
     Response<dynamic>? response;
@@ -293,24 +405,39 @@ class ApiService {
               'Authorization': 'Bearer $token',
               'Content-Type': 'application/json',
             },
+            validateStatus: (status) => status != null && status < 500,
           ),
           data: payload,
         );
-        break;
+        if (response.statusCode == 200 || response.statusCode == 202 || response.statusCode == 204) {
+          return true;
+        }
+        if (!_isRetryableStatus(response.statusCode)) {
+          break;
+        }
       } on DioException catch (e) {
         lastError = e;
+        if (!isRetryableDioError(e)) break;
         if (attempt == maxAttempts) break;
-        await Future.delayed(Duration(milliseconds: attempt * 400));
+        final delay = computeBackoffDelay(
+          failureStreak: attempt - 1,
+          retryAfterSeconds: retryAfterSecondsFromResponse(e.response),
+          baseRetryAfterSeconds: runtimeRetryAfterSeconds,
+        );
+        await Future.delayed(delay);
       }
     }
 
-    final ok = response != null && response.statusCode == 200;
-    if (!ok && lastError != null) {
+    if (lastError != null) {
       debugPrint(
         '❌ Violation send error: ${lastError.response?.statusCode} - ${lastError.response?.data}',
       );
+    } else if (response != null) {
+      debugPrint(
+        '❌ Violation send rejected: ${response.statusCode} - ${response.data}',
+      );
     }
-    return ok;
+    return false;
   }
 
   Future<int> flushViolationQueue({String? token}) async {
@@ -596,13 +723,20 @@ class ApiService {
       );
 
       if (response.statusCode == 200 && response.data is Map<String, dynamic>) {
+        _lastRetryAfterSeconds = 0;
         return response.data as Map<String, dynamic>;
       }
+      _lastRetryAfterSeconds = retryAfterSecondsFromResponse(response);
       debugPrint(
         '⚠️ syncAnswerJournal failed: status=${response.statusCode}, body=${response.data}',
       );
       return null;
+    } on DioException catch (e) {
+      _lastRetryAfterSeconds = retryAfterSecondsFromResponse(e.response);
+      debugPrint('syncAnswerJournal error: $e');
+      return null;
     } catch (e) {
+      _lastRetryAfterSeconds = 0;
       debugPrint('syncAnswerJournal error: $e');
       return null;
     }

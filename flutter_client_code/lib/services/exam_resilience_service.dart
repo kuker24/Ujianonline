@@ -393,13 +393,19 @@ class ExamResilienceService {
       );
       if (response == null) {
         _journalFailureStreak = (_journalFailureStreak + 1).clamp(0, 6);
-        final backoffMs = 500 * (1 << _journalFailureStreak);
-        final untilMs = nowMs + backoffMs;
+        final delay = _apiService.computeBackoffDelay(
+          failureStreak: _journalFailureStreak,
+          retryAfterSeconds: _apiService.lastRetryAfterSeconds,
+          baseRetryAfterSeconds: _apiService.runtimeRetryAfterSeconds,
+        );
+        final untilMs = nowMs + delay.inMilliseconds;
         await _storage.write(key: _journalBackoffUntilKey, value: '$untilMs');
         await _appendDiagnosticEvent('journal_sync_failed', data: {
           'session_id': sessionId,
           'batch_size': eventsToSync.length,
           'failure_streak': _journalFailureStreak,
+          'backoff_ms': delay.inMilliseconds,
+          'retry_after_seconds': _apiService.lastRetryAfterSeconds,
         });
         return 0;
       }

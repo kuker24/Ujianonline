@@ -487,7 +487,6 @@ class ApiClient {
     }
 
 
-
 /* ===== Module: 10-endpoints-auth-users-exams.js ===== */
 
     // Auth endpoints
@@ -939,29 +938,8 @@ class ApiClient {
         return this.request('GET', `/analytics/exam/${examId}/question-difficulty`);
     }
 
-    async getAssessmentAnalysis(examId, classScope) {
-        const params = new URLSearchParams();
-        if (typeof classScope === 'string') {
-            const className = String(classScope || '').trim();
-            if (className) {
-                params.append('class_name', className);
-            }
-        } else if (classScope && typeof classScope === 'object') {
-            const classNames = Array.isArray(classScope.classNames)
-                ? classScope.classNames.map((item) => String(item || '').trim()).filter(Boolean)
-                : [];
-            if (classNames.length > 0) {
-                params.append('class_names', classNames.join(','));
-            } else {
-                const className = String(classScope.className || '').trim();
-                if (className) {
-                    params.append('class_name', className);
-                }
-            }
-        }
-        if (!params.has('class_name') && !params.has('class_names')) {
-            throw new Error('class_name atau class_names wajib diisi');
-        }
+    async getAssessmentAnalysis(examId, className) {
+        const params = new URLSearchParams({ class_name: className });
         return this.request('GET', `/analytics/exam/${examId}/assessment?${params.toString()}`);
     }
 
@@ -1002,7 +980,7 @@ class ApiClient {
     }
 
     async getRuntimePolicy() {
-        return this.request('GET', '/monitoring/runtime-policy');
+        return this.request('GET', '/runtime/policy');
     }
 
     async getOpsSummary() {
@@ -1212,8 +1190,6 @@ class ApiClient {
 // Global API instance
 window.api = new ApiClient();
 const api = window.api; // Maintain local reference for file internal usage if any
-
-
 
 
 /* ===== Module: 30-ui-shortcuts.js ===== */
@@ -1476,8 +1452,8 @@ window.apiRequestRaw = apiRequestRaw;
         apiDebug('[API.JS] toggleApkSection called');
 
         if (!checkAdmin()) {
-            apiDebug('[API.JS] toggleApkSection: User is not admin/developer');
-            if (typeof showToast === 'function') showToast('Akses ditolak: Hanya admin/developer', 'error');
+            apiDebug('[API.JS] toggleApkSection: User is not admin');
+            if (typeof showToast === 'function') showToast('Akses ditolak: Hanya admin', 'error');
             return;
         }
 
@@ -1517,8 +1493,8 @@ window.apiRequestRaw = apiRequestRaw;
         apiDebug('[API.JS] toggleFreezeSection called');
 
         if (!checkAdmin()) {
-            apiDebug('[API.JS] toggleFreezeSection: User is not admin/developer');
-            if (typeof showToast === 'function') showToast('Akses ditolak: Hanya admin/developer', 'error');
+            apiDebug('[API.JS] toggleFreezeSection: User is not admin');
+            if (typeof showToast === 'function') showToast('Akses ditolak: Hanya admin', 'error');
             return;
         }
 
@@ -1551,8 +1527,8 @@ window.apiRequestRaw = apiRequestRaw;
         apiDebug('%c[API.JS] toggleSettingsNav called', 'color: #ff9900; font-weight: bold');
 
         if (!checkAdmin()) {
-            apiDebug('[API.JS] toggleSettingsNav: User is not admin/developer');
-            if (typeof showToast === 'function') showToast('Akses ditolak: Hanya admin/developer', 'error');
+            apiDebug('[API.JS] toggleSettingsNav: User is not admin');
+            if (typeof showToast === 'function') showToast('Akses ditolak: Hanya admin', 'error');
             return;
         }
 
@@ -1610,7 +1586,7 @@ window.apiRequestRaw = apiRequestRaw;
 
                 // Check Admin - with feedback
                 if (!checkAdmin()) {
-                    apiDebug('[API.JS] User is not admin/developer, shortcut ignored');
+                    apiDebug('[API.JS] User is not admin, shortcut ignored');
                     return;
                 }
 

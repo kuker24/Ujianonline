@@ -373,6 +373,10 @@ class AnswerSyncWorker {
         this.sessionId = null;
         this.intervalId = null;
         this.syncInterval = 20000; // 20 seconds baseline to reduce write pressure
+        this.batchSize = 30;
+        this.retryAfterSeconds = 8;
+        this.failureStreak = 0;
+        this.backoffUntil = 0;
         this.syncInFlight = false;
     }
 
@@ -398,6 +402,34 @@ class AnswerSyncWorker {
         console.log('🔄 Sync worker started');
     }
 
+    setBatchSize(batchSize) {
+        const parsed = Number(batchSize);
+        if (!Number.isFinite(parsed)) return;
+        this.batchSize = Math.min(100, Math.max(10, Math.round(parsed)));
+    }
+
+    setRetryAfterSeconds(seconds) {
+        const parsed = Number(seconds);
+        if (!Number.isFinite(parsed)) return;
+        this.retryAfterSeconds = Math.min(60, Math.max(1, Math.round(parsed)));
+    }
+
+    computeBackoffDelayMs(response = null) {
+        const retryHeader = response?.headers?.get?.('Retry-After');
+        const retryAfter = Number.parseInt(retryHeader || '', 10);
+        const baseSeconds = Number.isFinite(retryAfter) && retryAfter > 0
+            ? retryAfter
+            : this.retryAfterSeconds;
+        const exponent = Math.min(6, Math.max(0, this.failureStreak));
+        const cappedSeconds = Math.min(baseSeconds * (2 ** exponent), 60);
+        const jitter = 0.2 + (Math.random() * 0.2);
+        return Math.round((cappedSeconds * 1000) + (cappedSeconds * 1000 * jitter));
+    }
+
+    shouldRetryStatus(status) {
+        return [429, 502, 503, 504].includes(Number(status));
+    }
+
     stop() {
         if (this.intervalId) {
             clearInterval(this.intervalId);
@@ -409,14 +441,16 @@ class AnswerSyncWorker {
     async syncNow() {
         if (!this.sessionId) return;
         if (this.syncInFlight) return;
+        if (Date.now() < this.backoffUntil) return;
 
         this.syncInFlight = true;
         try {
-            const unsyncedAnswers = await this.storage.getUnsyncedAnswers(this.sessionId);
+            const allUnsyncedAnswers = await this.storage.getUnsyncedAnswers(this.sessionId);
+            const unsyncedAnswers = allUnsyncedAnswers.slice(0, this.batchSize);
 
             if (unsyncedAnswers.length === 0) return;
 
-            console.log(`🔄 Syncing ${unsyncedAnswers.length} answers...`);
+            console.log(`🔄 Syncing ${unsyncedAnswers.length}/${allUnsyncedAnswers.length} answers...`);
 
             // Prepare batch payload with type normalization
             const answers = unsyncedAnswers
@@ -444,14 +478,26 @@ class AnswerSyncWorker {
             });
 
             if (response.ok) {
+                this.failureStreak = 0;
+                this.backoffUntil = 0;
                 const syncedIds = unsyncedAnswers.map(a => a.question_id);
                 await this.storage.markAsSynced(syncedIds);
                 console.log(`✅ Synced ${syncedIds.length} answers`);
             } else {
-                console.warn('Sync failed, will retry...');
+                this.failureStreak = Math.min(6, this.failureStreak + 1);
+                if (this.shouldRetryStatus(response.status)) {
+                    const delayMs = this.computeBackoffDelayMs(response);
+                    this.backoffUntil = Date.now() + delayMs;
+                    console.warn(`Sync busy (${response.status}), retry in ${Math.round(delayMs / 1000)}s`);
+                } else {
+                    console.warn('Sync failed, will retry on next interval...');
+                }
             }
         } catch (error) {
-            console.error('Sync error:', error);
+            this.failureStreak = Math.min(6, this.failureStreak + 1);
+            const delayMs = this.computeBackoffDelayMs();
+            this.backoffUntil = Date.now() + delayMs;
+            console.error(`Sync error, retry in ${Math.round(delayMs / 1000)}s:`, error);
         } finally {
             this.syncInFlight = false;
         }
@@ -525,7 +571,6 @@ let storageManager = null;
 let syncWorker = null;
 
 
-
 /* ===== Module: 10-exam-core-security-websocket.js ===== */
 
 class ExamSystem {
@@ -563,7 +608,11 @@ class ExamSystem {
         this.pendingSyncTimeout = null;
         this.runtimePolicy = {
             auto_save_interval_ms: 35000,
-            answer_sync_debounce_ms: 5000
+            answer_sync_debounce_ms: 15000,
+            answer_sync_interval_seconds: 15,
+            answer_sync_batch_size: 30,
+            retry_after_seconds: 8,
+            final_submit_priority: true
         };
         this.lastViolationTimestamps = {};
         this.wsReconnectAttempts = 0;
@@ -726,26 +775,42 @@ class ExamSystem {
             const policy = await api.getRuntimePolicy();
             if (!policy || typeof policy !== 'object') return;
 
-            const autoSaveMs = Number(policy.auto_save_interval_ms);
-            const debounceMs = Number(policy.answer_sync_debounce_ms);
+            const answerSyncSeconds = Number(policy.answer_sync_interval_seconds);
+            const answerBatchSize = Number(policy.answer_sync_batch_size);
+            const retryAfterSeconds = Number(policy.retry_after_seconds);
 
-            if (Number.isFinite(autoSaveMs) && autoSaveMs >= 10000 && autoSaveMs <= 120000) {
-                this.runtimePolicy.auto_save_interval_ms = autoSaveMs;
+            if (Number.isFinite(answerSyncSeconds) && answerSyncSeconds >= 10 && answerSyncSeconds <= 120) {
+                this.runtimePolicy.answer_sync_interval_seconds = answerSyncSeconds;
+                this.runtimePolicy.auto_save_interval_ms = answerSyncSeconds * 1000;
+                this.runtimePolicy.answer_sync_debounce_ms = Math.max(5000, Math.min(30000, answerSyncSeconds * 500));
+            } else {
+                const autoSaveMs = Number(policy.auto_save_interval_ms);
+                const debounceMs = Number(policy.answer_sync_debounce_ms);
+                if (Number.isFinite(autoSaveMs) && autoSaveMs >= 10000 && autoSaveMs <= 120000) {
+                    this.runtimePolicy.auto_save_interval_ms = autoSaveMs;
+                }
+                if (Number.isFinite(debounceMs) && debounceMs >= 1000 && debounceMs <= 30000) {
+                    this.runtimePolicy.answer_sync_debounce_ms = debounceMs;
+                }
             }
-            if (Number.isFinite(debounceMs) && debounceMs >= 1000 && debounceMs <= 30000) {
-                this.runtimePolicy.answer_sync_debounce_ms = debounceMs;
+            if (Number.isFinite(answerBatchSize) && answerBatchSize >= 10 && answerBatchSize <= 100) {
+                this.runtimePolicy.answer_sync_batch_size = answerBatchSize;
+            }
+            if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds >= 1 && retryAfterSeconds <= 60) {
+                this.runtimePolicy.retry_after_seconds = retryAfterSeconds;
             }
 
             if (syncWorker) {
-                const syncIntervalMs = Math.max(
-                    20000,
-                    this.runtimePolicy.auto_save_interval_ms || 35000,
-                    (this.runtimePolicy.answer_sync_debounce_ms || 5000) * 4
-                );
-                syncWorker.setSyncInterval(syncIntervalMs);
+                syncWorker.setSyncInterval(this.runtimePolicy.auto_save_interval_ms || 35000);
+                if (typeof syncWorker.setBatchSize === 'function') {
+                    syncWorker.setBatchSize(this.runtimePolicy.answer_sync_batch_size || 30);
+                }
+                if (typeof syncWorker.setRetryAfterSeconds === 'function') {
+                    syncWorker.setRetryAfterSeconds(this.runtimePolicy.retry_after_seconds || 8);
+                }
             }
 
-            if (policy.degrade_mode === true) {
+            if (policy.degrade_mode === true || policy.mode === 'busy' || policy.mode === 'degraded' || policy.mode === 'exam_peak') {
                 console.warn('⚠️ Runtime policy: degrade mode active');
             }
         } catch (error) {

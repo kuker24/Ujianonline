@@ -89,7 +89,7 @@
     }
 
     async getRuntimePolicy() {
-        return this.request('GET', '/monitoring/runtime-policy');
+        return this.request('GET', '/runtime/policy');
     }
 
     async getOpsSummary() {

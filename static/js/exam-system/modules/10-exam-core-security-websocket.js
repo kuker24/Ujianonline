@@ -33,7 +33,11 @@ class ExamSystem {
         this.pendingSyncTimeout = null;
         this.runtimePolicy = {
             auto_save_interval_ms: 35000,
-            answer_sync_debounce_ms: 5000
+            answer_sync_debounce_ms: 15000,
+            answer_sync_interval_seconds: 15,
+            answer_sync_batch_size: 30,
+            retry_after_seconds: 8,
+            final_submit_priority: true
         };
         this.lastViolationTimestamps = {};
         this.wsReconnectAttempts = 0;
@@ -196,26 +200,42 @@ class ExamSystem {
             const policy = await api.getRuntimePolicy();
             if (!policy || typeof policy !== 'object') return;
 
-            const autoSaveMs = Number(policy.auto_save_interval_ms);
-            const debounceMs = Number(policy.answer_sync_debounce_ms);
+            const answerSyncSeconds = Number(policy.answer_sync_interval_seconds);
+            const answerBatchSize = Number(policy.answer_sync_batch_size);
+            const retryAfterSeconds = Number(policy.retry_after_seconds);
 
-            if (Number.isFinite(autoSaveMs) && autoSaveMs >= 10000 && autoSaveMs <= 120000) {
-                this.runtimePolicy.auto_save_interval_ms = autoSaveMs;
+            if (Number.isFinite(answerSyncSeconds) && answerSyncSeconds >= 10 && answerSyncSeconds <= 120) {
+                this.runtimePolicy.answer_sync_interval_seconds = answerSyncSeconds;
+                this.runtimePolicy.auto_save_interval_ms = answerSyncSeconds * 1000;
+                this.runtimePolicy.answer_sync_debounce_ms = Math.max(5000, Math.min(30000, answerSyncSeconds * 500));
+            } else {
+                const autoSaveMs = Number(policy.auto_save_interval_ms);
+                const debounceMs = Number(policy.answer_sync_debounce_ms);
+                if (Number.isFinite(autoSaveMs) && autoSaveMs >= 10000 && autoSaveMs <= 120000) {
+                    this.runtimePolicy.auto_save_interval_ms = autoSaveMs;
+                }
+                if (Number.isFinite(debounceMs) && debounceMs >= 1000 && debounceMs <= 30000) {
+                    this.runtimePolicy.answer_sync_debounce_ms = debounceMs;
+                }
             }
-            if (Number.isFinite(debounceMs) && debounceMs >= 1000 && debounceMs <= 30000) {
-                this.runtimePolicy.answer_sync_debounce_ms = debounceMs;
+            if (Number.isFinite(answerBatchSize) && answerBatchSize >= 10 && answerBatchSize <= 100) {
+                this.runtimePolicy.answer_sync_batch_size = answerBatchSize;
+            }
+            if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds >= 1 && retryAfterSeconds <= 60) {
+                this.runtimePolicy.retry_after_seconds = retryAfterSeconds;
             }
 
             if (syncWorker) {
-                const syncIntervalMs = Math.max(
-                    20000,
-                    this.runtimePolicy.auto_save_interval_ms || 35000,
-                    (this.runtimePolicy.answer_sync_debounce_ms || 5000) * 4
-                );
-                syncWorker.setSyncInterval(syncIntervalMs);
+                syncWorker.setSyncInterval(this.runtimePolicy.auto_save_interval_ms || 35000);
+                if (typeof syncWorker.setBatchSize === 'function') {
+                    syncWorker.setBatchSize(this.runtimePolicy.answer_sync_batch_size || 30);
+                }
+                if (typeof syncWorker.setRetryAfterSeconds === 'function') {
+                    syncWorker.setRetryAfterSeconds(this.runtimePolicy.retry_after_seconds || 8);
+                }
             }
 
-            if (policy.degrade_mode === true) {
+            if (policy.degrade_mode === true || policy.mode === 'busy' || policy.mode === 'degraded' || policy.mode === 'exam_peak') {
                 console.warn('⚠️ Runtime policy: degrade mode active');
             }
         } catch (error) {

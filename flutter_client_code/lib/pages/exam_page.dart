@@ -73,6 +73,9 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
   int _currentQuestionIndex = 0;
   int _lastKnownTimeRemainingSeconds = 0;
   int? _lastServerTimeEpochMs;
+  int _answerJournalSyncSeconds = 15;
+  int _answerJournalBatchSize = 30;
+  int _commandPollSeconds = 25;
 
   // Smart violation/risk scoring (reduce false-positive, prioritize real cheating)
   final List<Map<String, dynamic>> _riskEvents = [];
@@ -500,13 +503,46 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
     await _refreshQueuedAnswerEventCount();
   }
 
-  void _startAnswerJournalSyncLoop() {
+  int _clampRuntimeInt(int value, int minValue, int maxValue, int fallback) {
+    if (value < minValue || value > maxValue) return fallback;
+    return value;
+  }
+
+  Future<void> _refreshRuntimePolicy({bool forceRefresh = false}) async {
+    try {
+      await _apiService.getRuntimePolicy(forceRefresh: forceRefresh);
+      _answerJournalSyncSeconds = _clampRuntimeInt(
+        _apiService.runtimeAnswerSyncIntervalSeconds,
+        10,
+        120,
+        15,
+      );
+      _answerJournalBatchSize = _clampRuntimeInt(
+        _apiService.runtimeAnswerSyncBatchSize,
+        10,
+        100,
+        30,
+      );
+      _commandPollSeconds = _clampRuntimeInt(
+        _apiService.runtimeCommandPollSeconds,
+        15,
+        120,
+        25,
+      );
+      debugPrint(
+        '📋 Runtime policy: answerSync=${_answerJournalSyncSeconds}s '
+        'batch=$_answerJournalBatchSize commandPoll=${_commandPollSeconds}s',
+      );
+    } catch (e) {
+      debugPrint('Runtime policy refresh skipped: $e');
+    }
+  }
+
+  Future<void> _startAnswerJournalSyncLoop() async {
     _answerJournalSyncTimer?.cancel();
-    const syncInterval = AppConfig.answerJournalSyncIntervalSeconds < 3
-        ? 3
-        : AppConfig.answerJournalSyncIntervalSeconds;
+    await _refreshRuntimePolicy();
     _answerJournalSyncTimer =
-        Timer.periodic(const Duration(seconds: syncInterval), (_) {
+        Timer.periodic(Duration(seconds: _answerJournalSyncSeconds), (_) {
       unawaited(_flushAnswerJournalQueue());
     });
   }
@@ -522,7 +558,7 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
 
     final acked = await _resilienceService.flushAnswerJournal(
       sessionId: sessionId,
-      batchSize: AppConfig.answerJournalBatchSize,
+      batchSize: _answerJournalBatchSize,
     );
     if (acked > 0) {
       unawaited(_refreshQueueIndicators());
@@ -899,10 +935,10 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
   /// Start polling server for admin commands (emergency exit, terminate)
   void _startServerCommandPolling() {
     _serverCommandTimer?.cancel();
-    _serverCommandTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+    _serverCommandTimer = Timer.periodic(Duration(seconds: _commandPollSeconds), (_) {
       _checkServerCommands();
     });
-    debugPrint('🔄 Server command polling started');
+    debugPrint('🔄 Server command polling started (${_commandPollSeconds}s)');
   }
 
   /// Stop server command polling
@@ -2166,8 +2202,9 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
                           );
 
                           // Exam is starting - activate security now!
+                          await _refreshRuntimePolicy(forceRefresh: true);
                           await _startExamSecurity();
-                          _startAnswerJournalSyncLoop();
+                          await _startAnswerJournalSyncLoop();
 
                           final sessionIdInt =
                               int.tryParse(_currentSessionId ?? '') ?? 0;
