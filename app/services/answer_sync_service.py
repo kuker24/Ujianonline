@@ -23,6 +23,10 @@ from app.core.exam_runtime_state import (
 )
 from app.core.exam_session_helpers import merge_statement_answer_metadata
 from app.core.redis_pubsub import get_redis, update_session_answers
+from app.services.answer_runtime_buffer import (
+    AnswerRuntimeBufferService,
+    is_runtime_answer_buffer_enabled,
+)
 from app.models.question import Question
 from app.models.session import Answer, ExamSession
 from app.schemas.answer import (
@@ -136,6 +140,9 @@ class AnswerSyncService:
 
     async def accept_batch(self, batch_data: Any) -> Dict[str, Any]:
         """Persist batch autosave in direct DB mode with no-op update skip."""
+        if is_runtime_answer_buffer_enabled():
+            return await AnswerRuntimeBufferService(self.db, self.current_user).accept_batch(batch_data)
+
         result = await self.db.execute(
             select(ExamSession).where(
                 ExamSession.id == batch_data.session_id,
@@ -399,6 +406,33 @@ class AnswerSyncService:
                 duplicates=duplicate_count,
                 invalid=invalid_count,
                 applied_question_count=0,
+                acks=acks,
+                server_time=datetime.now(timezone.utc),
+            )
+
+        if is_runtime_answer_buffer_enabled():
+            buffered_count = await AnswerRuntimeBufferService(
+                self.db,
+                self.current_user,
+            ).accept_journal_events(sync_data, accepted_events)
+            accepted_event_ids = [event_id for event_id, _ in accepted_events]
+            if accepted_event_ids:
+                await redis.sadd(event_set_key, *accepted_event_ids)
+                await redis.expire(event_set_key, ANSWER_JOURNAL_EVENT_TTL_SECONDS)
+            for event_id, event in accepted_events:
+                acks.append(
+                    AnswerJournalAck(
+                        event_id=event_id,
+                        question_id=int(event.question_id),
+                        status="applied",
+                    )
+                )
+            return AnswerJournalSyncResponse(
+                status="ok",
+                accepted=len(accepted_events),
+                duplicates=duplicate_count,
+                invalid=invalid_count,
+                applied_question_count=buffered_count,
                 acks=acks,
                 server_time=datetime.now(timezone.utc),
             )

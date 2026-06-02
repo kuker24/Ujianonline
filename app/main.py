@@ -104,6 +104,27 @@ async def lifespan(app: FastAPI):
     except Exception as violation_task_err:
         logger.warning(f"Could not start violation event drain loop: {violation_task_err}")
 
+    # Start runtime answer buffer drain loop (active only when answer queue flags enable it)
+    app.state.answer_buffer_task = None
+    app.state.answer_buffer_stop = None
+    try:
+        import asyncio
+        from app.services.answer_runtime_buffer import (
+            answer_runtime_buffer_drain_loop,
+            is_runtime_answer_buffer_enabled,
+        )
+
+        if is_runtime_answer_buffer_enabled():
+            app.state.answer_buffer_stop = asyncio.Event()
+            app.state.answer_buffer_task = asyncio.create_task(
+                answer_runtime_buffer_drain_loop(app.state.answer_buffer_stop)
+            )
+            logger.info("Answer runtime buffer drain loop scheduled")
+        else:
+            logger.info("Answer runtime buffer drain loop disabled by feature flags")
+    except Exception as answer_buffer_err:
+        logger.warning(f"Could not start answer runtime buffer drain loop: {answer_buffer_err}")
+
     # Start background alerting system
     app.state.alerting_task = None
     app.state.alerting_lock_owner = False
@@ -155,6 +176,24 @@ async def lifespan(app: FastAPI):
         logger.info("Violation event drain loop stopped")
     except Exception:
         logger.exception("Failed to stop violation event drain loop cleanly")
+
+    # Stop runtime answer buffer drain loop
+    try:
+        answer_buffer_stop = getattr(app.state, "answer_buffer_stop", None)
+        answer_buffer_task = getattr(app.state, "answer_buffer_task", None)
+        if answer_buffer_stop:
+            answer_buffer_stop.set()
+        if answer_buffer_task and not answer_buffer_task.done():
+            answer_buffer_task.cancel()
+            try:
+                await answer_buffer_task
+            except asyncio.CancelledError:
+                pass
+            except Exception:
+                pass
+        logger.info("Answer runtime buffer drain loop stopped")
+    except Exception:
+        logger.exception("Failed to stop answer runtime buffer drain loop cleanly")
 
     # Stop alerting system
     try:
