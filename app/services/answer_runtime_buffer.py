@@ -84,16 +84,15 @@ def _answer_queue_percentage() -> int:
 
 
 def is_runtime_answer_buffer_enabled() -> bool:
-    """Return whether runtime buffering is globally available.
+    """Return whether runtime answer buffering infrastructure is globally enabled.
 
-    This is a capability check only. New per-session routing must use
-    is_runtime_answer_buffer_enabled_for_session() so percentage canaries are
-    deterministic and sticky per session.
+    This is intentionally a capability/flush check, not a canary routing
+    decision. Use is_runtime_answer_buffer_enabled_for_session() for routing
+    new writes.
     """
     return bool(
         getattr(settings, "answer_queue_enabled", False)
         and _answer_write_mode() in {"queue", "hybrid"}
-        and _answer_queue_percentage() > 0
     )
 
 
@@ -123,6 +122,8 @@ def is_runtime_answer_buffer_enabled_for_session(
         return False
 
     percentage = _answer_queue_percentage()
+    if percentage <= 0:
+        return False
     if percentage >= 100:
         return True
 

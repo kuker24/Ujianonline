@@ -229,7 +229,12 @@ class AnswerSyncService:
 
             persisted_via_queue = False
             mode = _answer_write_mode()
-            if mode == "queue":
+            selected_for_async_answer_path = is_runtime_answer_buffer_enabled_for_session(
+                session_id=session_id,
+                user_id=int(self.current_user.id),
+                exam_id=exam_id,
+            )
+            if mode == "queue" and selected_for_async_answer_path:
                 try:
                     await enqueue_answer_payload(
                         {
@@ -256,11 +261,7 @@ class AnswerSyncService:
                         str(queue_exc),
                     )
 
-            if mode == "hybrid" and is_runtime_answer_buffer_enabled_for_session(
-                session_id=session_id,
-                user_id=int(self.current_user.id),
-                exam_id=exam_id,
-            ):
+            if mode == "hybrid" and selected_for_async_answer_path:
                 await AnswerRuntimeBufferService(self.db, self.current_user).accept_single_answer(
                     session=locked_session,
                     answer_data=answer_data,

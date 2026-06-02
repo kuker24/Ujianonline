@@ -60,6 +60,31 @@ async def test_final_submit_preflushes_runtime_answer_buffer_when_enabled(monkey
     assert flushed == {"db": fake_db, "session_id": 123}
 
 
+@pytest.mark.asyncio
+async def test_final_submit_flush_ignores_percentage_zero_when_capability_enabled(monkeypatch) -> None:
+    flushed = {}
+
+    async def fake_flush(db, session_id):
+        flushed["db"] = db
+        flushed["session_id"] = session_id
+        return 1
+
+    monkeypatch.setattr(final_submit_service.settings, "answer_write_mode", "hybrid")
+    monkeypatch.setattr(final_submit_service.settings, "answer_queue_enabled", True)
+    monkeypatch.setattr(final_submit_service.settings, "answer_queue_percentage", 0)
+    monkeypatch.setattr(final_submit_service, "flush_runtime_answer_buffer_for_session", fake_flush)
+
+    fake_db = SimpleNamespace()
+    service = final_submit_service.FinalSubmitService(
+        db=fake_db,
+        current_user=SimpleNamespace(id=7, username="student"),
+    )
+
+    await service._flush_answer_buffers_before_submit(123)
+
+    assert flushed == {"db": fake_db, "session_id": 123}
+
+
 class _MappingResult:
     def __init__(self, row):
         self._row = row

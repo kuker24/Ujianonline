@@ -414,6 +414,136 @@ async def test_single_answer_hybrid_percentage_false_falls_back_to_direct_write(
     assert wrote == {"session_id": 123, "question_id": 9}
 
 
+async def _noop_update_session_answers(_session_id, _answers):
+    return None
+
+
+async def _fake_runtime_count(self, session_id, question_ids, log_prefix):
+    return len(question_ids)
+
+
+@pytest.mark.asyncio
+async def test_single_answer_queue_percentage_false_falls_back_to_direct_write(monkeypatch) -> None:
+    _patch_single_answer_common(monkeypatch)
+    wrote = {}
+
+    async def fail_enqueue(_payload):
+        raise AssertionError("queue enqueue should not run when session is not selected")
+
+    async def fake_write(self, *, session_id, question_id, write_fields):
+        wrote["session_id"] = session_id
+        wrote["question_id"] = question_id
+        wrote["selected_option_id"] = write_fields["selected_option_id"]
+
+    monkeypatch.setattr(answer_sync_service, "_answer_write_mode", lambda: "queue")
+    monkeypatch.setattr(answer_sync_service, "is_runtime_answer_buffer_enabled_for_session", lambda **_kwargs: False)
+    monkeypatch.setattr(answer_sync_service, "enqueue_answer_payload", fail_enqueue)
+    monkeypatch.setattr(answer_sync_service.AnswerSyncService, "_write_single_answer_direct", fake_write)
+    monkeypatch.setattr(answer_sync_service.AnswerSyncService, "_update_runtime_answered_count", _fake_runtime_count)
+    monkeypatch.setattr(answer_sync_service, "update_session_answers", _noop_update_session_answers)
+
+    locked_session = SimpleNamespace(id=123, exam_id=55, status="in_progress")
+    db = _FakeSingleAnswerDb(
+        results=[
+            _FirstResult((123, 55, "in_progress")),
+            _ScalarResult(None),
+            _ScalarResult(locked_session),
+        ]
+    )
+
+    response = await _single_answer_service(db).accept_single_answer(
+        AnswerSubmit(session_id=123, question_id=9, selected_option_id=2),
+        request=None,
+    )
+
+    assert response.status == "saved"
+    assert wrote == {"session_id": 123, "question_id": 9, "selected_option_id": 2}
+
+
+@pytest.mark.asyncio
+async def test_single_answer_queue_percentage_true_enqueues_without_direct_write(monkeypatch) -> None:
+    _patch_single_answer_common(monkeypatch)
+    queued = {}
+
+    async def fake_enqueue(payload):
+        queued.update(payload)
+
+    async def fail_direct(*_args, **_kwargs):
+        raise AssertionError("direct write should not run for selected queue-mode session")
+
+    monkeypatch.setattr(answer_sync_service, "_answer_write_mode", lambda: "queue")
+    monkeypatch.setattr(answer_sync_service, "is_runtime_answer_buffer_enabled_for_session", lambda **_kwargs: True)
+    monkeypatch.setattr(answer_sync_service, "enqueue_answer_payload", fake_enqueue)
+    monkeypatch.setattr(answer_sync_service.AnswerSyncService, "_write_single_answer_direct", fail_direct)
+    monkeypatch.setattr(answer_sync_service.AnswerSyncService, "_update_runtime_answered_count", _fake_runtime_count)
+    monkeypatch.setattr(answer_sync_service, "update_session_answers", _noop_update_session_answers)
+
+    locked_session = SimpleNamespace(id=123, exam_id=55, status="in_progress")
+    db = _FakeSingleAnswerDb(
+        results=[
+            _FirstResult((123, 55, "in_progress")),
+            _ScalarResult(None),
+            _ScalarResult(locked_session),
+        ]
+    )
+
+    response = await _single_answer_service(db).accept_single_answer(
+        AnswerSubmit(session_id=123, question_id=9, selected_option_id=2),
+        request=None,
+    )
+
+    assert response.status == "saved"
+    assert queued["session_id"] == 123
+    assert queued["exam_id"] == 55
+    assert queued["user_id"] == 7
+    assert queued["question_id"] == 9
+    assert queued["selected_option_id"] == 2
+    assert queued["selected_option_ids"] is None
+    assert queued["answer_text"] is None
+    assert queued["statement_answers"] is None
+    assert queued["is_correct"] is True
+    assert queued["points_earned"] == 1.0
+    assert "answered_at" in queued
+
+
+@pytest.mark.asyncio
+async def test_single_answer_queue_enqueue_failure_falls_back_to_direct_write(monkeypatch) -> None:
+    _patch_single_answer_common(monkeypatch)
+    wrote = {}
+
+    async def fail_enqueue(_payload):
+        raise RuntimeError("redis busy")
+
+    async def fake_write(self, *, session_id, question_id, write_fields):
+        wrote["session_id"] = session_id
+        wrote["question_id"] = question_id
+        wrote["selected_option_id"] = write_fields["selected_option_id"]
+
+    monkeypatch.setattr(answer_sync_service, "_answer_write_mode", lambda: "queue")
+    monkeypatch.setattr(answer_sync_service, "is_runtime_answer_buffer_enabled_for_session", lambda **_kwargs: True)
+    monkeypatch.setattr(answer_sync_service, "enqueue_answer_payload", fail_enqueue)
+    monkeypatch.setattr(answer_sync_service.AnswerSyncService, "_write_single_answer_direct", fake_write)
+    monkeypatch.setattr(answer_sync_service.AnswerSyncService, "_update_runtime_answered_count", _fake_runtime_count)
+    monkeypatch.setattr(answer_sync_service, "update_session_answers", _noop_update_session_answers)
+
+    locked_session = SimpleNamespace(id=123, exam_id=55, status="in_progress")
+    db = _FakeSingleAnswerDb(
+        results=[
+            _FirstResult((123, 55, "in_progress")),
+            _ScalarResult(None),
+            _ScalarResult(locked_session),
+        ]
+    )
+
+    response = await _single_answer_service(db).accept_single_answer(
+        AnswerSubmit(session_id=123, question_id=9, selected_option_id=2),
+        request=None,
+    )
+
+    assert response.status == "saved"
+    assert wrote == {"session_id": 123, "question_id": 9, "selected_option_id": 2}
+
+
 class _FakeRuntimeBufferService:
     def __init__(self, db, current_user):
         self.db = db

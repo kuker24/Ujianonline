@@ -478,7 +478,7 @@ Makna operasional:
 
 ### 12.2 Staged rollout runtime answer buffer
 
-Runtime answer buffer tidak boleh langsung 100% di production tanpa pembuktian final submit flush. `ANSWER_QUEUE_PERCENTAGE` bersifat deterministik per session: session yang sama akan sticky ke jalur direct atau buffer selama nilai env tidak berubah. Gunakan canary bertahap 10% → 50% → 100% setelah test dan monitoring stabil.
+Runtime answer buffer tidak boleh langsung 100% di production tanpa pembuktian final submit flush. `ANSWER_QUEUE_PERCENTAGE` hanya mengatur routing session baru ke jalur async/buffer, bersifat deterministik per session, dan session yang sama akan sticky ke jalur direct atau buffer selama nilai env tidak berubah. Menurunkan percentage ke `0` menghentikan session baru masuk buffer, tetapi flush/drain buffer lama tetap boleh berjalan selama `ANSWER_QUEUE_ENABLED=true` dan mode masih `queue`/`hybrid`. Gunakan canary bertahap 10% → 50% → 100% setelah test dan monitoring stabil.
 
 #### Stage 0 — direct mode only
 
@@ -543,10 +543,23 @@ Syarat keras:
 
 Jika ada gejala jawaban terlambat, pending Redis naik, atau submit sering 503:
 
+Rollback total:
+
 ```env
-ANSWER_QUEUE_ENABLED=false
 ANSWER_WRITE_MODE=direct
+ANSWER_QUEUE_ENABLED=false
+ANSWER_QUEUE_PERCENTAGE=0
 ```
+
+Graceful drain rollback jika masih ada dirty buffer/pending Redis dan operator ingin menghentikan session baru masuk buffer sambil tetap mengizinkan flush:
+
+```env
+ANSWER_WRITE_MODE=hybrid
+ANSWER_QUEUE_ENABLED=true
+ANSWER_QUEUE_PERCENTAGE=0
+```
+
+Setelah pending/dirty buffer kosong, pindahkan ke rollback total (`direct`/`off`).
 
 Tetap pertahankan jika stabil:
 

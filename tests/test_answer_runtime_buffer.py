@@ -23,9 +23,27 @@ def _enable_queue(monkeypatch, *, mode="hybrid", enabled=True, percentage=10) ->
     monkeypatch.setattr(buffer.settings, "answer_queue_percentage", percentage)
 
 
-def test_runtime_answer_buffer_percentage_zero_disables_all_sessions(monkeypatch) -> None:
+def test_runtime_answer_buffer_percentage_zero_disables_new_session_routing_only(monkeypatch) -> None:
     _enable_queue(monkeypatch, percentage=0)
 
+    assert buffer.is_runtime_answer_buffer_enabled() is True
+    assert buffer.is_runtime_answer_buffer_enabled_for_session(123, user_id=7, exam_id=55) is False
+
+
+def test_runtime_answer_buffer_global_capability_ignores_percentage_for_flush(monkeypatch) -> None:
+    _enable_queue(monkeypatch, mode="hybrid", enabled=True, percentage=0)
+    assert buffer.is_runtime_answer_buffer_enabled() is True
+    assert buffer.is_runtime_answer_buffer_enabled_for_session(123, user_id=7, exam_id=55) is False
+
+    _enable_queue(monkeypatch, mode="queue", enabled=True, percentage=0)
+    assert buffer.is_runtime_answer_buffer_enabled() is True
+    assert buffer.is_runtime_answer_buffer_enabled_for_session(123, user_id=7, exam_id=55) is False
+
+    _enable_queue(monkeypatch, mode="direct", enabled=True, percentage=100)
+    assert buffer.is_runtime_answer_buffer_enabled() is False
+    assert buffer.is_runtime_answer_buffer_enabled_for_session(123, user_id=7, exam_id=55) is False
+
+    _enable_queue(monkeypatch, mode="hybrid", enabled=False, percentage=100)
     assert buffer.is_runtime_answer_buffer_enabled() is False
     assert buffer.is_runtime_answer_buffer_enabled_for_session(123, user_id=7, exam_id=55) is False
 
