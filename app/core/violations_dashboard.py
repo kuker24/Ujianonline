@@ -6,7 +6,7 @@ Separated from API router to keep endpoint modules focused on transport/auth con
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -566,6 +566,14 @@ def _build_violations_query(
     return query
 
 
+def _apply_violations_scope(query, *, exam_id: Optional[int], current_user: User):
+    if exam_id:
+        query = query.where(ExamSession.exam_id == exam_id)
+    if is_teacher_scope_restricted(current_user):
+        query = query.where(Exam.creator_id == current_user.id)
+    return query
+
+
 async def _build_violations_summary_payload(
     db: AsyncSession,
     *,
@@ -604,12 +612,16 @@ async def _build_violations_summary_payload(
             )
         )
     )
-    if exam_id:
-        grouped_query = grouped_query.where(ExamSession.exam_id == exam_id)
-        distinct_session_query = distinct_session_query.where(ExamSession.exam_id == exam_id)
-    if is_teacher_scope_restricted(current_user):
-        grouped_query = grouped_query.where(Exam.creator_id == current_user.id)
-        distinct_session_query = distinct_session_query.where(Exam.creator_id == current_user.id)
+    grouped_query = _apply_violations_scope(
+        grouped_query,
+        exam_id=exam_id,
+        current_user=current_user,
+    )
+    distinct_session_query = _apply_violations_scope(
+        distinct_session_query,
+        exam_id=exam_id,
+        current_user=current_user,
+    )
 
     grouped_result = await db.execute(grouped_query)
     grouped_rows = grouped_result.fetchall()
@@ -655,6 +667,196 @@ async def _build_violations_summary_payload(
     }
 
 
+async def _build_violations_aggregate_payload(
+    db: AsyncSession,
+    *,
+    exam_id: Optional[int],
+    date_from: datetime,
+    date_to: datetime,
+    current_user: User,
+    include_warning_only: bool = True,
+    selected_exam_title: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Build aggregate-first violation dashboard without loading individual logs."""
+    base_filters = _base_violations_filters(
+        date_from=date_from,
+        date_to=date_to,
+        include_warning_only=include_warning_only,
+    )
+    type_query = (
+        select(
+            ExamLog.event_type,
+            func.count(ExamLog.id).label("count"),
+            func.count(func.distinct(ExamSession.user_id)).label("offender_count"),
+            func.max(ExamLog.created_at).label("last_seen_at"),
+        )
+        .join(ExamSession, ExamLog.session_id == ExamSession.id)
+        .join(Exam, ExamSession.exam_id == Exam.id)
+        .where(*base_filters)
+        .group_by(ExamLog.event_type)
+        .order_by(desc("count"))
+        .limit(50)
+    )
+    offender_query = (
+        select(
+            ExamSession.user_id,
+            User.full_name,
+            User.username,
+            User.student_class,
+            func.count(ExamLog.id).label("count"),
+            func.max(ExamLog.created_at).label("latest_violation_at"),
+        )
+        .join(ExamSession, ExamLog.session_id == ExamSession.id)
+        .join(Exam, ExamSession.exam_id == Exam.id)
+        .join(User, User.id == ExamSession.user_id)
+        .where(*base_filters)
+        .group_by(ExamSession.user_id, User.full_name, User.username, User.student_class)
+        .order_by(desc("count"), desc("latest_violation_at"))
+        .limit(10)
+    )
+    timeline_query = (
+        select(
+            func.date_trunc("hour", ExamLog.created_at).label("hour_bucket"),
+            func.count(ExamLog.id).label("count"),
+        )
+        .join(ExamSession, ExamLog.session_id == ExamSession.id)
+        .join(Exam, ExamSession.exam_id == Exam.id)
+        .where(*base_filters)
+        .group_by("hour_bucket")
+        .order_by("hour_bucket")
+    )
+    distinct_query = (
+        select(
+            func.count(ExamLog.id).label("total_violations"),
+            func.count(func.distinct(ExamSession.user_id)).label("unique_offenders"),
+            func.count(func.distinct(ExamLog.session_id)).label("affected_sessions"),
+            func.count(func.distinct(ExamSession.exam_id)).label("unique_exams"),
+        )
+        .join(ExamSession, ExamLog.session_id == ExamSession.id)
+        .join(Exam, ExamSession.exam_id == Exam.id)
+        .where(*base_filters)
+    )
+
+    type_query = _apply_violations_scope(type_query, exam_id=exam_id, current_user=current_user)
+    offender_query = _apply_violations_scope(
+        offender_query,
+        exam_id=exam_id,
+        current_user=current_user,
+    )
+    timeline_query = _apply_violations_scope(
+        timeline_query,
+        exam_id=exam_id,
+        current_user=current_user,
+    )
+    distinct_query = _apply_violations_scope(
+        distinct_query,
+        exam_id=exam_id,
+        current_user=current_user,
+    )
+
+    type_rows = (await db.execute(type_query)).all()
+    offender_rows = (await db.execute(offender_query)).all()
+    timeline_rows = (await db.execute(timeline_query)).all()
+    totals = (await db.execute(distinct_query)).mappings().one()
+
+    by_type: Dict[str, int] = {}
+    type_breakdown: List[Dict[str, Any]] = []
+    for event_type, count, offender_count, last_seen_at in type_rows:
+        normalized_type = canonical_violation_event_type(
+            event_type,
+            {},
+            assume_violation=True,
+        ) or event_type
+        violation_type = strip_violation_prefix(normalized_type)
+        safe_count = int(count or 0)
+        by_type[violation_type] = by_type.get(violation_type, 0) + safe_count
+        meta = get_violation_metadata(normalized_type, assume_violation=True)
+        type_breakdown.append(
+            {
+                "violation_type": violation_type,
+                "label": meta["label"],
+                "severity": meta["severity"],
+                "category": meta["category"],
+                "description": meta["description"],
+                "explanation": get_violation_explanation(violation_type, assume_violation=True),
+                "count": safe_count,
+                "offender_count": int(offender_count or 0),
+                "last_seen_at": (
+                    _ensure_aware_datetime(last_seen_at).isoformat() if last_seen_at else ""
+                ),
+                "last_seen_at_display": _format_wib_datetime(last_seen_at),
+                "offenders": [],
+                "recent_violations": [],
+            }
+        )
+
+    top_offenders: List[Dict[str, Any]] = []
+    for user_id, full_name, username, student_class, count, latest_violation_at in offender_rows:
+        name = full_name or username or f"User #{user_id}"
+        top_offenders.append(
+            {
+                "user_id": int(user_id),
+                "name": name,
+                "username": username,
+                "class": student_class,
+                "count": int(count or 0),
+                "exam_titles": [],
+                "latest_violation_at": (
+                    _ensure_aware_datetime(latest_violation_at).isoformat()
+                    if latest_violation_at
+                    else ""
+                ),
+                "latest_violation_at_display": _format_wib_datetime(latest_violation_at),
+                "type_breakdown": [],
+                "recent_violations": [],
+            }
+        )
+
+    timeline: Dict[str, int] = {}
+    for hour_bucket, count in timeline_rows:
+        aware_bucket = _ensure_aware_datetime(hour_bucket) or datetime.now(timezone.utc)
+        timeline[aware_bucket.astimezone(WIB_TIMEZONE).strftime("%Y-%m-%d %H:00")] = int(
+            count or 0
+        )
+
+    total_violations = int(totals["total_violations"] or 0)
+    affected_session_count = int(totals["affected_sessions"] or 0)
+    generated_at = datetime.now(timezone.utc)
+    return {
+        "aggregate_only": True,
+        "summary_only": True,
+        "total_violations": total_violations,
+        "by_type": by_type,
+        "type_details": {
+            violation_type: get_violation_metadata(violation_type, assume_violation=True)
+            for violation_type in by_type.keys()
+        },
+        "type_breakdown": type_breakdown,
+        "top_offenders": top_offenders,
+        "offender_details": top_offenders,
+        "unique_offender_count": int(totals["unique_offenders"] or 0),
+        "timeline": timeline,
+        "violations": [],
+        "unique_exam_count": int(totals["unique_exams"] or 0),
+        "affected_session_count": affected_session_count,
+        "average_per_session": (
+            round(total_violations / affected_session_count, 2)
+            if affected_session_count
+            else 0
+        ),
+        "selected_exam_title": selected_exam_title,
+        "date_range_label": _format_date_range_label(date_from, date_to),
+        "generated_at": generated_at.isoformat(),
+        "generated_at_display": _format_wib_datetime(generated_at),
+        "filters": {
+            "exam_id": exam_id,
+            "date_from": date_from.isoformat(),
+            "date_to": date_to.isoformat(),
+            "detail_level": "summary",
+        },
+    }
+
+
 async def _resolve_selected_exam_title(
     db: AsyncSession,
     *,
@@ -676,6 +878,7 @@ def _build_violations_export_filename() -> str:
 
 
 __all__ = [
+    "_build_violations_aggregate_payload",
     "_build_violations_dashboard_payload",
     "_build_violations_export_filename",
     "_build_violations_query",

@@ -955,6 +955,8 @@ class ApiClient {
         if (dateFrom) params.append('date_from', dateFrom);
         if (dateTo) params.append('date_to', dateTo);
         if (options && options.summaryOnly) params.append('summary_only', 'true');
+        if (options && options.countedOnly) params.append('counted_only', 'true');
+        if (options && options.detailLevel) params.append('detail_level', options.detailLevel);
         const query = params.toString();
         return this.request('GET', `/monitoring/violations${query ? `?${query}` : ''}`);
     }

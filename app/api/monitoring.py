@@ -94,6 +94,7 @@ from app.core.violation_metadata import VIOLATION_TYPE_METADATA
 from app.core.violation_scoring import VIOLATION_DISABLED_EVENT_TYPES
 from app.core.violations_dashboard import (
     _ensure_aware_datetime,
+    _build_violations_aggregate_payload,
     _build_violations_dashboard_payload,
     _build_violations_export_filename,
     _build_violations_query,
@@ -343,6 +344,7 @@ async def get_violations_dashboard(
     date_to: Optional[datetime] = None,
     summary_only: bool = False,
     counted_only: bool = False,
+    detail_level: str = "auto",
     current_user: User = Depends(get_current_teacher),
     db: AsyncSession = Depends(get_db_read)
 ):
@@ -358,6 +360,10 @@ async def get_violations_dashboard(
 
     effective_from, effective_to = _coerce_violations_date_range(date_from, date_to)
     include_warning_only = not bool(counted_only)
+    normalized_detail_level = (detail_level or "auto").strip().lower()
+    if normalized_detail_level not in {"auto", "summary", "detail"}:
+        raise HTTPException(status_code=400, detail="detail_level harus auto, summary, atau detail")
+
     if summary_only:
         return await _build_violations_summary_payload(
             db,
@@ -366,6 +372,29 @@ async def get_violations_dashboard(
             date_to=effective_to,
             current_user=current_user,
             include_warning_only=include_warning_only,
+        )
+
+    aggregate_first = normalized_detail_level == "summary" or (
+        normalized_detail_level == "auto"
+        and (
+            settings.exam_peak_mode
+            or str(settings.admin_monitoring_detail_level).lower() == "summary"
+        )
+    )
+    if aggregate_first:
+        selected_exam_title = await _resolve_selected_exam_title(
+            db,
+            exam_id=exam_id,
+            current_user=current_user,
+        )
+        return await _build_violations_aggregate_payload(
+            db,
+            exam_id=exam_id,
+            date_from=effective_from,
+            date_to=effective_to,
+            current_user=current_user,
+            include_warning_only=include_warning_only,
+            selected_exam_title=selected_exam_title,
         )
 
     result = await db.execute(
