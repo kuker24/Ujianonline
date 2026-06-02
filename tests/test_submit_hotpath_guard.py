@@ -4,6 +4,7 @@ import re
 
 EXAMS_SOURCE = Path("app/api/exams.py").read_text(encoding="utf-8")
 EXAM_ANSWER_SYNC_SOURCE = Path("app/api/exam_answer_sync.py").read_text(encoding="utf-8")
+EXAM_SESSION_RUNTIME_SOURCE = Path("app/api/exam_session_runtime.py").read_text(encoding="utf-8")
 SECURITY_SOURCE = Path("app/core/security.py").read_text(encoding="utf-8")
 AUTH_SOURCE = Path("app/api/auth.py").read_text(encoding="utf-8")
 WEBSOCKET_SOURCE = Path("app/api/websocket.py").read_text(encoding="utf-8")
@@ -35,12 +36,12 @@ def test_start_uses_hot_path_auth_dependency() -> None:
 
 
 def test_status_uses_hot_path_auth_dependency() -> None:
-    fn = _extract_async_function(EXAMS_SOURCE, "get_session_status")
+    fn = _extract_async_function(EXAM_SESSION_RUNTIME_SOURCE, "get_session_status")
     assert "current_user: AuthenticatedUser = Depends(get_current_user_hot_path)" in fn
 
 
 def test_remaining_time_uses_hot_path_auth_dependency() -> None:
-    fn = _extract_async_function(EXAMS_SOURCE, "get_remaining_time")
+    fn = _extract_async_function(EXAM_SESSION_RUNTIME_SOURCE, "get_remaining_time")
     assert "current_user: AuthenticatedUser = Depends(get_current_user_hot_path)" in fn
 
 
@@ -65,7 +66,7 @@ def test_log_violation_uses_hot_path_auth_dependency() -> None:
 
 
 def test_resume_session_uses_hot_path_auth_dependency() -> None:
-    fn = _extract_async_function(EXAMS_SOURCE, "resume_session")
+    fn = _extract_async_function(EXAM_SESSION_RUNTIME_SOURCE, "resume_session")
     assert "current_user: AuthenticatedUser = Depends(get_current_user_hot_path)" in fn
 
 

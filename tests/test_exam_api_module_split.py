@@ -3,6 +3,7 @@ from pathlib import Path
 
 EXAMS_SOURCE = Path("app/api/exams.py").read_text(encoding="utf-8")
 ANSWER_SYNC_API_SOURCE = Path("app/api/exam_answer_sync.py").read_text(encoding="utf-8")
+SESSION_RUNTIME_API_SOURCE = Path("app/api/exam_session_runtime.py").read_text(encoding="utf-8")
 MAIN_SOURCE = Path("app/main.py").read_text(encoding="utf-8")
 ANSWER_SYNC_SCHEMA_SOURCE = Path("app/schemas/answer_sync.py").read_text(encoding="utf-8")
 
@@ -22,6 +23,25 @@ def test_answer_sync_routes_live_outside_large_exams_module() -> None:
 def test_answer_sync_router_is_registered_in_main() -> None:
     assert "exam_answer_sync" in MAIN_SOURCE
     assert "app.include_router(exam_answer_sync.router)" in MAIN_SOURCE
+
+
+def test_session_runtime_routes_live_outside_large_exams_module() -> None:
+    assert "async def get_session_status" not in EXAMS_SOURCE
+    assert "async def get_remaining_time" not in EXAMS_SOURCE
+    assert "async def resume_session" not in EXAMS_SOURCE
+    assert "class PreciseTimerResponse" not in EXAMS_SOURCE
+    assert "class SessionResumeResponse" not in EXAMS_SOURCE
+
+    assert "async def get_session_status" in SESSION_RUNTIME_API_SOURCE
+    assert "async def get_remaining_time" in SESSION_RUNTIME_API_SOURCE
+    assert "async def resume_session" in SESSION_RUNTIME_API_SOURCE
+    assert "class PreciseTimerResponse" in SESSION_RUNTIME_API_SOURCE
+    assert "class SessionResumeResponse" in SESSION_RUNTIME_API_SOURCE
+
+
+def test_session_runtime_router_is_registered_in_main() -> None:
+    assert "exam_session_runtime" in MAIN_SOURCE
+    assert "app.include_router(exam_session_runtime.router)" in MAIN_SOURCE
 
 
 def test_batch_autosave_schemas_live_in_schema_module() -> None:
