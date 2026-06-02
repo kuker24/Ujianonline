@@ -5,7 +5,7 @@ import pytest
 import sqlalchemy
 from fastapi import HTTPException
 
-from app.api import exam_answer_sync, exams
+from app.api import answer_sync, exam_answer_sync
 from app.schemas.answer import (
     AnswerJournalEvent,
     AnswerJournalSyncRequest,
@@ -64,9 +64,9 @@ class _FakeAnswerSyncService:
 @pytest.mark.asyncio
 async def test_submit_answer_endpoint_routes_to_answer_sync_service(monkeypatch) -> None:
     fake_service = _FakeAnswerSyncService()
-    monkeypatch.setattr(exams, "get_answer_sync_service", lambda db, user: fake_service)
+    monkeypatch.setattr(answer_sync, "get_answer_sync_service", lambda db, user: fake_service)
 
-    response = await exams.submit_answer(
+    response = await answer_sync.submit_answer(
         AnswerSubmit(session_id=123, question_id=45, selected_option_id=9),
         request="request-object",
         current_user=SimpleNamespace(id=7),

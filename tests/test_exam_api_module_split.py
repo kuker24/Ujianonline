@@ -2,7 +2,10 @@ from pathlib import Path
 
 
 EXAMS_SOURCE = Path("app/api/exams.py").read_text(encoding="utf-8")
+SINGLE_ANSWER_API_SOURCE = Path("app/api/answer_sync.py").read_text(encoding="utf-8")
 ANSWER_SYNC_API_SOURCE = Path("app/api/exam_answer_sync.py").read_text(encoding="utf-8")
+FINAL_SUBMIT_API_SOURCE = Path("app/api/final_submit.py").read_text(encoding="utf-8")
+VIOLATION_EVENTS_API_SOURCE = Path("app/api/violation_events.py").read_text(encoding="utf-8")
 SESSION_RUNTIME_API_SOURCE = Path("app/api/exam_session_runtime.py").read_text(encoding="utf-8")
 OFFLINE_PACKAGE_API_SOURCE = Path("app/api/exam_offline_package.py").read_text(encoding="utf-8")
 PAUSE_CONTROL_API_SOURCE = Path("app/api/exam_pause_control.py").read_text(encoding="utf-8")
@@ -10,6 +13,12 @@ EXPORTS_API_SOURCE = Path("app/api/exam_exports.py").read_text(encoding="utf-8")
 CRUD_API_SOURCE = Path("app/api/exam_crud.py").read_text(encoding="utf-8")
 MAIN_SOURCE = Path("app/main.py").read_text(encoding="utf-8")
 ANSWER_SYNC_SCHEMA_SOURCE = Path("app/schemas/answer_sync.py").read_text(encoding="utf-8")
+
+
+def test_single_answer_route_lives_outside_large_exams_module() -> None:
+    assert "async def submit_answer" not in EXAMS_SOURCE
+    assert "async def submit_answer" in SINGLE_ANSWER_API_SOURCE
+    assert '@router.post("/submit-answer"' in SINGLE_ANSWER_API_SOURCE
 
 
 def test_answer_sync_routes_live_outside_large_exams_module() -> None:
@@ -25,8 +34,34 @@ def test_answer_sync_routes_live_outside_large_exams_module() -> None:
 
 
 def test_answer_sync_router_is_registered_in_main() -> None:
+    assert "answer_sync" in MAIN_SOURCE
     assert "exam_answer_sync" in MAIN_SOURCE
+    assert "app.include_router(answer_sync.router)" in MAIN_SOURCE
     assert "app.include_router(exam_answer_sync.router)" in MAIN_SOURCE
+
+
+def test_final_submit_route_lives_outside_large_exams_module() -> None:
+    assert "async def submit_exam" not in EXAMS_SOURCE
+    assert "async def submit_exam" in FINAL_SUBMIT_API_SOURCE
+    assert '@router.post("/submit"' in FINAL_SUBMIT_API_SOURCE
+    assert "get_final_submit_service" in FINAL_SUBMIT_API_SOURCE
+
+
+def test_final_submit_router_is_registered_in_main() -> None:
+    assert "final_submit" in MAIN_SOURCE
+    assert "app.include_router(final_submit.router)" in MAIN_SOURCE
+
+
+def test_violation_log_route_lives_outside_large_exams_module() -> None:
+    assert "async def log_violation" not in EXAMS_SOURCE
+    assert "async def log_violation" in VIOLATION_EVENTS_API_SOURCE
+    assert '@router.post("/log-violation"' in VIOLATION_EVENTS_API_SOURCE
+    assert "enqueue_violation_event" in VIOLATION_EVENTS_API_SOURCE
+
+
+def test_violation_events_router_is_registered_in_main() -> None:
+    assert "violation_events" in MAIN_SOURCE
+    assert "app.include_router(violation_events.router)" in MAIN_SOURCE
 
 
 def test_session_runtime_routes_live_outside_large_exams_module() -> None:
@@ -131,3 +166,26 @@ def test_batch_autosave_schemas_live_in_schema_module() -> None:
     assert "class BatchAnswerItem" in ANSWER_SYNC_SCHEMA_SOURCE
     assert "class BatchAutoSaveRequest" in ANSWER_SYNC_SCHEMA_SOURCE
     assert "class BatchAutoSaveResponse" in ANSWER_SYNC_SCHEMA_SOURCE
+
+
+def test_split_exam_routers_import_without_circular_dependency() -> None:
+    import app.api.answer_sync as single_answer_router
+    import app.api.exam_answer_sync as batch_answer_router
+    import app.api.exam_crud as crud_router
+    import app.api.exam_offline_package as offline_router
+    import app.api.exam_pause_control as pause_router
+    import app.api.exam_session_runtime as runtime_router
+    import app.api.final_submit as final_submit_router
+    import app.api.violation_events as violation_router
+
+    routers = [
+        single_answer_router.router,
+        batch_answer_router.router,
+        crud_router.router,
+        offline_router.router,
+        pause_router.router,
+        runtime_router.router,
+        final_submit_router.router,
+        violation_router.router,
+    ]
+    assert all(router.routes for router in routers)

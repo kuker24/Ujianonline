@@ -15,7 +15,7 @@ import logging
 from app.config import settings
 from app.database import init_db
 from app.core.redis_pubsub import init_redis, close_redis
-from app.api import auth, users, exams, exam_crud, exam_answer_sync, exam_session_runtime, exam_offline_package, exam_pause_control, exam_exports, questions, websocket, stats, sxb, seb_autoconfig, runtime
+from app.api import auth, users, exams, exam_crud, answer_sync, final_submit, violation_events, exam_answer_sync, exam_session_runtime, exam_offline_package, exam_pause_control, exam_exports, questions, websocket, stats, sxb, seb_autoconfig, runtime
 from app.api import grading, analytics, monitoring
 from app.api import exam_seb, exam_admin
 
@@ -315,6 +315,9 @@ jinja_templates = Jinja2Templates(directory="templates")
 app.include_router(exams.public_router)
 app.include_router(exams.router)
 app.include_router(exam_crud.router)
+app.include_router(answer_sync.router)
+app.include_router(final_submit.router)
+app.include_router(violation_events.router)
 app.include_router(exam_answer_sync.router)
 app.include_router(exam_session_runtime.router)
 app.include_router(exam_offline_package.router)

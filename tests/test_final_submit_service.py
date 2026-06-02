@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.api import exams
+from app.api import final_submit
 from app.schemas.answer import ExamSubmitRequest, ExamSubmitResponse
 from app.services import final_submit_service
 
@@ -23,9 +23,9 @@ class _FakeFinalSubmitService:
 @pytest.mark.asyncio
 async def test_submit_exam_endpoint_routes_to_final_submit_service(monkeypatch) -> None:
     fake_service = _FakeFinalSubmitService()
-    monkeypatch.setattr(exams, "get_final_submit_service", lambda db, user: fake_service)
+    monkeypatch.setattr(final_submit, "get_final_submit_service", lambda db, user: fake_service)
 
-    response = await exams.submit_exam(
+    response = await final_submit.submit_exam(
         ExamSubmitRequest(session_id=123),
         request=None,
         current_user=SimpleNamespace(id=7, username="student"),
