@@ -429,7 +429,6 @@ def print_plan(args: argparse.Namespace, rows: list[SessionRow]) -> None:
 
 def main() -> None:
     args = parse_args()
-    validate_args(args)
     rows = build_session_rows(args)
     validate_args(args, rows)
     print_plan(args, rows)

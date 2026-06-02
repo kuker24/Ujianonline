@@ -115,6 +115,18 @@ def test_execute_with_csv_requires_token_for_every_row(tmp_path) -> None:
         load_script.validate_args(_args(sessions_csv=str(csv_file), execute=True), rows)
 
 
+def test_execute_with_csv_allows_per_row_tokens_without_global_token(tmp_path) -> None:
+    csv_file = tmp_path / "sessions.csv"
+    csv_file.write_text(
+        "session_id,question_id,selected_option_id,token\n"
+        "1001,2001,3001,row-token\n",
+        encoding="utf-8",
+    )
+    rows = load_script.load_session_rows(csv_file, fallback_token="", fallback_selected_option_id=1)
+
+    load_script.validate_args(_args(sessions_csv=str(csv_file), execute=True), rows)
+
+
 def test_mask_token_does_not_print_full_secret() -> None:
     token = "abcdefghijklmnopqrstuvwxyz"
     masked = load_script.mask_token(token)
