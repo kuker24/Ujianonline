@@ -176,7 +176,7 @@ Untuk setiap stage catat:
 | p95 latency `/api/exams/submit-answer` | tidak naik tajam |
 | p99 latency `/api/exams/submit-answer` | tidak ada spike berkepanjangan |
 | final submit success rate | 100% pada sample test |
-| 429 rate | terukur dan tidak massal |
+| 429 rate | terukur dan tidak massal; ini pressure signal, bukan success |
 | 503 rate | 0 atau sangat rendah; investigasi jika muncul |
 | Redis pending/processing queue size | tidak naik terus-menerus |
 | Redis dirty session count | tidak naik terus-menerus |
@@ -187,8 +187,8 @@ Untuk setiap stage catat:
 Summary JSON script menyimpan:
 
 - total requests,
-- success/failures,
-- status counts,
+- success/failures (`success` hanya HTTP 2xx; 401/403/404/429/5xx dihitung sebagai failure),
+- status counts untuk investigasi auth/session/rate-limit/backend pressure,
 - p50/p95/p99/max,
 - per endpoint summary,
 - VU count,

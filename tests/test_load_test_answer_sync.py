@@ -137,6 +137,50 @@ def test_round_robin_worker_assignment_is_stable() -> None:
     assert assigned_sessions == [1001, 1002, 1003, 1001, 1002, 1003, 1001]
 
 
+def test_success_status_counts_only_2xx() -> None:
+    success_codes = [200, 201, 202, 204, 299]
+    failure_codes = [0, 300, 400, 401, 403, 404, 429, 500, 503]
+
+    for status_code in success_codes:
+        assert load_script.is_success_status(status_code) is True
+    for status_code in failure_codes:
+        assert load_script.is_success_status(status_code) is False
+
+
+def test_summarize_counts_4xx_as_failure() -> None:
+    samples = [
+        load_script.Sample(
+            "/api/exams/submit-answer",
+            200,
+            10.0,
+            load_script.is_success_status(200),
+        ),
+        load_script.Sample(
+            "/api/exams/submit-answer",
+            429,
+            20.0,
+            load_script.is_success_status(429),
+        ),
+        load_script.Sample(
+            "/api/exams/submit-answer",
+            401,
+            30.0,
+            load_script.is_success_status(401),
+        ),
+    ]
+
+    summary = load_script.summarize(samples)
+    per_endpoint = summary["per_endpoint"]["/api/exams/submit-answer"]
+
+    assert summary["requests"] == 3
+    assert summary["success"] == 1
+    assert summary["failures"] == 2
+    assert summary["status_counts"] == {200: 1, 401: 1, 429: 1}
+    assert per_endpoint["success"] == 1
+    assert per_endpoint["failures"] == 2
+    assert per_endpoint["status_counts"] == {200: 1, 401: 1, 429: 1}
+
+
 def test_summarize_includes_percentiles_and_per_endpoint() -> None:
     samples = [
         load_script.Sample("/api/exams/submit-answer", 200, 10.0, True),

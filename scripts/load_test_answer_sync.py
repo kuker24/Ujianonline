@@ -67,6 +67,11 @@ def _status_counts(rows: Iterable[Sample]) -> dict[int, int]:
     return dict(sorted(counts.items()))
 
 
+def is_success_status(status_code: int) -> bool:
+    """Return True only for HTTP 2xx load-test responses."""
+    return 200 <= int(status_code) < 300
+
+
 def summarize(samples: Iterable[Sample]) -> dict[str, object]:
     rows = list(samples)
     latencies = [row.latency_ms for row in rows]
@@ -293,7 +298,7 @@ async def post_json(
             endpoint=endpoint,
             status_code=response.status_code,
             latency_ms=latency_ms,
-            ok=response.status_code < 500,
+            ok=is_success_status(response.status_code),
         )
     except Exception:
         latency_ms = (time.perf_counter() - started) * 1000
