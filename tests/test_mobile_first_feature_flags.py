@@ -30,12 +30,21 @@ def test_mobile_first_flags_defaults_are_safe() -> None:
     assert cfg.exam_peak_mode is False
     assert cfg.admin_monitoring_detail_level == "summary"
     assert cfg.violation_async_enabled is True
+    assert cfg.answer_sync_internal_service is True
+    assert cfg.answer_write_mode == "direct"
+    assert cfg.answer_queue_enabled is False
+    assert cfg.answer_queue_percentage == 0
     assert cfg.heavy_exports_active is True
 
 
 def test_invalid_admin_monitoring_detail_level_is_rejected() -> None:
     with pytest.raises(ValueError, match="ADMIN_MONITORING_DETAIL_LEVEL"):
         _settings_for_test(admin_monitoring_detail_level="verbose")
+
+
+def test_invalid_answer_queue_percentage_is_rejected() -> None:
+    with pytest.raises(ValueError, match="ANSWER_QUEUE_PERCENTAGE"):
+        _settings_for_test(answer_queue_percentage=101)
 
 
 def test_require_feature_enabled_raises_consistent_disabled_payload() -> None:

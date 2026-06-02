@@ -42,7 +42,12 @@ class Settings(BaseSettings):
 
     # Redis
     redis_url: str = "redis://localhost:6379/0"
+    answer_sync_internal_service: bool = (
+        os.getenv("ANSWER_SYNC_INTERNAL_SERVICE", "true").lower() == "true"
+    )
     answer_write_mode: str = os.getenv("ANSWER_WRITE_MODE", "direct").lower()
+    answer_queue_enabled: bool = os.getenv("ANSWER_QUEUE_ENABLED", "false").lower() == "true"
+    answer_queue_percentage: int = int(os.getenv("ANSWER_QUEUE_PERCENTAGE", "0"))
     answer_queue_flush_on_submit: bool = (
         os.getenv("ANSWER_QUEUE_FLUSH_ON_SUBMIT", "true").lower() == "true"
     )
@@ -224,6 +229,11 @@ class Settings(BaseSettings):
                 "ADMIN_MONITORING_DETAIL_LEVEL harus salah satu dari: "
                 "summary, standard, detail."
             )
+
+        if self.answer_write_mode not in {"direct", "queue", "hybrid"}:
+            raise ValueError("ANSWER_WRITE_MODE harus direct, queue, atau hybrid.")
+        if self.answer_queue_percentage < 0 or self.answer_queue_percentage > 100:
+            raise ValueError("ANSWER_QUEUE_PERCENTAGE harus antara 0 dan 100.")
 
         # Enforce secure keys in production - prevent deployment with defaults.
         if self.app_env == "production":

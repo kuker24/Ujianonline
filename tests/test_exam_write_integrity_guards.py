@@ -4,6 +4,7 @@ import re
 
 EXAMS_SOURCE = Path("app/api/exams.py").read_text(encoding="utf-8")
 ANSWER_PROCESSOR_SOURCE = Path("app/tasks/answer_processor.py").read_text(encoding="utf-8")
+ANSWER_SYNC_SERVICE_SOURCE = Path("app/services/answer_sync_service.py").read_text(encoding="utf-8")
 UPLOAD_SOURCE = Path("app/api/upload.py").read_text(encoding="utf-8")
 BACKUP_SOURCE = Path("app/api/backup.py").read_text(encoding="utf-8")
 
@@ -27,10 +28,12 @@ def test_submit_answer_rechecks_session_under_write_lock() -> None:
 
 
 def test_auto_save_batch_serializes_session_writes() -> None:
-    fn = _extract_async_function(EXAMS_SOURCE, "auto_save_batch")
-    assert "_acquire_session_write_lock" in fn
-    assert "_ensure_session_in_progress_for_user" in fn
-    assert "integrity conflict, retrying with serialized merge" in fn
+    endpoint_fn = _extract_async_function(EXAMS_SOURCE, "auto_save_batch")
+    assert "get_answer_sync_service" in endpoint_fn
+    assert "accept_batch" in endpoint_fn
+    assert "_acquire_session_write_lock" in ANSWER_SYNC_SERVICE_SOURCE
+    assert "_ensure_session_in_progress_for_user" in ANSWER_SYNC_SERVICE_SOURCE
+    assert "write conflict, retrying serialized merge" in ANSWER_SYNC_SERVICE_SOURCE
 
 
 def test_submit_exam_takes_session_lock_before_finalize() -> None:
