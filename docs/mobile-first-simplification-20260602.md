@@ -377,7 +377,7 @@ Scope:
 ```text
 - Tambah settings flags.
 - Tambah env example.
-- Guard SEB desktop legacy endpoints.
+- Guard SEB desktop legacy endpoints and hide SEB PC generate/download UI when `SEB_DESKTOP_LEGACY_ENABLED=false`.
 - Guard SEB QR/debug endpoints.
 - Guard APK build endpoint saja.
 - Guard Telegram alerting.
@@ -397,7 +397,7 @@ Tidak termasuk:
 Rollback:
 
 ```text
-- Set SEB_DESKTOP_LEGACY_ENABLED=true jika butuh PC SEB.
+- Set SEB_DESKTOP_LEGACY_ENABLED=true jika butuh PC SEB; admin SEB Builder form/link remains hidden while false.
 - Set SEB_QR_ENABLED=true jika butuh QR legacy.
 - Set APK_BUILD_ENDPOINT_ENABLED=true jika admin perlu build dari server.
 - Set TELEGRAM_ALERTING_ENABLED=true jika Telegram mandatory.

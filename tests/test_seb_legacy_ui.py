@@ -1,9 +1,16 @@
 from pathlib import Path
 
 
-def test_admin_sidebar_labels_seb_as_legacy_pc() -> None:
+def test_admin_sidebar_labels_seb_as_legacy_pc_when_enabled() -> None:
     layout = Path("templates/admin/layout.html").read_text(encoding="utf-8")
+    sidebar_module = Path("static/js/sidebar-loader/modules/00-sidebar-loader-core.js").read_text(encoding="utf-8")
+    sidebar_bundle = Path("static/js/sidebar-loader.js").read_text(encoding="utf-8")
+
+    assert "feature_flags.seb_desktop_legacy_enabled" in layout
     assert "SEB Legacy PC" in layout
+    assert "SEB Legacy PC" in sidebar_module
+    assert "SEB Legacy PC" in sidebar_bundle
+    assert "SEB Builder</a>" not in sidebar_bundle
 
 
 def test_seb_builder_page_marks_pc_builder_as_legacy_optional() -> None:
@@ -11,6 +18,8 @@ def test_seb_builder_page_marks_pc_builder_as_legacy_optional() -> None:
     assert "Legacy Opsional" in template
     assert "APK resmi/mobile-first adalah runtime utama" in template
     assert "SEB_DESKTOP_LEGACY_ENABLED=false" in template
+    assert "feature_flags.seb_desktop_legacy_enabled" in template
+    assert "SEB PC/Desktop legacy sedang dinonaktifkan" in template
     assert "Generate Legacy .seb File" in template
 
 

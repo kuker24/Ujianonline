@@ -68,6 +68,27 @@ async def test_seb_desktop_download_config_disabled_by_default(monkeypatch) -> N
 
 
 @pytest.mark.asyncio
+async def test_public_seb_desktop_config_disabled_by_default(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "seb_desktop_legacy_enabled", False)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await exam_seb.download_default_seb_config()
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail["feature"] == "seb_desktop_legacy"
+
+
+@pytest.mark.asyncio
+async def test_public_seb_desktop_config_still_available_when_legacy_enabled(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "seb_desktop_legacy_enabled", True)
+
+    response = await exam_seb.download_default_seb_config()
+
+    assert response.media_type == "application/seb"
+    assert f"{settings.base_url}/student/".encode() in response.body
+
+
+@pytest.mark.asyncio
 async def test_seb_qr_disabled_by_default(monkeypatch) -> None:
     monkeypatch.setattr(settings, "seb_qr_enabled", False)
 
@@ -76,6 +97,15 @@ async def test_seb_qr_disabled_by_default(monkeypatch) -> None:
 
     assert exc_info.value.status_code == 404
     assert exc_info.value.detail["feature"] == "seb_qr"
+
+
+@pytest.mark.asyncio
+async def test_seb_qr_still_available_when_legacy_qr_enabled(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "seb_qr_enabled", True)
+
+    response = await exam_seb.get_seb_qrcode(url="https://example.test/api/exams/default-seb-config.seb")
+
+    assert response.media_type == "image/png"
 
 
 @pytest.mark.asyncio

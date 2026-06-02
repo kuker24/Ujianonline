@@ -410,6 +410,7 @@
                 <code>SEB_DESKTOP_LEGACY_ENABLED=false</code>; aktifkan hanya jika ada sesi khusus PC/laptop dan sudah diuji terpisah.
             </div>
 
+            {% if feature_flags.seb_desktop_legacy_enabled %}
             <!-- PC Builder Section -->
             <div id="pc-builder" class="builder-section active">
                 <!-- Preset Selection -->
@@ -623,6 +624,20 @@
                     </div>
                 </div>
             </div>
+            {% else %}
+            <div class="card" id="seb-legacy-disabled-card" style="padding: 1.5rem; border: 1px solid rgba(245, 158, 11, 0.35); background: rgba(245, 158, 11, 0.08);">
+                <h3 style="margin-top: 0; color: #fbbf24;">
+                    <i class="fas fa-lock"></i> SEB PC/Desktop legacy sedang dinonaktifkan
+                </h3>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+                    Form generate/download file <code>.seb</code> tidak ditampilkan karena production default memakai APK Android resmi sebagai runtime utama.
+                    Aktifkan <code>SEB_DESKTOP_LEGACY_ENABLED=true</code> hanya untuk sesi fallback PC/laptop yang sudah diuji terpisah.
+                </p>
+                <a class="btn-primary" href="/admin/settings.html" style="display: inline-flex; align-items: center; gap: 0.5rem; text-decoration: none;">
+                    <i class="fas fa-mobile-screen-button"></i> Kembali ke konfigurasi APK-first
+                </a>
+            </div>
+            {% endif %}
 
         </main>
     </div>

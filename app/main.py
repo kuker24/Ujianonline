@@ -479,7 +479,18 @@ async def admin_pages(request: Request, page: str = "index.html"):
         jinja_templates.get_template(template_name)
     except TemplateNotFound:
         return JSONResponse(status_code=404, content={"detail": "Halaman tidak ditemukan"})
-    response = jinja_templates.TemplateResponse(template_name, {"request": request})
+    response = jinja_templates.TemplateResponse(
+        template_name,
+        {
+            "request": request,
+            "feature_flags": {
+                "seb_desktop_legacy_enabled": settings.seb_desktop_legacy_enabled,
+                "seb_qr_enabled": settings.seb_qr_enabled,
+                "apk_build_endpoint_enabled": settings.apk_build_endpoint_enabled,
+                "mobile_apk_primary": settings.mobile_apk_primary,
+            },
+        },
+    )
     # Admin/guru UI should not be cached aggressively to avoid stale JS/HTML after hot patches.
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     response.headers["Pragma"] = "no-cache"
