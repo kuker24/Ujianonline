@@ -7,6 +7,7 @@ SESSION_RUNTIME_API_SOURCE = Path("app/api/exam_session_runtime.py").read_text(e
 OFFLINE_PACKAGE_API_SOURCE = Path("app/api/exam_offline_package.py").read_text(encoding="utf-8")
 PAUSE_CONTROL_API_SOURCE = Path("app/api/exam_pause_control.py").read_text(encoding="utf-8")
 EXPORTS_API_SOURCE = Path("app/api/exam_exports.py").read_text(encoding="utf-8")
+CRUD_API_SOURCE = Path("app/api/exam_crud.py").read_text(encoding="utf-8")
 MAIN_SOURCE = Path("app/main.py").read_text(encoding="utf-8")
 ANSWER_SYNC_SCHEMA_SOURCE = Path("app/schemas/answer_sync.py").read_text(encoding="utf-8")
 
@@ -94,6 +95,32 @@ def test_pdf_export_routes_live_outside_large_exams_module() -> None:
 def test_exam_exports_router_is_registered_in_main() -> None:
     assert "exam_exports" in MAIN_SOURCE
     assert "app.include_router(exam_exports.router)" in MAIN_SOURCE
+
+
+def test_exam_crud_routes_live_outside_large_exams_module() -> None:
+    moved_handlers = [
+        "list_exams",
+        "get_exam",
+        "create_exam",
+        "update_exam",
+        "delete_exam",
+        "publish_exam",
+        "toggle_publish_exam",
+        "regenerate_exam_token",
+        "create_exam_from_template",
+        "duplicate_exam",
+    ]
+    for handler in moved_handlers:
+        assert f"async def {handler}(" not in EXAMS_SOURCE
+        assert f"async def {handler}(" in CRUD_API_SOURCE
+
+    assert "_validate_questions_for_publish" in CRUD_API_SOURCE
+    assert "_autofill_placeholder_options_for_publish" in CRUD_API_SOURCE
+
+
+def test_exam_crud_router_is_registered_in_main() -> None:
+    assert "exam_crud" in MAIN_SOURCE
+    assert "app.include_router(exam_crud.router)" in MAIN_SOURCE
 
 
 def test_batch_autosave_schemas_live_in_schema_module() -> None:
