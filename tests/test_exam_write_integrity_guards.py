@@ -3,7 +3,10 @@ import re
 
 
 EXAMS_SOURCE = Path("app/api/exams.py").read_text(encoding="utf-8")
+SINGLE_ANSWER_SOURCE = Path("app/api/answer_sync.py").read_text(encoding="utf-8")
 EXAM_ANSWER_SYNC_SOURCE = Path("app/api/exam_answer_sync.py").read_text(encoding="utf-8")
+FINAL_SUBMIT_API_SOURCE = Path("app/api/final_submit.py").read_text(encoding="utf-8")
+VIOLATION_EVENTS_SOURCE = Path("app/api/violation_events.py").read_text(encoding="utf-8")
 ANSWER_PROCESSOR_SOURCE = Path("app/tasks/answer_processor.py").read_text(encoding="utf-8")
 ANSWER_SYNC_SERVICE_SOURCE = Path("app/services/answer_sync_service.py").read_text(encoding="utf-8")
 FINAL_SUBMIT_SERVICE_SOURCE = Path("app/services/final_submit_service.py").read_text(encoding="utf-8")
@@ -22,7 +25,7 @@ def _extract_async_function(source: str, function_name: str) -> str:
 
 
 def test_submit_answer_routes_through_service_and_rechecks_session_under_lock() -> None:
-    endpoint_fn = _extract_async_function(EXAMS_SOURCE, "submit_answer")
+    endpoint_fn = _extract_async_function(SINGLE_ANSWER_SOURCE, "submit_answer")
     assert "get_answer_sync_service" in endpoint_fn
     assert "accept_single_answer(answer_data, request)" in endpoint_fn
 
@@ -44,7 +47,7 @@ def test_auto_save_batch_serializes_session_writes() -> None:
 
 
 def test_submit_exam_takes_session_lock_before_finalize() -> None:
-    endpoint_fn = _extract_async_function(EXAMS_SOURCE, "submit_exam")
+    endpoint_fn = _extract_async_function(FINAL_SUBMIT_API_SOURCE, "submit_exam")
     assert "get_final_submit_service" in endpoint_fn
     assert "submit_exam(submit_data, request)" in endpoint_fn
     assert "_acquire_session_write_lock" in FINAL_SUBMIT_SERVICE_SOURCE
@@ -53,16 +56,16 @@ def test_submit_exam_takes_session_lock_before_finalize() -> None:
 
 
 def test_log_violation_uses_atomic_increment() -> None:
-    fn = _extract_async_function(EXAMS_SOURCE, "log_violation")
+    fn = _extract_async_function(VIOLATION_EVENTS_SOURCE, "log_violation")
     assert "func.coalesce(ExamSession.violation_count, 0) + increment_value" in fn
     assert ".returning(" in fn
 
 
 def test_log_violation_ignores_closed_or_transitioned_sessions() -> None:
-    fn = _extract_async_function(EXAMS_SOURCE, "log_violation")
+    fn = _extract_async_function(VIOLATION_EVENTS_SOURCE, "log_violation")
     assert "terminal_session_statuses" in fn
     assert "return _ignored_violation_response(" in fn
-    assert 'status="ignored"' in EXAMS_SOURCE
+    assert 'status="ignored"' in VIOLATION_EVENTS_SOURCE
     assert "ExamSession.status.in_(active_session_statuses)" in fn
     assert "Ignored violation for closed session" in fn
 
