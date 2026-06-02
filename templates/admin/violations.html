@@ -37,7 +37,7 @@
 
         .filters-controls {
             display: grid;
-            grid-template-columns: minmax(220px, 1.35fr) minmax(180px, 1fr) minmax(180px, 1fr) auto;
+            grid-template-columns: minmax(220px, 1.35fr) minmax(180px, 1fr) minmax(180px, 1fr) minmax(190px, 0.9fr) auto;
             gap: 1rem;
             align-items: flex-end;
         }
@@ -88,7 +88,7 @@
 
         .filters-meta {
             display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
+            grid-template-columns: repeat(4, minmax(0, 1fr));
             gap: 0.75rem;
         }
 
@@ -495,6 +495,17 @@
             color: rgba(148, 163, 184, 0.7);
         }
 
+        .summary-mode-note {
+            margin-top: 0.8rem;
+            padding: 0.8rem 0.95rem;
+            border-left: 4px solid #38bdf8;
+            border-radius: 0.75rem;
+            background: rgba(56, 189, 248, 0.1);
+            color: #bae6fd;
+            font-size: 0.86rem;
+            line-height: 1.55;
+        }
+
         .violation-explainer-modal {
             position: fixed;
             inset: 0;
@@ -707,6 +718,14 @@
                     <div class="form-group">
                         <label for="date-to">Sampai</label>
                         <input type="date" id="date-to" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label for="detail-level">Mode Tampilan</label>
+                        <select id="detail-level" class="form-control">
+                            <option value="summary" selected>Ringkas / agregat</option>
+                            <option value="auto">Otomatis sesuai server</option>
+                            <option value="detail">Detail lengkap</option>
+                        </select>
                     </div>
                     <div class="filter-actions">
                         <button class="btn btn-primary" onclick="applyFilters()">
@@ -1119,6 +1138,12 @@
             return params;
         }
 
+        function getSelectedDetailLevel() {
+            const selector = document.getElementById('detail-level');
+            const value = selector ? String(selector.value || 'summary').toLowerCase() : 'summary';
+            return ['summary', 'auto', 'detail'].includes(value) ? value : 'summary';
+        }
+
         function getViolationTypeMeta(type, typeDetails = {}) {
             const key = String(type || '').replace(/^violation_/, '');
             const detail = typeDetails[key] || typeDetails[type] || {};
@@ -1166,7 +1191,8 @@
                 const data = await api.getViolationsDashboard(
                     params.get('exam_id'),
                     params.get('date_from'),
-                    params.get('date_to')
+                    params.get('date_to'),
+                    { detailLevel: getSelectedDetailLevel() }
                 );
 
                 dashboardData = data;
@@ -1213,6 +1239,7 @@
             const selectedExam = data.selected_exam_title || 'Semua ujian';
             const period = data.date_range_label || '-';
             const generatedAt = data.generated_at_display || '-';
+            const modeLabel = data.aggregate_only ? 'Ringkas/agregat' : 'Detail lengkap';
 
             filtersMeta.innerHTML = `
                 <div class="filters-meta-item">
@@ -1229,6 +1256,11 @@
                     <label>Data Dibuat</label>
                     <strong>${escapeHtml(generatedAt)}</strong>
                     <span>Gunakan refresh bila ingin mengambil data terbaru.</span>
+                </div>
+                <div class="filters-meta-item">
+                    <label>Mode</label>
+                    <strong>${escapeHtml(modeLabel)}</strong>
+                    <span>${data.aggregate_only ? 'Log detail tidak dimuat otomatis agar admin ringan saat peak.' : 'Memuat log detail; gunakan seperlunya di luar peak.'}</span>
                 </div>
             `;
         }
@@ -1579,6 +1611,22 @@
         function renderDetailsTable(violations) {
             const container = document.getElementById('details-table-container');
             const summary = document.getElementById('details-summary');
+            const aggregateOnly = Boolean(dashboardData && dashboardData.aggregate_only);
+
+            if (aggregateOnly) {
+                summary.textContent = 'Mode ringkas aktif';
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-gauge-high"></i>
+                        <p>Mode ringkas aktif: dashboard hanya memuat agregat pelanggaran.</p>
+                        <div class="summary-mode-note">
+                            Ini mengurangi beban server saat ujian ramai. Jika benar-benar perlu audit detail,
+                            ubah <strong>Mode Tampilan</strong> ke <strong>Detail lengkap</strong> lalu klik Terapkan Filter.
+                        </div>
+                    </div>
+                `;
+                return;
+            }
 
             if (!violations.length) {
                 summary.textContent = '0 log';
