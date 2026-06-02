@@ -301,7 +301,8 @@ async def _claim_pending_sessions(redis: Any, batch_size: int) -> List[int]:
 
 
 async def _ack_processing_session(redis: Any, session_id: int) -> None:
-    await redis.lrem(PROCESSING_QUEUE_KEY, 1, str(session_id))
+    await redis.lrem(PROCESSING_QUEUE_KEY, 0, str(session_id))
+    await redis.lrem(PENDING_QUEUE_KEY, 0, str(session_id))
     await redis.delete(SESSION_QUEUED_KEY_TEMPLATE.format(session_id=session_id))
 
 
@@ -402,6 +403,23 @@ async def _flush_session_buffer(db: AsyncSession, redis: Any, session_id: int) -
     else:
         await _restore_processing_session(redis, session_id)
     return changed_rows
+
+
+async def flush_runtime_answer_buffer_for_session(db: AsyncSession, session_id: int) -> int:
+    """Synchronously flush one session's runtime answer buffer before final submit.
+
+    This is intentionally session-scoped so final submit can be prioritized over
+    background drains and admin monitoring. The function is a no-op unless the
+    runtime buffer feature flags are active.
+    """
+    if not is_runtime_answer_buffer_enabled():
+        return 0
+    redis = await get_redis()
+    dirty_count = await redis.scard(session_dirty_questions_key(session_id))
+    if int(dirty_count or 0) <= 0:
+        await _ack_processing_session(redis, session_id)
+        return 0
+    return await _flush_session_buffer(db, redis, session_id)
 
 
 async def flush_runtime_answer_buffer_once(batch_size: int = DEFAULT_FLUSH_BATCH_SIZE) -> int:

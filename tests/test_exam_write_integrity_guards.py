@@ -5,6 +5,7 @@ import re
 EXAMS_SOURCE = Path("app/api/exams.py").read_text(encoding="utf-8")
 ANSWER_PROCESSOR_SOURCE = Path("app/tasks/answer_processor.py").read_text(encoding="utf-8")
 ANSWER_SYNC_SERVICE_SOURCE = Path("app/services/answer_sync_service.py").read_text(encoding="utf-8")
+FINAL_SUBMIT_SERVICE_SOURCE = Path("app/services/final_submit_service.py").read_text(encoding="utf-8")
 UPLOAD_SOURCE = Path("app/api/upload.py").read_text(encoding="utf-8")
 BACKUP_SOURCE = Path("app/api/backup.py").read_text(encoding="utf-8")
 
@@ -37,10 +38,12 @@ def test_auto_save_batch_serializes_session_writes() -> None:
 
 
 def test_submit_exam_takes_session_lock_before_finalize() -> None:
-    fn = _extract_async_function(EXAMS_SOURCE, "submit_exam")
-    assert "_acquire_session_write_lock" in fn
-    assert ".with_for_update()" in fn
-    assert "finalize_exam_session_submission" in fn
+    endpoint_fn = _extract_async_function(EXAMS_SOURCE, "submit_exam")
+    assert "get_final_submit_service" in endpoint_fn
+    assert "submit_exam(submit_data, request)" in endpoint_fn
+    assert "_acquire_session_write_lock" in FINAL_SUBMIT_SERVICE_SOURCE
+    assert ".with_for_update()" in FINAL_SUBMIT_SERVICE_SOURCE
+    assert "finalize_exam_session_submission" in FINAL_SUBMIT_SERVICE_SOURCE
 
 
 def test_log_violation_uses_atomic_increment() -> None:
