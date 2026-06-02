@@ -2,20 +2,33 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
+import sqlalchemy
+from fastapi import HTTPException
 
-from app.api import exam_answer_sync
+from app.api import exam_answer_sync, exams
 from app.schemas.answer import (
     AnswerJournalSyncRequest,
     AnswerJournalSyncResponse,
+    AnswerResponse,
+    AnswerSubmit,
     AutoSaveRequest,
     AutoSaveResponse,
 )
 from app.schemas.answer_sync import BatchAnswerItem, BatchAutoSaveRequest
+from app.services import answer_sync_service
 
 
 class _FakeAnswerSyncService:
     def __init__(self):
         self.called = None
+
+    async def accept_single_answer(self, answer_data, request):
+        self.called = ("single", answer_data.session_id, request)
+        return AnswerResponse(
+            status="saved",
+            question_id=answer_data.question_id,
+            message="Jawaban berhasil disimpan",
+        )
 
     async def accept_legacy_autosave(self, save_data):
         self.called = ("legacy_autosave", save_data.session_id)
@@ -45,6 +58,22 @@ class _FakeAnswerSyncService:
             acks=[],
             server_time=datetime.now(timezone.utc),
         )
+
+
+@pytest.mark.asyncio
+async def test_submit_answer_endpoint_routes_to_answer_sync_service(monkeypatch) -> None:
+    fake_service = _FakeAnswerSyncService()
+    monkeypatch.setattr(exams, "get_answer_sync_service", lambda db, user: fake_service)
+
+    response = await exams.submit_answer(
+        AnswerSubmit(session_id=123, question_id=45, selected_option_id=9),
+        request="request-object",
+        current_user=SimpleNamespace(id=7),
+        db=None,
+    )
+
+    assert response.status == "saved"
+    assert fake_service.called == ("single", 123, "request-object")
 
 
 @pytest.mark.asyncio
@@ -99,3 +128,234 @@ async def test_answer_journal_endpoint_routes_to_answer_sync_service(monkeypatch
 
     assert response.status == "ok"
     assert fake_service.called == ("journal", 123)
+
+
+class _FirstResult:
+    def __init__(self, row):
+        self._row = row
+
+    def first(self):
+        return self._row
+
+
+class _ScalarResult:
+    def __init__(self, value):
+        self._value = value
+
+    def scalar_one_or_none(self):
+        return self._value
+
+
+class _FakeSingleAnswerDb:
+    def __init__(self, results=None, exc=None):
+        self.results = list(results or [])
+        self.exc = exc
+        self.commits = 0
+        self.rollbacks = 0
+        self.execute_calls = 0
+
+    async def execute(self, _stmt, *_args, **_kwargs):
+        self.execute_calls += 1
+        if self.exc is not None:
+            raise self.exc
+        if not self.results:
+            return _FirstResult(None)
+        return self.results.pop(0)
+
+    async def commit(self):
+        self.commits += 1
+
+    async def rollback(self):
+        self.rollbacks += 1
+
+    def add(self, _obj):
+        pass
+
+
+def _single_answer_service(db):
+    return answer_sync_service.AnswerSyncService(
+        db=db,
+        current_user=SimpleNamespace(id=7, username="student01"),
+    )
+
+
+def _patch_single_answer_common(monkeypatch, *, status="in_progress"):
+    async def ok_rate_limit(_limiter, _key):
+        return True, 99
+
+    async def ok_seb(_request, _exam_id, _db, require_seb=True):
+        assert require_seb is True
+        return True
+
+    async def question_payload(_db, *, exam_id, question_id):
+        return {
+            "id": question_id,
+            "exam_id": exam_id,
+            "question_type": "multiple_choice",
+            "pgk_type": None,
+            "points": 1.0,
+        }
+
+    monkeypatch.setattr(answer_sync_service, "check_rate_limit", ok_rate_limit)
+    monkeypatch.setattr(answer_sync_service, "validate_seb_headers", ok_seb)
+    monkeypatch.setattr(answer_sync_service, "get_question_validation_payload_cached", question_payload)
+    monkeypatch.setattr(
+        answer_sync_service,
+        "validate_answer_with_cached_payload",
+        lambda *_args, **_kwargs: (True, 1.0),
+    )
+    monkeypatch.setattr(answer_sync_service, "should_publish_progress_update", lambda _session_id: False)
+    monkeypatch.setattr(answer_sync_service, "_answer_write_mode", lambda: "direct")
+    monkeypatch.setattr(answer_sync_service, "is_runtime_answer_buffer_enabled", lambda: False)
+    return status
+
+
+@pytest.mark.asyncio
+async def test_single_answer_submitted_session_is_idempotent(monkeypatch) -> None:
+    _patch_single_answer_common(monkeypatch)
+    db = _FakeSingleAnswerDb(results=[_FirstResult((123, 55, "submitted"))])
+
+    response = await _single_answer_service(db).accept_single_answer(
+        AnswerSubmit(session_id=123, question_id=9, selected_option_id=2),
+        request=None,
+    )
+
+    assert response.status == "saved"
+    assert "diabaikan" in response.message
+    assert db.execute_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_single_answer_invalid_session_raises_404(monkeypatch) -> None:
+    _patch_single_answer_common(monkeypatch)
+    db = _FakeSingleAnswerDb(results=[_FirstResult(None)])
+
+    with pytest.raises(HTTPException) as exc_info:
+        await _single_answer_service(db).accept_single_answer(
+            AnswerSubmit(session_id=123, question_id=9, selected_option_id=2),
+            request=None,
+        )
+
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_single_answer_non_in_progress_session_raises_400(monkeypatch) -> None:
+    _patch_single_answer_common(monkeypatch)
+    db = _FakeSingleAnswerDb(results=[_FirstResult((123, 55, "terminated"))])
+
+    with pytest.raises(HTTPException) as exc_info:
+        await _single_answer_service(db).accept_single_answer(
+            AnswerSubmit(session_id=123, question_id=9, selected_option_id=2),
+            request=None,
+        )
+
+    assert exc_info.value.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_single_answer_transient_db_error_returns_503_retry_after(monkeypatch) -> None:
+    _patch_single_answer_common(monkeypatch)
+    db = _FakeSingleAnswerDb(exc=sqlalchemy.exc.TimeoutError("busy"))
+
+    with pytest.raises(HTTPException) as exc_info:
+        await _single_answer_service(db).accept_single_answer(
+            AnswerSubmit(session_id=123, question_id=9, selected_option_id=2),
+            request=None,
+        )
+
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.headers["Retry-After"] == "1"
+
+
+@pytest.mark.asyncio
+async def test_single_answer_direct_write_updates_runtime_count(monkeypatch) -> None:
+    _patch_single_answer_common(monkeypatch)
+    wrote = {}
+    runtime = {}
+
+    async def fake_write(self, *, session_id, question_id, write_fields):
+        wrote["session_id"] = session_id
+        wrote["question_id"] = question_id
+        wrote["is_correct"] = write_fields["is_correct"]
+        wrote["points_earned"] = write_fields["points_earned"]
+
+    async def fake_add_answered(session_id, question_ids):
+        runtime["added"] = (session_id, question_ids)
+        return 4
+
+    async def fake_update_snapshot(session_id, **kwargs):
+        runtime["snapshot"] = (session_id, kwargs)
+
+    async def fake_update_session_answers(session_id, answers):
+        runtime["answers"] = (session_id, answers)
+
+    monkeypatch.setattr(answer_sync_service.AnswerSyncService, "_write_single_answer_direct", fake_write)
+    monkeypatch.setattr(answer_sync_service, "add_answered_questions_and_count", fake_add_answered)
+    monkeypatch.setattr(answer_sync_service, "update_runtime_snapshot_answered_count", fake_update_snapshot)
+    monkeypatch.setattr(answer_sync_service, "update_session_answers", fake_update_session_answers)
+
+    locked_session = SimpleNamespace(id=123, exam_id=55, status="in_progress")
+    db = _FakeSingleAnswerDb(
+        results=[
+            _FirstResult((123, 55, "in_progress")),
+            _ScalarResult(None),
+            _ScalarResult(locked_session),
+        ]
+    )
+
+    response = await _single_answer_service(db).accept_single_answer(
+        AnswerSubmit(session_id=123, question_id=9, selected_option_id=2),
+        request=None,
+    )
+
+    assert response.status == "saved"
+    assert wrote == {"session_id": 123, "question_id": 9, "is_correct": True, "points_earned": 1.0}
+    assert runtime["added"] == (123, [9])
+    assert runtime["snapshot"][1]["answered_count"] == 4
+    assert runtime["answers"] == (123, {"9": True})
+
+
+@pytest.mark.asyncio
+async def test_single_answer_hybrid_buffer_path_does_not_call_direct_write(monkeypatch) -> None:
+    _patch_single_answer_common(monkeypatch)
+    called = {}
+
+    class _FakeRuntimeBuffer:
+        def __init__(self, db, current_user):
+            called["init"] = (db, current_user.id)
+
+        async def accept_single_answer(self, **kwargs):
+            called["buffer"] = kwargs
+            return 1
+
+    async def fail_direct(*_args, **_kwargs):
+        raise AssertionError("direct write should not run in hybrid buffer mode")
+
+    monkeypatch.setattr(answer_sync_service, "_answer_write_mode", lambda: "hybrid")
+    monkeypatch.setattr(answer_sync_service, "is_runtime_answer_buffer_enabled", lambda: True)
+    monkeypatch.setattr(answer_sync_service, "AnswerRuntimeBufferService", _FakeRuntimeBuffer)
+    monkeypatch.setattr(answer_sync_service.AnswerSyncService, "_write_single_answer_direct", fail_direct)
+    monkeypatch.setattr(answer_sync_service, "add_answered_questions_and_count", lambda *_args, **_kwargs: None)
+
+    async def fake_update_session_answers(_session_id, _answers):
+        return None
+
+    monkeypatch.setattr(answer_sync_service, "update_session_answers", fake_update_session_answers)
+
+    locked_session = SimpleNamespace(id=123, exam_id=55, status="in_progress")
+    db = _FakeSingleAnswerDb(
+        results=[
+            _FirstResult((123, 55, "in_progress")),
+            _ScalarResult(None),
+            _ScalarResult(locked_session),
+        ]
+    )
+
+    response = await _single_answer_service(db).accept_single_answer(
+        AnswerSubmit(session_id=123, question_id=9, selected_option_id=2),
+        request=None,
+    )
+
+    assert response.status == "saved"
+    assert called["buffer"]["session"] is locked_session

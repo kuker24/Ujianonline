@@ -5,6 +5,7 @@ import re
 EXAMS_SOURCE = Path("app/api/exams.py").read_text(encoding="utf-8")
 EXAM_ANSWER_SYNC_SOURCE = Path("app/api/exam_answer_sync.py").read_text(encoding="utf-8")
 EXAM_SESSION_RUNTIME_SOURCE = Path("app/api/exam_session_runtime.py").read_text(encoding="utf-8")
+ANSWER_SYNC_SERVICE_SOURCE = Path("app/services/answer_sync_service.py").read_text(encoding="utf-8")
 SECURITY_SOURCE = Path("app/core/security.py").read_text(encoding="utf-8")
 AUTH_SOURCE = Path("app/api/auth.py").read_text(encoding="utf-8")
 WEBSOCKET_SOURCE = Path("app/api/websocket.py").read_text(encoding="utf-8")
@@ -70,13 +71,18 @@ def test_resume_session_uses_hot_path_auth_dependency() -> None:
     assert "current_user: AuthenticatedUser = Depends(get_current_user_hot_path)" in fn
 
 
-def test_submit_answer_uses_advisory_lock_update_insert_strategy() -> None:
-    fn = _extract_async_function(EXAMS_SOURCE, "submit_answer")
-    assert "pg_insert(Answer)" in fn
-    assert "on_conflict_do_update" in fn
-    assert "pg_advisory_xact_lock" in fn
-    assert "update(Answer)" in fn
-    assert "no unique or exclusion constraint" in fn
+def test_submit_answer_service_uses_advisory_lock_update_insert_strategy() -> None:
+    endpoint_fn = _extract_async_function(EXAMS_SOURCE, "submit_answer")
+    assert "accept_single_answer(answer_data, request)" in endpoint_fn
+
+    service_fn = _extract_async_function(ANSWER_SYNC_SERVICE_SOURCE, "accept_single_answer")
+    direct_write_fn = _extract_async_function(ANSWER_SYNC_SERVICE_SOURCE, "_write_single_answer_direct")
+    assert "_lock_session_for_single_answer" in service_fn
+    assert "pg_insert(Answer)" in direct_write_fn
+    assert "on_conflict_do_update" in direct_write_fn
+    assert "pg_advisory_xact_lock" in ANSWER_SYNC_SERVICE_SOURCE
+    assert "update(Answer)" in direct_write_fn
+    assert "no unique or exclusion constraint" in direct_write_fn
 
 
 def test_hot_path_auth_exists_and_skips_db_dependency() -> None:

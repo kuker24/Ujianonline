@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
+from fastapi import HTTPException
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -97,6 +98,24 @@ def _risk_status(total_count: int, severity: str) -> str:
     return "normal"
 
 
+def _parse_optional_datetime(raw_value: Any) -> Optional[datetime]:
+    if not raw_value:
+        return None
+    if isinstance(raw_value, datetime):
+        value = raw_value
+    else:
+        raw = str(raw_value).strip()
+        if not raw:
+            return None
+        if raw.endswith("Z"):
+            raw = raw[:-1] + "+00:00"
+        try:
+            value = datetime.fromisoformat(raw)
+        except Exception:
+            return None
+    return _ensure_aware_utc(value)
+
+
 def _fingerprint_event(session_id: int, event_type: str, payload: Dict[str, Any]) -> str:
     payload_subset = {
         "event_type": event_type,
@@ -119,6 +138,126 @@ async def _publish_exam_monitor_event(exam_id: int, payload: Dict[str, Any]) -> 
         )
     except Exception as delta_exc:
         logger.debug("Failed to mirror violation event to delta stream: %s", str(delta_exc))
+
+
+async def _read_cached_session_state(
+    *,
+    session_id: int,
+    current_user_id: int,
+) -> Optional[Dict[str, Any]]:
+    try:
+        cached = await get_session_data(session_id)
+    except Exception:
+        logger.debug("Violation session cache read failed", exc_info=True)
+        return None
+
+    if not cached:
+        return None
+
+    cached_session_id = safe_int(cached.get("session_id"))
+    if cached_session_id is not None and cached_session_id != session_id:
+        return None
+    if cached_session_id is None:
+        return None
+
+    cached_user_id = safe_int(cached.get("user_id"))
+    if cached_user_id != current_user_id:
+        raise HTTPException(status_code=404, detail="Sesi ujian tidak ditemukan")
+
+    cached_exam_id = safe_int(cached.get("exam_id"))
+    status = str(cached.get("status") or "").strip().lower()
+    if not cached_exam_id or not status:
+        return None
+
+    return {
+        "id": session_id,
+        "exam_id": cached_exam_id,
+        "violation_count": safe_int(cached.get("violation_count")) or 0,
+        "status": status,
+        "end_time": _parse_optional_datetime(cached.get("end_time")),
+        "source": "cache",
+    }
+
+
+async def _refresh_session_runtime_cache(
+    *,
+    session_id: int,
+    user_id: int,
+    session_state: Dict[str, Any],
+) -> None:
+    try:
+        cached = await get_session_data(session_id) or {}
+        if cached and safe_int(cached.get("user_id")) not in {None, user_id}:
+            return
+        end_time = session_state.get("end_time")
+        cached.update(
+            {
+                "session_id": session_id,
+                "user_id": user_id,
+                "exam_id": int(session_state["exam_id"]),
+                "status": str(session_state.get("status") or ""),
+                "end_time": end_time.isoformat() if isinstance(end_time, datetime) else end_time,
+                "violation_count": int(session_state.get("violation_count") or 0),
+            }
+        )
+        await store_session_data(session_id, cached)
+    except Exception:
+        logger.debug("Violation session cache refresh failed", exc_info=True)
+
+
+async def _load_session_state_from_db(
+    db: AsyncSession,
+    *,
+    session_id: int,
+    current_user_id: int,
+) -> Optional[Dict[str, Any]]:
+    session_state_result = await db.execute(
+        select(
+            ExamSession.id,
+            ExamSession.exam_id,
+            ExamSession.violation_count,
+            ExamSession.status,
+            ExamSession.end_time,
+        ).where(
+            ExamSession.id == session_id,
+            ExamSession.user_id == current_user_id,
+        )
+    )
+    row = session_state_result.mappings().one_or_none()
+    if not row:
+        return None
+    state = dict(row)
+    state["status"] = str(state.get("status") or "").strip().lower()
+    state["source"] = "db"
+    await _refresh_session_runtime_cache(
+        session_id=session_id,
+        user_id=current_user_id,
+        session_state=state,
+    )
+    return state
+
+
+async def _resolve_session_state_for_enqueue(
+    db: AsyncSession,
+    *,
+    violation_data: ViolationLog,
+    current_user: Any,
+) -> Optional[Dict[str, Any]]:
+    session_id = int(violation_data.session_id)
+    current_user_id = int(current_user.id)
+
+    cached_state = await _read_cached_session_state(
+        session_id=session_id,
+        current_user_id=current_user_id,
+    )
+    if cached_state is not None:
+        return cached_state
+
+    return await _load_session_state_from_db(
+        db,
+        session_id=session_id,
+        current_user_id=current_user_id,
+    )
 
 
 async def _cache_enqueued_event(event: Dict[str, Any], violation_meta: Dict[str, Any]) -> int:
@@ -194,26 +333,24 @@ async def enqueue_violation_event(
         assume_violation=True,
     )
     if not normalized_event_type:
-        from fastapi import HTTPException
-
         raise HTTPException(status_code=400, detail="Jenis pelanggaran tidak valid")
 
-    session_state_result = await db.execute(
-        select(
-            ExamSession.id,
-            ExamSession.exam_id,
-            ExamSession.violation_count,
-            ExamSession.status,
-            ExamSession.end_time,
-        ).where(
-            ExamSession.id == violation_data.session_id,
-            ExamSession.user_id == current_user.id,
+    try:
+        session_state = await _resolve_session_state_for_enqueue(
+            db,
+            violation_data=violation_data,
+            current_user=current_user,
         )
-    )
-    session_state = session_state_result.mappings().one_or_none()
-    if not session_state:
-        from fastapi import HTTPException
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning(
+            "Violation session validation fallback failed; dropping best-effort event: %s",
+            str(exc),
+        )
+        return ViolationEnqueueResult(status="dropped", violation_count=0)
 
+    if not session_state:
         raise HTTPException(status_code=404, detail="Sesi ujian tidak ditemukan")
 
     current_count = int(session_state["violation_count"] or 0)
@@ -271,6 +408,14 @@ async def enqueue_violation_event(
         await redis.rpush(PENDING_KEY, _json_dumps(event))
         await redis.expire(PENDING_KEY, CACHE_TTL_SECONDS)
         cached_count = await _cache_enqueued_event(event, violation_meta)
+        await _refresh_session_runtime_cache(
+            session_id=int(session_state["id"]),
+            user_id=int(current_user.id),
+            session_state={
+                **dict(session_state),
+                "violation_count": max(current_count, cached_count),
+            },
+        )
     except Exception:
         # Best-effort by design: violation logging must not block answers/final submit.
         logger.exception("Failed to enqueue violation event; dropping best-effort event")

@@ -93,6 +93,7 @@ async def get_session_status(
             ExamSession.id.label("session_id"),
             ExamSession.exam_id.label("exam_id"),
             ExamSession.start_time.label("start_time"),
+            ExamSession.end_time.label("end_time"),
             ExamSession.status.label("status"),
             ExamSession.violation_count.label("violation_count"),
             ExamSession.total_paused_seconds.label("total_paused_seconds"),
@@ -157,6 +158,31 @@ async def get_session_status(
 
     await db.commit()
 
+    if not redis_belongs_to_user:
+        redis_data = {
+            "session_id": session_id,
+            "user_id": current_user.id,
+            "exam_id": session_exam_id,
+            "start_time": session_row["start_time"].isoformat() if session_row["start_time"] else None,
+            "end_time": session_row["end_time"].isoformat() if session_row["end_time"] else None,
+            "duration_minutes": safe_int(session_row["duration_minutes"]) or 0,
+            "status": session_status,
+            "answered_count": int(answered_count),
+            "answered_count_stale": False,
+            "total_questions": int(total_questions),
+            "violation_count": session_violation_count,
+            "total_paused_seconds": safe_int(session_row["total_paused_seconds"]) or 0,
+        }
+        redis_belongs_to_user = True
+        try:
+            await store_session_data(session_id, redis_data)
+        except Exception as cache_exc:
+            logger.debug(
+                "SESSION-STATUS | session=%s | failed to create redis snapshot: %s",
+                session_id,
+                str(cache_exc),
+            )
+
     if redis_belongs_to_user and redis_data is not None:
         redis_changed = False
         if safe_int(redis_data.get("answered_count")) != int(answered_count):
@@ -168,8 +194,18 @@ async def get_session_status(
         if safe_int(redis_data.get("total_questions")) != int(total_questions):
             redis_data["total_questions"] = int(total_questions)
             redis_changed = True
+        if safe_int(redis_data.get("session_id")) != session_id:
+            redis_data["session_id"] = session_id
+            redis_changed = True
+        if safe_int(redis_data.get("exam_id")) != session_exam_id:
+            redis_data["exam_id"] = session_exam_id
+            redis_changed = True
         if str(redis_data.get("status") or "") != session_status:
             redis_data["status"] = session_status
+            redis_changed = True
+        end_time_value = session_row["end_time"].isoformat() if session_row["end_time"] else None
+        if redis_data.get("end_time") != end_time_value:
+            redis_data["end_time"] = end_time_value
             redis_changed = True
         if safe_int(redis_data.get("violation_count")) != session_violation_count:
             redis_data["violation_count"] = session_violation_count

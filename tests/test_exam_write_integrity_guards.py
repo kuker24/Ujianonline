@@ -21,12 +21,17 @@ def _extract_async_function(source: str, function_name: str) -> str:
     return match.group(0)
 
 
-def test_submit_answer_rechecks_session_under_write_lock() -> None:
-    fn = _extract_async_function(EXAMS_SOURCE, "submit_answer")
-    assert "session_status != \"in_progress\"" in fn
-    assert "Sesi ujian sudah dikumpulkan. Jawaban tambahan diabaikan." in fn
-    assert "await validate_seb_headers(request, exam_id, db, require_seb=True)" in fn
-    assert "except HTTPException as exc:" in fn
+def test_submit_answer_routes_through_service_and_rechecks_session_under_lock() -> None:
+    endpoint_fn = _extract_async_function(EXAMS_SOURCE, "submit_answer")
+    assert "get_answer_sync_service" in endpoint_fn
+    assert "accept_single_answer(answer_data, request)" in endpoint_fn
+
+    assert "async def accept_single_answer" in ANSWER_SYNC_SERVICE_SOURCE
+    assert "await validate_seb_headers(request, exam_id, self.db, require_seb=True)" in ANSWER_SYNC_SERVICE_SOURCE
+    assert "_lock_session_for_single_answer" in ANSWER_SYNC_SERVICE_SOURCE
+    assert ".with_for_update()" in ANSWER_SYNC_SERVICE_SOURCE
+    assert "Sesi ujian sudah dikumpulkan. Jawaban tambahan diabaikan." in ANSWER_SYNC_SERVICE_SOURCE
+    assert "Retry-After\": \"1\"" in ANSWER_SYNC_SERVICE_SOURCE
 
 
 def test_auto_save_batch_serializes_session_writes() -> None:

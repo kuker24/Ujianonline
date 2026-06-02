@@ -155,6 +155,8 @@ async def _write_answer_buffer(
             "answer_text": item.get("answer_text"),
             "statement_answers": item.get("statement_answers"),
             "answer_metadata": item.get("answer_metadata") or {},
+            "is_correct": item.get("is_correct"),
+            "points_earned": item.get("points_earned"),
             "updated_at": now_iso,
         }
         mapping[str(question_id)] = _json_dumps(payload)
@@ -166,10 +168,19 @@ async def _write_answer_buffer(
     pipe = redis.pipeline()
     pipe.hset(answers_key, mapping=mapping)
     pipe.sadd(dirty_key, *dirty_ids)
-    pipe.set(answered_count_key, len(mapping), ex=RUNTIME_ANSWER_TTL_SECONDS)
     pipe.expire(answers_key, RUNTIME_ANSWER_TTL_SECONDS)
     pipe.expire(dirty_key, RUNTIME_ANSWER_TTL_SECONDS)
     await pipe.execute()
+
+    try:
+        total_buffered_answers = int(await redis.hlen(answers_key) or 0)
+        await redis.set(
+            answered_count_key,
+            total_buffered_answers,
+            ex=RUNTIME_ANSWER_TTL_SECONDS,
+        )
+    except Exception:
+        logger.debug("Failed to refresh runtime buffer answered count", exc_info=True)
     await _enqueue_session_for_flush(redis, session_id)
     return len(mapping)
 
@@ -180,6 +191,34 @@ class AnswerRuntimeBufferService:
     def __init__(self, db: AsyncSession, current_user: Any):
         self.db = db
         self.current_user = current_user
+
+    async def accept_single_answer(
+        self,
+        *,
+        session: ExamSession,
+        answer_data: Any,
+        answer_metadata: Dict[str, Any],
+        is_correct: Any,
+        points_earned: Any,
+    ) -> int:
+        """Buffer one validated submit-answer payload for hybrid runtime mode."""
+        return await _write_answer_buffer(
+            session_id=int(session.id),
+            user_id=int(self.current_user.id),
+            exam_id=int(session.exam_id),
+            answers=[
+                {
+                    "question_id": int(answer_data.question_id),
+                    "selected_option_id": answer_data.selected_option_id,
+                    "selected_option_ids": answer_data.selected_option_ids,
+                    "answer_text": answer_data.answer_text,
+                    "statement_answers": answer_data.statement_answers,
+                    "answer_metadata": dict(answer_metadata or {}),
+                    "is_correct": is_correct,
+                    "points_earned": points_earned,
+                }
+            ],
+        )
 
     async def accept_batch(self, batch_data: Any) -> Dict[str, Any]:
         session = await _ensure_active_session_for_user(
@@ -373,8 +412,8 @@ async def _flush_session_buffer(db: AsyncSession, redis: Any, session_id: int) -
             existing_answer.answer_text = item.get("answer_text")
             existing_answer.answer_metadata = final_metadata
             existing_answer.answered_at = now_utc
-            existing_answer.is_correct = None
-            existing_answer.points_earned = None
+            existing_answer.is_correct = item.get("is_correct")
+            existing_answer.points_earned = item.get("points_earned")
             changed_rows += 1
         else:
             db.add(
@@ -386,8 +425,8 @@ async def _flush_session_buffer(db: AsyncSession, redis: Any, session_id: int) -
                     answer_text=item.get("answer_text"),
                     answer_metadata=final_metadata,
                     answered_at=now_utc,
-                    is_correct=None,
-                    points_earned=None,
+                    is_correct=item.get("is_correct"),
+                    points_earned=item.get("points_earned"),
                 )
             )
             changed_rows += 1

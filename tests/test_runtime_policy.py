@@ -55,3 +55,19 @@ async def test_runtime_policy_endpoint_returns_no_store_json(monkeypatch) -> Non
     assert response.headers["X-Runtime-Policy-Version"] == "20260602-mobile-runtime-v1"
     assert b'"mode":"busy"' in response.body
     assert b'"answer_sync_interval_seconds":25' in response.body
+
+
+@pytest.mark.asyncio
+async def test_mobile_runtime_policy_falls_back_when_internal_policy_fails(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "exam_peak_mode", False)
+
+    async def broken_internal_policy(force_refresh=False):
+        raise RuntimeError("redis unavailable")
+
+    monkeypatch.setattr(runtime_policy, "get_internal_runtime_policy", broken_internal_policy)
+
+    policy = await runtime_policy.get_mobile_runtime_policy()
+
+    assert policy["mode"] == "normal"
+    assert policy["resource_mode"] == "normal"
+    assert policy["degrade_mode"] is False

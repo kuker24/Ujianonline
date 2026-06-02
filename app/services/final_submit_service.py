@@ -387,7 +387,10 @@ class FinalSubmitService:
         try:
             cached_session_data = await get_session_data(session.id)
             if cached_session_data and safe_int(cached_session_data.get("user_id")) == self.current_user.id:
+                cached_session_data["session_id"] = session.id
+                cached_session_data["exam_id"] = session.exam_id
                 cached_session_data["status"] = "submitted"
+                cached_session_data["end_time"] = session.end_time.isoformat() if session.end_time else None
                 cached_session_data["answered_count_stale"] = False
                 cached_session_data["violation_count"] = int(session.violation_count or 0)
                 await store_session_data(session.id, cached_session_data)

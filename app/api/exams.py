@@ -19,7 +19,6 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, func, or_, and_, text, update
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import selectinload, joinedload, noload
 from pydantic import BaseModel
 import pytz
@@ -51,7 +50,7 @@ from app.core.security import (
 from app.middleware.seb_validation import validate_seb_headers, get_client_info
 from app.core.redis_pubsub import (
     publish_message, store_session_data, get_session_data,
-    update_session_answers, get_redis, update_session_activity
+    get_redis, update_session_activity
 )
 from app.core.client_ip import get_client_ip
 from app.core.answer_review_helpers import (
@@ -67,10 +66,6 @@ from app.core.exam_access_policy import (
     is_exam_participant_role as _is_exam_participant_role,
     participant_has_exam_access as _participant_has_exam_access,
 )
-from app.core.exam_answer_validation import (
-    get_question_validation_payload_cached as _get_question_validation_payload_cached,
-    validate_answer_with_cached_payload as _validate_answer_with_cached_payload,
-)
 from app.core.exam_results_cache import (
     build_exam_results_cache_key as _build_exam_results_cache_key,
     build_exam_results_viewer_scope as _build_exam_results_viewer_scope,
@@ -79,16 +74,7 @@ from app.core.exam_results_cache import (
     set_cached_exam_results as _set_cached_exam_results,
 )
 from app.core.exam_runtime_cache import (
-    answer_has_meaningful_content_clause as _answer_has_meaningful_content_clause,
-    get_exam_question_count_cached as _get_exam_question_count_cached,
     get_session_answer_count_cached as _get_session_answer_count_cached,
-    invalidate_session_answer_count_cache as _invalidate_session_answer_count_cache,
-    should_publish_progress_update as _should_publish_progress_update,
-)
-from app.core.exam_runtime_state import (
-    add_answered_questions_and_count as _add_answered_questions_and_count,
-    get_answered_count_from_set as _get_answered_count_from_set,
-    update_runtime_snapshot_answered_count as _update_runtime_snapshot_answered_count,
 )
 from app.core.monitoring_delta import publish_monitoring_delta
 from app.core.exam_session_helpers import (
@@ -121,9 +107,9 @@ from app.core.feature_flags import require_feature_enabled
 from app.core.rate_limiter import RateLimiters, check_rate_limit
 from app.services.exam_service import ExamService
 from app.services.exam_submission_service import finalize_exam_session_submission
+from app.services.answer_sync_service import get_answer_sync_service
 from app.services.final_submit_service import get_final_submit_service
 from app.services.violation_event_service import enqueue_violation_event
-from app.tasks.answer_processor import drain_answer_queue, enqueue_answer_payload
 
 logger = logging.getLogger(__name__)
 
@@ -363,67 +349,6 @@ SESSION_WRITE_LOCK_NAMESPACE = 48102
 
 _exam_start_validation_local_cache: Dict[int, float] = {}
 
-
-def _answer_write_mode() -> str:
-    mode = str(getattr(settings, "answer_write_mode", "direct") or "direct").strip().lower()
-    if mode == "queue":
-        return "queue"
-    return "direct"
-
-
-async def _publish_exam_monitor_event(exam_id: int, payload: Dict[str, Any]) -> None:
-    await publish_message(f"exam_monitor_{exam_id}", payload)
-    try:
-        await publish_monitoring_delta(
-            exam_id=exam_id,
-            event_type=str(payload.get("type") or "event"),
-            payload=payload,
-        )
-    except Exception as delta_exc:
-        logger.debug("Failed to mirror monitor event to delta stream: %s", str(delta_exc))
-
-
-def _build_exam_start_validation_cache_key(exam_id: int) -> str:
-    return f"{EXAM_START_VALIDATION_CACHE_PREFIX}:{exam_id}:options-ok"
-
-
-async def _acquire_session_write_lock(db: AsyncSession, session_id: int) -> None:
-    """
-    Serialize all mutating writes for the same exam session.
-
-    This prevents answer writes from racing against final submission and avoids
-    post-submit mutations under concurrent retry bursts.
-    """
-    await db.execute(
-        text("SELECT pg_advisory_xact_lock(:namespace, :session_id)"),
-        {
-            "namespace": SESSION_WRITE_LOCK_NAMESPACE,
-            "session_id": session_id,
-        },
-    )
-
-
-async def _ensure_session_in_progress_for_user(
-    db: AsyncSession,
-    *,
-    session_id: int,
-    user_id: int,
-    lock_row: bool = False,
-) -> ExamSession:
-    query = select(ExamSession).where(
-        ExamSession.id == session_id,
-        ExamSession.user_id == user_id,
-    )
-    if lock_row:
-        query = query.with_for_update()
-
-    result = await db.execute(query)
-    session = result.scalar_one_or_none()
-    if session is None:
-        raise HTTPException(status_code=404, detail="Sesi ujian tidak ditemukan")
-    if session.status != "in_progress":
-        raise HTTPException(status_code=400, detail="Sesi ujian sudah berakhir")
-    return session
 
 
 
@@ -2363,9 +2288,11 @@ async def start_exam_session(
         or session.start_time.isoformat()
     )
     session_cache_data = {
+        "session_id": session.id,
         "user_id": current_user.id,
         "exam_id": exam_id,
         "start_time": session.start_time.isoformat(),
+        "end_time": session.end_time.isoformat() if session.end_time else None,
         "started_at": started_at_iso,
         "duration_seconds": exam.duration_minutes * 60,
         "elapsed_seconds": int((existing_redis_data or {}).get("elapsed_seconds") or 0),
@@ -2892,329 +2819,9 @@ async def submit_answer(
     current_user: AuthenticatedUser = Depends(get_current_user_hot_path),
     db: AsyncSession = Depends(get_db)
 ):
-    """Submit a single answer."""
-    # Rate limit check (30 requests/minute per session)
-    session_key = f"{current_user.id}:{answer_data.session_id}"
-    is_allowed, remaining = await check_rate_limit(RateLimiters.ANSWER_SUBMIT, session_key)
-    if not is_allowed:
-        raise HTTPException(
-            status_code=429,
-            detail="Terlalu banyak request. Tunggu beberapa saat.",
-            headers={"Retry-After": "5", "X-RateLimit-Remaining": str(remaining)}
-        )
-
-    session_id = int(answer_data.session_id)
-    try:
-        session_row_result = await db.execute(
-            select(
-                ExamSession.id,
-                ExamSession.exam_id,
-                ExamSession.status,
-            ).where(
-                ExamSession.id == session_id,
-                ExamSession.user_id == current_user.id,
-            )
-        )
-    except (sqlalchemy.exc.TimeoutError, sqlalchemy.exc.DBAPIError) as exc:
-        logger.warning(
-            "SUBMIT-ANSWER | session=%s | transient DB read pressure: %s",
-            session_id,
-            str(exc),
-        )
-        raise HTTPException(
-            status_code=503,
-            detail="Server sedang sibuk, silakan ulangi kirim jawaban.",
-            headers={"Retry-After": "1"},
-        )
-
-    session_row = session_row_result.first()
-    if session_row is None:
-        raise HTTPException(status_code=404, detail="Sesi ujian tidak ditemukan")
-
-    exam_id = int(session_row[1])
-    session_status = str(session_row[2] or "").strip().lower()
-
-    if session_status != "in_progress":
-        # Idempotent/no-op for retry races after successful submit.
-        if session_status in {"submitted", "completed"}:
-            return AnswerResponse(
-                status="saved",
-                question_id=answer_data.question_id,
-                message="Sesi ujian sudah dikumpulkan. Jawaban tambahan diabaikan.",
-            )
-        raise HTTPException(status_code=400, detail="Sesi ujian sudah berakhir")
-
-    # Validate SEB
-    await validate_seb_headers(request, exam_id, db, require_seb=True)
-
-    # Get question validation payload (local cache first) and validate.
-    try:
-        question_payload = await _get_question_validation_payload_cached(
-            db,
-            exam_id=exam_id,
-            question_id=answer_data.question_id,
-        )
-    except (sqlalchemy.exc.TimeoutError, sqlalchemy.exc.DBAPIError) as exc:
-        logger.warning(
-            "SUBMIT-ANSWER | Q%s | transient DB question read pressure: %s",
-            answer_data.question_id,
-            str(exc),
-        )
-        raise HTTPException(
-            status_code=503,
-            detail="Server sedang sibuk, silakan ulangi kirim jawaban.",
-            headers={"Retry-After": "1"},
-        )
-
-    if not question_payload:
-        raise HTTPException(status_code=404, detail="Soal tidak ditemukan")
-
-    question_id = int(question_payload["id"])
-    question_type = str(question_payload.get("question_type") or "")
-    question_pgk_type = question_payload.get("pgk_type")
-    question_max_points = float(question_payload.get("points") or 0.0)
-
-    # Build final metadata from incoming payload only, then persist with UPSERT.
-    incoming_metadata = dict(answer_data.answer_metadata or {})
-    merged_statement_answers = answer_data.statement_answers
-    final_metadata, _ = merge_statement_answer_metadata(
-        existing_metadata={},
-        incoming_metadata=incoming_metadata,
-        incoming_statement_answers=merged_statement_answers,
-    )
-
-    if logger.isEnabledFor(logging.DEBUG):
-        logger.debug(
-            "SUBMIT-ANSWER | Q%s (%s) | pgk_type=%s",
-            question_id,
-            question_type,
-            question_pgk_type,
-        )
-
-    has_answer = (
-        answer_data.selected_option_id is not None or
-        (answer_data.selected_option_ids is not None and len(answer_data.selected_option_ids) > 0) or
-        (answer_data.answer_text is not None and answer_data.answer_text.strip() != '') or
-        (merged_statement_answers is not None and len(merged_statement_answers) > 0)
-    )
-
-    if not has_answer:
-        logger.warning(f"SUBMIT-ANSWER | Q{question_id} | Tidak ada data jawaban yang valid!")
-
-    try:
-        is_correct, points_earned = _validate_answer_with_cached_payload(
-            question_payload,
-            selected_option_id=answer_data.selected_option_id,
-            selected_option_ids=answer_data.selected_option_ids,
-            answer_text=answer_data.answer_text,
-            statement_answers=merged_statement_answers,
-        )
-    except Exception as e:
-        logger.error(
-            "SUBMIT-ANSWER | Q%s | Error saat validasi: %s",
-            question_id,
-            str(e),
-            exc_info=True
-        )
-        is_correct = False
-        points_earned = 0.0
-
-    if logger.isEnabledFor(logging.DEBUG):
-        logger.debug(
-            "SUBMIT-ANSWER | Q%s validation result | is_correct=%s points_earned=%s max_points=%s",
-            question_id,
-            is_correct,
-            points_earned,
-            question_max_points,
-        )
-
-    write_timestamp = datetime.now(timezone.utc)
-    write_fields = {
-        "selected_option_id": answer_data.selected_option_id,
-        "selected_option_ids": answer_data.selected_option_ids,
-        "answer_text": answer_data.answer_text,
-        "answer_metadata": final_metadata,
-        "is_correct": is_correct,
-        "points_earned": points_earned,
-        "answered_at": write_timestamp,
-    }
-    answered_count_runtime: Optional[int] = None
-    persisted_via_queue = False
-
-    try:
-        if _answer_write_mode() == "queue":
-            queue_payload = {
-                "session_id": session_id,
-                "exam_id": exam_id,
-                "user_id": current_user.id,
-                "question_id": question_id,
-                "selected_option_id": answer_data.selected_option_id,
-                "selected_option_ids": answer_data.selected_option_ids,
-                "answer_text": answer_data.answer_text,
-                "statement_answers": merged_statement_answers,
-                "answer_metadata": final_metadata,
-                "is_correct": is_correct,
-                "points_earned": points_earned,
-                "answered_at": write_timestamp.isoformat(),
-            }
-            try:
-                await enqueue_answer_payload(queue_payload)
-                persisted_via_queue = True
-            except Exception as queue_exc:
-                logger.warning(
-                    "SUBMIT-ANSWER | session=%s Q%s | queue enqueue failed, fallback direct write: %s",
-                    session_id,
-                    question_id,
-                    str(queue_exc),
-                )
-
-        if not persisted_via_queue:
-            upsert_stmt = (
-                pg_insert(Answer)
-                .values(
-                    session_id=session_id,
-                    question_id=question_id,
-                    **write_fields,
-                )
-                .on_conflict_do_update(
-                    index_elements=[Answer.session_id, Answer.question_id],
-                    set_=write_fields,
-                )
-            )
-            try:
-                await db.execute(upsert_stmt)
-            except sqlalchemy.exc.DBAPIError as upsert_exc:
-                # Fallback for legacy deployments that lack unique index
-                # on (session_id, question_id).
-                if "no unique or exclusion constraint" not in str(upsert_exc).lower():
-                    raise
-                await db.execute(
-                    text("SELECT pg_advisory_xact_lock(:session_id, :question_id)"),
-                    {"session_id": session_id, "question_id": question_id},
-                )
-                update_stmt = (
-                    update(Answer)
-                    .where(
-                        Answer.session_id == session_id,
-                        Answer.question_id == question_id,
-                    )
-                    .values(**write_fields)
-                )
-                update_result = await db.execute(update_stmt)
-                if (update_result.rowcount or 0) == 0:
-                    db.add(
-                        Answer(
-                            session_id=session_id,
-                            question_id=question_id,
-                            **write_fields,
-                        )
-                    )
-            await db.commit()
-
-        _invalidate_session_answer_count_cache(session_id)
-        try:
-            answered_count_runtime = await _add_answered_questions_and_count(
-                session_id,
-                [question_id],
-            )
-            if answered_count_runtime is not None:
-                await _update_runtime_snapshot_answered_count(
-                    session_id,
-                    expected_user_id=current_user.id,
-                    answered_count=answered_count_runtime,
-                    mark_stale=False,
-                    status="in_progress",
-                )
-            else:
-                cached_session_data = await get_session_data(session_id)
-                if cached_session_data and safe_int(cached_session_data.get("user_id")) == current_user.id:
-                    cached_session_data["answered_count_stale"] = True
-                    await store_session_data(session_id, cached_session_data)
-        except Exception as cache_exc:
-            logger.debug(
-                "SUBMIT-ANSWER | session=%s | failed to refresh runtime answered_count: %s",
-                session_id,
-                str(cache_exc),
-            )
-    except HTTPException as exc:
-        await db.rollback()
-        if exc.status_code == 400:
-            detail_text = str(exc.detail).lower()
-            if "sudah berakhir" in detail_text or "sudah dikumpulkan" in detail_text:
-                return AnswerResponse(
-                    status="saved",
-                    question_id=question_id,
-                    message="Sesi ujian sudah dikumpulkan. Jawaban tambahan diabaikan.",
-                )
-        raise
-    except Exception as exc:
-        await db.rollback()
-        if isinstance(exc, (sqlalchemy.exc.TimeoutError, sqlalchemy.exc.DBAPIError)):
-            logger.warning(
-                "SUBMIT-ANSWER | Q%s | transient DB write pressure: %s",
-                question_id,
-                str(exc),
-            )
-            raise HTTPException(
-                status_code=503,
-                detail="Server sedang sibuk, silakan ulangi kirim jawaban.",
-                headers={"Retry-After": "1"},
-            )
-        logger.error(
-            "SUBMIT-ANSWER | Q%s | upsert failed: %s",
-            question_id,
-            str(exc),
-            exc_info=True,
-        )
-        raise HTTPException(status_code=409, detail="Konflik penyimpanan jawaban, silakan coba lagi")
-
-    # Progress broadcast is throttled to reduce DB pressure on hot path.
-    if _should_publish_progress_update(session_id):
-        total_questions = await _get_exam_question_count_cached(db, exam_id)
-        answered_count: Optional[int] = answered_count_runtime
-        if answered_count is None:
-            try:
-                answered_count = await _get_answered_count_from_set(session_id)
-            except Exception as runtime_exc:
-                logger.debug(
-                    "SUBMIT-ANSWER | session=%s | failed reading answered_count set: %s",
-                    session_id,
-                    str(runtime_exc),
-                )
-        if answered_count is None:
-            answered_result = await db.execute(
-                select(func.count(func.distinct(Answer.question_id))).where(
-                    Answer.session_id == session_id,
-                    _answer_has_meaningful_content_clause(),
-                )
-            )
-            answered_count = int(answered_result.scalar() or 0)
-        progress = (answered_count / total_questions * 100) if total_questions > 0 else 0.0
-
-        # End DB transaction before Redis publish to avoid long idle-in-transaction windows.
-        await db.commit()
-
-        try:
-            await _publish_exam_monitor_event(exam_id, {
-                "type": "progress_update",
-                "user_id": current_user.id,
-                "exam_id": exam_id,
-                "session_id": session_id,
-                "progress": round(progress, 2),
-                "answered_count": answered_count,
-                "total_questions": total_questions,
-                "timestamp": datetime.now(timezone.utc).isoformat()
-            })
-        except Exception as e:
-            logger.warning(f"Failed to broadcast progress update: {e}")
-
-    # NOTE: Response does NOT include is_correct!
-    return AnswerResponse(
-        status="saved",
-        question_id=question_id,
-        message="Jawaban berhasil disimpan"
-    )
-
+    """Submit a single answer via AnswerSyncService."""
+    service = get_answer_sync_service(db, current_user)
+    return await service.accept_single_answer(answer_data, request)
 
 def _is_transient_db_pressure_error(exc: Exception) -> bool:
     if isinstance(exc, sqlalchemy.exc.TimeoutError):

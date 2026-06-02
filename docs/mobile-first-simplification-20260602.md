@@ -447,3 +447,123 @@ Target akhir:
 - Tidak ada output APK/signing key/secret masuk repo.
 - Load test menunjukkan DB pressure turun.
 ```
+
+## 12. Production rollout
+
+Bagian ini menjadi panduan aman untuk production setelah fase mobile-first dan service-boundary answer sync diterapkan.
+
+### 12.1 Safe production baseline
+
+Gunakan baseline berikut untuk production saat ujian aktif, terutama sebelum runtime answer buffer dibuktikan lewat staging/load test:
+
+```env
+ANSWER_WRITE_MODE=direct
+ANSWER_QUEUE_ENABLED=false
+ANSWER_QUEUE_PERCENTAGE=0
+VIOLATION_ASYNC_ENABLED=true
+ADMIN_MONITORING_DETAIL_LEVEL=summary
+SEB_DESKTOP_LEGACY_ENABLED=false
+SEB_QR_ENABLED=false
+APK_BUILD_ENDPOINT_ENABLED=false
+TELEGRAM_ALERTING_ENABLED=false
+```
+
+Makna operasional:
+
+- Jawaban siswa tetap direct-write sebagai mode paling kompatibel.
+- Runtime answer buffer/queue tetap off secara default.
+- Violation logging tetap async agar tidak membebani jalur jawaban/final submit.
+- Monitoring admin default summary/aggregate-first.
+- SEB desktop, QR legacy, APK build server, dan Telegram alerting tetap disabled-by-default.
+
+### 12.2 Staged rollout runtime answer buffer
+
+Runtime answer buffer tidak boleh langsung 100% di production tanpa pembuktian final submit flush.
+
+#### Stage 0 — direct mode only
+
+```env
+ANSWER_WRITE_MODE=direct
+ANSWER_QUEUE_ENABLED=false
+ANSWER_QUEUE_PERCENTAGE=0
+```
+
+Tujuan:
+
+- Baseline production aman.
+- Semua single answer, autosave, journal, dan final submit tetap kompatibel dengan behavior existing.
+
+#### Stage 1 — hybrid canary 10%
+
+```env
+ANSWER_WRITE_MODE=hybrid
+ANSWER_QUEUE_ENABLED=true
+ANSWER_QUEUE_PERCENTAGE=10
+```
+
+Syarat:
+
+- Jalankan di staging lebih dulu.
+- Verifikasi final submit selalu flush runtime buffer sebelum grading.
+- Pantau error 503 submit dan ukuran pending Redis.
+
+#### Stage 2 — hybrid 50%
+
+```env
+ANSWER_WRITE_MODE=hybrid
+ANSWER_QUEUE_ENABLED=true
+ANSWER_QUEUE_PERCENTAGE=50
+```
+
+Syarat:
+
+- Stage 1 stabil.
+- Tidak ada penurunan answered_count/dashboard.
+- Tidak ada kehilangan jawaban pada refresh/final submit.
+
+#### Stage 3 — hybrid/queue 100%
+
+```env
+ANSWER_WRITE_MODE=hybrid
+ANSWER_QUEUE_ENABLED=true
+ANSWER_QUEUE_PERCENTAGE=100
+```
+
+Syarat keras:
+
+- Load test sudah melewati target concurrency production.
+- Final submit flush terbukti aman.
+- Redis, DB, worker drain, dan observability sudah stabil.
+
+### 12.3 Rollback cepat
+
+Jika ada gejala jawaban terlambat, pending Redis naik, atau submit sering 503:
+
+```env
+ANSWER_QUEUE_ENABLED=false
+ANSWER_WRITE_MODE=direct
+```
+
+Tetap pertahankan jika stabil:
+
+```env
+VIOLATION_ASYNC_ENABLED=true
+```
+
+Saat traffic ujian puncak, tetap gunakan:
+
+```env
+ADMIN_MONITORING_DETAIL_LEVEL=summary
+```
+
+Jika export/report berat mengganggu peak traffic:
+
+```env
+EXAM_PEAK_MODE=true
+```
+
+Catatan rollback:
+
+- Rollback env di atas tidak membutuhkan schema migration.
+- Jangan restart saat ujian aktif kecuali benar-benar perlu dan disetujui operator.
+- Jika restart harus dilakukan, prioritaskan window kosong dan backup konfigurasi terlebih dahulu.
