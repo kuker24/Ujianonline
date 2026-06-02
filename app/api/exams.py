@@ -334,6 +334,9 @@ SESSION_WRITE_LOCK_NAMESPACE = 48102
 _exam_start_validation_local_cache: Dict[int, float] = {}
 
 
+def _build_exam_start_validation_cache_key(exam_id: int) -> str:
+    """Build the Redis cache key for exam-start option integrity validation."""
+    return f"{EXAM_START_VALIDATION_CACHE_PREFIX}:{int(exam_id)}"
 
 
 async def _ensure_exam_start_option_integrity(db: AsyncSession, exam_id: int) -> None:
