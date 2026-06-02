@@ -15,7 +15,7 @@ import logging
 from app.config import settings
 from app.database import init_db
 from app.core.redis_pubsub import init_redis, close_redis
-from app.api import auth, users, exams, questions, websocket, stats, sxb, seb_autoconfig
+from app.api import auth, users, exams, questions, websocket, stats, sxb, seb_autoconfig, runtime
 from app.api import grading, analytics, monitoring
 from app.api import exam_seb, exam_admin
 
@@ -280,6 +280,7 @@ app.include_router(users.router)
 app.include_router(questions.router)
 app.include_router(websocket.router)
 app.include_router(stats.router)
+app.include_router(runtime.router)  # APK/mobile adaptive runtime policy
 app.include_router(sxb.router) # SXB Private API
 app.include_router(seb_autoconfig.router)  # SEB Auto-Configuration (Dynamic)
 
