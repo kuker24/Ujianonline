@@ -32,6 +32,23 @@ def test_debug_and_profile_can_override_cleartext_for_local_testing() -> None:
 
 
 def test_api_service_forces_https_when_config_enabled() -> None:
+    config = Path("flutter_client_code/lib/config.dart").read_text(encoding="utf-8")
     source = Path("flutter_client_code/lib/services/api_service.dart").read_text(encoding="utf-8")
+
+    assert 'static const bool forceHttps = true;' in config
+    assert 'static const bool allowCleartextTraffic = false;' in config
+    assert 'static const String serverUrl = "https://' in config
+    assert 'static const String serverUrl = "http://' not in config
     assert "if (AppConfig.forceHttps && value.startsWith('http://'))" in source
     assert "value.replaceFirst('http://', 'https://')" in source
+
+
+def test_release_signing_config_uses_uncommitted_key_properties_only() -> None:
+    gradle = Path("flutter_client_code/android/app/build.gradle").read_text(encoding="utf-8")
+
+    assert "rootProject.file('key.properties')" in gradle
+    assert "keystoreProperties['storeFile']" in gradle
+    assert ".jks" not in gradle
+    assert ".keystore" not in gradle
+    assert "storePassword \"" not in gradle
+    assert "keyPassword \"" not in gradle
