@@ -15,7 +15,7 @@ import logging
 from app.config import settings
 from app.database import init_db
 from app.core.redis_pubsub import init_redis, close_redis
-from app.api import auth, users, exams, exam_answer_sync, exam_session_runtime, exam_offline_package, exam_pause_control, questions, websocket, stats, sxb, seb_autoconfig, runtime
+from app.api import auth, users, exams, exam_answer_sync, exam_session_runtime, exam_offline_package, exam_pause_control, exam_exports, questions, websocket, stats, sxb, seb_autoconfig, runtime
 from app.api import grading, analytics, monitoring
 from app.api import exam_seb, exam_admin
 
@@ -318,6 +318,7 @@ app.include_router(exam_answer_sync.router)
 app.include_router(exam_session_runtime.router)
 app.include_router(exam_offline_package.router)
 app.include_router(exam_pause_control.router)
+app.include_router(exam_exports.router)
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(questions.router)
