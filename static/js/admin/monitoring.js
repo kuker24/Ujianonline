@@ -41,6 +41,9 @@
         let opsSummaryInFlight = false;
         let opsSummaryForceQueued = false;
         let refreshDataInFlight = false;
+        let refreshQueuedWhileHidden = false;
+        let lastVisibleRefreshAt = 0;
+        const VISIBLE_REFRESH_MIN_GAP_MS = 5000;
 
         function applyRoleScopedVisibility() {
             const opsCardEl = document.getElementById('ops-summary-card');
@@ -965,19 +968,27 @@
 
                 runtimePolicy.admin_refresh_interval_ms = clampIntervalMs(
                     policy.admin_refresh_interval_ms,
-                    runtimePolicy.admin_refresh_interval_ms
+                    runtimePolicy.admin_refresh_interval_ms,
+                    10000,
+                    30000
                 );
                 runtimePolicy.monitor_modal_poll_interval_ms = clampIntervalMs(
                     policy.monitor_modal_poll_interval_ms,
-                    runtimePolicy.monitor_modal_poll_interval_ms
+                    runtimePolicy.monitor_modal_poll_interval_ms,
+                    15000,
+                    60000
                 );
                 runtimePolicy.student_detail_poll_interval_ms = clampIntervalMs(
                     policy.student_detail_poll_interval_ms,
-                    runtimePolicy.student_detail_poll_interval_ms
+                    runtimePolicy.student_detail_poll_interval_ms,
+                    10000,
+                    60000
                 );
                 runtimePolicy.fullscreen_monitor_poll_interval_ms = clampIntervalMs(
                     policy.fullscreen_monitor_poll_interval_ms,
-                    runtimePolicy.fullscreen_monitor_poll_interval_ms
+                    runtimePolicy.fullscreen_monitor_poll_interval_ms,
+                    10000,
+                    60000
                 );
             } catch (error) {
                 console.warn('Runtime policy fetch failed, fallback to defaults:', error?.message || error);
@@ -985,8 +996,20 @@
         }
 
         function runIfVisible(task) {
-            if (document.hidden) return;
+            if (document.hidden) {
+                refreshQueuedWhileHidden = true;
+                return;
+            }
             task();
+        }
+
+        function refreshSummaryOnceWhenVisible() {
+            if (document.hidden) return;
+            const now = Date.now();
+            if ((now - lastVisibleRefreshAt) < VISIBLE_REFRESH_MIN_GAP_MS) return;
+            lastVisibleRefreshAt = now;
+            refreshQueuedWhileHidden = false;
+            refreshData();
         }
 
         function startMainRefreshLoop() {
@@ -1462,9 +1485,11 @@
             }, 60000);
 
             document.addEventListener('visibilitychange', () => {
-                if (document.hidden) return;
-                refreshData();
-                if (!isTeacher) loadOpsSummary();
+                if (document.hidden) {
+                    refreshQueuedWhileHidden = true;
+                    return;
+                }
+                refreshSummaryOnceWhenVisible();
             });
         }
 

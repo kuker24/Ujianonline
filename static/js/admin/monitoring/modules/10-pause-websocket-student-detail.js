@@ -148,9 +148,11 @@
             }, 60000);
 
             document.addEventListener('visibilitychange', () => {
-                if (document.hidden) return;
-                refreshData();
-                if (!isTeacher) loadOpsSummary();
+                if (document.hidden) {
+                    refreshQueuedWhileHidden = true;
+                    return;
+                }
+                refreshSummaryOnceWhenVisible();
             });
         }
 
