@@ -190,7 +190,7 @@ async function generateSebFile() {
     };
 
     try {
-        showNotification('Generating .seb file...', 'info');
+        showNotification('Generating legacy PC .seb file...', 'info');
 
         const formData = new FormData();
         formData.append('build_name', buildName);
@@ -211,12 +211,15 @@ async function generateSebFile() {
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
+            if (response.status === 503) {
+                throw new Error('SEB PC/Desktop legacy sedang dinonaktifkan. APK resmi tetap menjadi runtime utama. Aktifkan SEB_DESKTOP_LEGACY_ENABLED hanya jika diperlukan.');
+            }
             throw new Error(errorData.detail || `Build failed with status ${response.status}`);
         }
 
         const result = await response.json();
 
-        showNotification('SEB file generated successfully!', 'success');
+        showNotification('Legacy SEB file generated successfully!', 'success');
 
         // Show download link
         document.getElementById('download-link').href = result.download_url;

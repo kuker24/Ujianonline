@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" type="image/gif" href="/static/favicon.gif">
-    <title>SEB Builder - Admin Panel | Ujian Online</title>
+    <title>SEB Legacy PC Builder - Admin Panel | Ujian Online</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="/static/css/admin.css">
@@ -355,6 +355,35 @@
             background: rgba(251, 191, 36, 0.2);
             color: #fbbf24;
         }
+
+        .legacy-notice {
+            margin: 1rem 0 1.5rem;
+            padding: 1rem 1.25rem;
+            border: 1px solid rgba(245, 158, 11, 0.35);
+            border-left: 4px solid #f59e0b;
+            background: rgba(245, 158, 11, 0.1);
+            border-radius: 0.75rem;
+            color: var(--text-secondary);
+            line-height: 1.55;
+        }
+
+        .legacy-notice strong {
+            color: #fbbf24;
+        }
+
+        .runtime-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            margin-left: 0.5rem;
+            padding: 0.25rem 0.55rem;
+            border-radius: 999px;
+            background: rgba(245, 158, 11, 0.16);
+            color: #fbbf24;
+            font-size: 0.75rem;
+            font-weight: 700;
+            vertical-align: middle;
+        }
     </style>
 </head>
 
@@ -366,12 +395,19 @@
                 <div>
                     <h1 class="page-title">
                         <i class="fas fa-shield-halved" style="color: #10b981;"></i>
-                        SEB Builder
+                        SEB PC Builder
+                        <span class="runtime-badge"><i class="fas fa-clock-rotate-left"></i> Legacy Opsional</span>
                     </h1>
                     <p style="color: var(--text-secondary); margin-top: 0.5rem;">
-                        Generate Secure Exam Browser files for PC (Windows, macOS, Linux)
+                        APK resmi/mobile-first adalah runtime utama. Gunakan SEB PC hanya untuk fallback Windows/macOS/Linux.
                     </p>
                 </div>
+            </div>
+
+            <div class="legacy-notice">
+                <strong><i class="fas fa-triangle-exclamation"></i> Mode legacy PC/Desktop.</strong>
+                Fitur ini tidak diperlukan untuk ujian APK resmi. Endpoint SEB desktop default-nya nonaktif melalui
+                <code>SEB_DESKTOP_LEGACY_ENABLED=false</code>; aktifkan hanya jika ada sesi khusus PC/laptop dan sudah diuji terpisah.
             </div>
 
             <!-- PC Builder Section -->
@@ -536,7 +572,7 @@
                                 <i class="fas fa-save"></i> Save as Template
                             </button>
                             <button class="btn-primary" onclick="generateSebFile()">
-                                <i class="fas fa-cog"></i> Generate .seb File
+                                <i class="fas fa-cog"></i> Generate Legacy .seb File
                             </button>
                         </div>
                     </div>
@@ -578,7 +614,7 @@
                 <!-- Build History -->
                 <div class="builds-history">
                     <h2 style="margin-bottom: 1rem;">
-                        <i class="fas fa-clock-rotate-left"></i> Build History
+                        <i class="fas fa-clock-rotate-left"></i> Legacy Build History
                     </h2>
                     <div id="pc-builds-list">
                         <p style="color: var(--text-secondary); text-align: center; padding: 2rem;">

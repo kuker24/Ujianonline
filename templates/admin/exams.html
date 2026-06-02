@@ -354,13 +354,16 @@
     <div class="modal-overlay" id="seb-modal">
         <div class="modal" style="max-width: 500px;">
             <div class="modal-header">
-                <h3 class="modal-title"><i class="fas fa-shield-halved" style="color: var(--success);"></i> Safe Exam
-                    Browser</h3>
+                <h3 class="modal-title"><i class="fas fa-shield-halved" style="color: var(--warning);"></i> SEB PC/Desktop
+                    <span style="font-size: 0.75rem; color: var(--warning);">(Legacy Opsional)</span></h3>
                 <button class="modal-close" onclick="closeModal('seb-modal')">&times;</button>
             </div>
             <div class="modal-body">
-                <p style="margin-bottom: 1.5rem; color: var(--text-secondary);">Download konfigurasi Safe Exam Browser
-                    untuk ujian ini. Pilih sesuai platform yang digunakan siswa.</p>
+                <p style="margin-bottom: 1rem; color: var(--text-secondary);">APK resmi adalah runtime utama ujian siswa. Konfigurasi SEB ini hanya untuk fallback PC/Desktop legacy.</p>
+                <div style="margin-bottom: 1.5rem; padding: 0.85rem; background: rgba(245, 158, 11, 0.12); border-left: 4px solid var(--warning); border-radius: 0.5rem; color: var(--text-secondary); font-size: 0.9rem;">
+                    <strong style="color: var(--warning);"><i class="fas fa-triangle-exclamation"></i> Opsional:</strong>
+                    gunakan hanya jika panitia memang membuka sesi Windows/macOS/iOS lama.
+                </div>
 
                 <div id="seb-exam-title" style="font-weight: 600; margin-bottom: 1rem;"></div>
 
@@ -375,7 +378,7 @@
                     </a>
                     <a id="seb-download-android" class="btn btn-secondary"
                         style="display: flex; align-items: center; gap: 0.75rem; justify-content: center;">
-                        <i class="fab fa-android" style="font-size: 1.25rem;"></i> Link untuk Android
+                        <i class="fab fa-android" style="font-size: 1.25rem;"></i> Link Android Legacy (gunakan APK resmi bila tersedia)
                     </a>
                 </div>
 
@@ -384,9 +387,9 @@
                     <p style="color: var(--success); font-weight: 500; margin-bottom: 0.5rem;"><i
                             class="fas fa-circle-info"></i> Petunjuk:</p>
                     <ul style="margin: 0; padding-left: 1.25rem; color: var(--text-secondary); font-size: 0.875rem;">
-                        <li><strong>Windows/macOS:</strong> Download file .seb dan buka dengan SEB</li>
-                        <li><strong>iOS:</strong> Copy link dan buka di Safari</li>
-                        <li><strong>Android:</strong> Copy link dan buka di browser</li>
+                        <li><strong>APK Android resmi:</strong> jalur utama untuk siswa mobile.</li>
+                        <li><strong>Windows/macOS:</strong> legacy fallback, download file .seb dan buka dengan SEB.</li>
+                        <li><strong>iOS/Android SEB link:</strong> legacy/opsional, gunakan hanya jika sudah diuji panitia.</li>
                 </div>
             </div>
         </div>
