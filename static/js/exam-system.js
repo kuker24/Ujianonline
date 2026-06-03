@@ -167,7 +167,9 @@ function renderQuestionImage(url, alt = 'Question image', extraAttributes = '') 
     if (!safeUrl) {
         return '';
     }
-    return `<img src="${escapeAttribute(safeUrl)}" class="question-image" alt="${escapeAttribute(alt)}"${extraAttributes}>`;
+    const hasZoomAttribute = /\sdata-(?:no-)?zoom\s*=/.test(extraAttributes || '');
+    const zoomAttribute = hasZoomAttribute ? '' : ' data-zoomable="true"';
+    return `<img src="${escapeAttribute(safeUrl)}" class="question-image" alt="${escapeAttribute(alt)}"${zoomAttribute}${extraAttributes}>`;
 }
 
 function renderQuestionVideo(url) {
@@ -2966,3 +2968,5 @@ class ExamSystem {
 }
 
 window.examSystem = null;
+
+

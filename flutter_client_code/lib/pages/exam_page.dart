@@ -1993,6 +1993,220 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
     );
   }
 
+  Future<bool> _handleOpenImagePreview(List<dynamic> args) async {
+    if (args.isEmpty) return false;
+
+    final rawUrl = '${args[0] ?? ''}'.trim();
+    if (rawUrl.isEmpty) return false;
+
+    final title = args.length > 1 && '${args[1] ?? ''}'.trim().isNotEmpty
+        ? '${args[1]}'.trim()
+        : 'Preview gambar';
+
+    try {
+      final resolvedUrl = await _resolveImagePreviewUrl(rawUrl);
+      if (resolvedUrl == null || resolvedUrl.isEmpty) return false;
+
+      final uri = Uri.tryParse(resolvedUrl);
+      if (uri == null || !uri.hasScheme || !['http', 'https'].contains(uri.scheme.toLowerCase())) {
+        return false;
+      }
+
+      final headers = await _buildImagePreviewHeaders(resolvedUrl);
+      if (!mounted) return false;
+
+      await _showNativeImagePreview(
+        imageUrl: resolvedUrl,
+        title: title,
+        headers: headers,
+      );
+      return true;
+    } catch (e) {
+      debugPrint('Native image preview failed: $e');
+      return false;
+    }
+  }
+
+  Future<String?> _resolveImagePreviewUrl(String rawUrl) async {
+    final trimmed = rawUrl.trim();
+    if (trimmed.isEmpty) return null;
+
+    final parsed = Uri.tryParse(trimmed);
+    if (parsed == null) return null;
+    if (parsed.hasScheme) return parsed.toString();
+
+    try {
+      final currentUrl = await _webViewController?.getUrl();
+      final base = currentUrl != null ? Uri.tryParse(currentUrl.toString()) : null;
+      if (base != null) {
+        return base.resolveUri(parsed).toString();
+      }
+    } catch (e) {
+      debugPrint('Failed resolving image URL against WebView URL: $e');
+    }
+
+    final serverBase = Uri.tryParse(_apiService.serverUrl);
+    if (serverBase != null) {
+      return serverBase.resolve(trimmed).toString();
+    }
+    return null;
+  }
+
+  Future<Map<String, String>> _buildImagePreviewHeaders(String imageUrl) async {
+    final headers = Map<String, String>.from(_apiService.getSebHeaders(imageUrl));
+    final token = await _apiService.getToken();
+    if (token != null && token.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $token';
+    }
+    return headers;
+  }
+
+  Future<void> _showNativeImagePreview({
+    required String imageUrl,
+    required String title,
+    required Map<String, String> headers,
+  }) async {
+    if (!mounted) return;
+
+    final transformationController = TransformationController();
+    var zoomed = false;
+
+    try {
+      await showDialog<void>(
+        context: context,
+        barrierColor: Colors.black,
+        barrierDismissible: true,
+        builder: (dialogContext) => PopScope(
+          canPop: true,
+          child: Material(
+            color: Colors.black,
+            child: SafeArea(
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: Center(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onDoubleTap: () {
+                          zoomed = !zoomed;
+                          transformationController.value = zoomed
+                              ? (Matrix4.identity()..scale(2.5))
+                              : Matrix4.identity();
+                        },
+                        child: InteractiveViewer(
+                          transformationController: transformationController,
+                          minScale: 1,
+                          maxScale: 5,
+                          panEnabled: true,
+                          scaleEnabled: true,
+                          child: Image.network(
+                            imageUrl,
+                            headers: headers,
+                            fit: BoxFit.contain,
+                            loadingBuilder: (context, child, loadingProgress) {
+                              if (loadingProgress == null) return child;
+                              return const SizedBox(
+                                width: 96,
+                                height: 96,
+                                child: Center(
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              );
+                            },
+                            errorBuilder: (context, error, stackTrace) {
+                              return const Padding(
+                                padding: EdgeInsets.all(24),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.broken_image_outlined,
+                                      color: Colors.white70,
+                                      size: 56,
+                                    ),
+                                    SizedBox(height: 12),
+                                    Text(
+                                      'Gambar gagal dimuat',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    top: 12,
+                    right: 12,
+                    child: ElevatedButton.icon(
+                      onPressed: () => Navigator.of(dialogContext).pop(),
+                      icon: const Icon(Icons.close),
+                      label: const Text('Tutup'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white.withValues(alpha: 0.16),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(999),
+                          side: const BorderSide(color: Colors.white30),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    left: 16,
+                    right: 16,
+                    bottom: 16,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.55),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 10,
+                        ),
+                        child: Text(
+                          '$title • Cubit untuk zoom, geser untuk pan, double tap untuk zoom cepat',
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                          ),
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    } finally {
+      transformationController.dispose();
+      if (mounted) {
+        await SecurityService.setImmersiveMode();
+      }
+    }
+  }
+
   /// Force submit exam due to too many violations
   Future<void> _forceSubmitExam({
     String reason = 'Anda telah mencapai ambang pelanggaran keamanan.',
@@ -2155,6 +2369,14 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
                   onWebViewCreated: (controller) {
                     _webViewController = controller;
                     unawaited(_injectAuthNow(controller));
+
+                    // Handler: stable native image preview for Android APK/WebView.
+                    controller.addJavaScriptHandler(
+                      handlerName: 'openImagePreview',
+                      callback: (args) async {
+                        return await _handleOpenImagePreview(args);
+                      },
+                    );
 
                     // Handler untuk security events
                     controller.addJavaScriptHandler(

@@ -1389,11 +1389,69 @@
         // ============== IMAGE ZOOM LOGIC ==============
         const zoomModal = document.getElementById('imageZoomModal');
         const zoomImg = document.getElementById('zoomImageObj');
+        const ZOOMABLE_EXAM_IMAGE_SELECTOR = [
+            'img.question-image',
+            '.question-content img',
+            '.question-card img',
+            '.question-text img',
+            '.question-options img',
+            '.option-item img',
+            '.option-btn img',
+            'img[data-zoomable="true"]'
+        ].join(', ');
         let currentZoom = 1;
-        let initialPinchDistance = null;
+        let pinchStartDistance = null;
+        let pinchStartZoom = 1;
+        let lastTouchTapTime = 0;
         let lastPanPos = { x: 0, y: 0 };
         let currentPanPos = { x: 0, y: 0 };
         let zoomCloseTimer = null;
+
+        function isZoomableExamImage(img) {
+            if (!img || !img.tagName || img.tagName.toLowerCase() !== 'img') return false;
+            const forcedZoom = img.dataset && img.dataset.zoomable === 'true';
+            if (img.dataset && img.dataset.noZoom === 'true') return false;
+            if (img.closest && img.closest('.no-image-zoom')) return false;
+            if (!forcedZoom && (!img.matches || !img.matches(ZOOMABLE_EXAM_IMAGE_SELECTOR))) return false;
+
+            const src = img.currentSrc || img.getAttribute('src') || img.src || '';
+            if (!src) return false;
+
+            const width = Number(img.naturalWidth || img.width || img.clientWidth || 0);
+            const height = Number(img.naturalHeight || img.height || img.clientHeight || 0);
+            if (!forcedZoom && width > 0 && height > 0 && width < 120 && height < 120) {
+                return false;
+            }
+            return true;
+        }
+
+        function findZoomableExamImage(target) {
+            if (!target || !target.closest) return null;
+            const directImg = target.tagName && target.tagName.toLowerCase() === 'img' ? target : null;
+            const interactiveTarget = target.closest('button, a, input, textarea, select, label, [role="button"]');
+            if (interactiveTarget && !directImg) return null;
+
+            const img = directImg || target.closest(ZOOMABLE_EXAM_IMAGE_SELECTOR);
+            return isZoomableExamImage(img) ? img : null;
+        }
+
+        function openNativeImagePreview(src, alt) {
+            if (!src || !window.flutter_inappwebview || typeof window.flutter_inappwebview.callHandler !== 'function') {
+                return false;
+            }
+            try {
+                const result = window.flutter_inappwebview.callHandler('openImagePreview', src, alt || '');
+                if (result && typeof result.then === 'function') {
+                    result.then((opened) => {
+                        if (opened === false) openImageZoom(src);
+                    }).catch(() => openImageZoom(src));
+                }
+                return true;
+            } catch (error) {
+                console.warn('Native image preview unavailable, falling back to JS modal:', error);
+                return false;
+            }
+        }
 
         function openImageZoom(src) {
             if (!zoomModal || !zoomImg || !src) return;
@@ -1402,6 +1460,8 @@
 
             // Reset zoom
             currentZoom = 1;
+            pinchStartDistance = null;
+            pinchStartZoom = 1;
             currentPanPos = { x: 0, y: 0 };
             updateZoomTransform();
         }
@@ -1414,23 +1474,29 @@
             if (!zoomModal || !zoomImg) return;
             zoomModal.classList.remove('active');
             currentZoom = 1;
+            pinchStartDistance = null;
+            pinchStartZoom = 1;
             currentPanPos = { x: 0, y: 0 };
             updateZoomTransform();
             if (zoomCloseTimer) clearTimeout(zoomCloseTimer);
             zoomCloseTimer = setTimeout(() => { zoomImg.src = ''; }, 300); // clear after fade out
         }
 
+        function clampZoom(value) {
+            return Math.min(5, Math.max(1, Number(value) || 1));
+        }
+
         function updateZoomTransform() {
-            // Batasi zoom max 5x dan min 1x
-            if (currentZoom < 1) currentZoom = 1;
-            if (currentZoom > 5) currentZoom = 5;
+            currentZoom = clampZoom(currentZoom);
 
             // Reset pan jika kembali ke zoom normal
             if (currentZoom === 1) {
                 currentPanPos = { x: 0, y: 0 };
             }
 
-            zoomImg.style.transform = `translate(${currentPanPos.x}px, ${currentPanPos.y}px) scale(${currentZoom})`;
+            if (zoomImg) {
+                zoomImg.style.transform = `translate(${currentPanPos.x}px, ${currentPanPos.y}px) scale(${currentZoom})`;
+            }
         }
 
         // Hitung jarak 2 jari (untuk pinch)
@@ -1447,6 +1513,7 @@
                 closeImageZoom(e);
                 return;
             }
+            if (target === zoomImg) return;
             if (currentZoom <= 1 && (target === zoomModal || (target && target.classList && target.classList.contains('image-zoom-container')))) {
                 closeImageZoom(e);
             }
@@ -1454,24 +1521,23 @@
 
         zoomModal.addEventListener('touchstart', (e) => {
             if (e.touches.length === 2) {
-                // Mulai Pinch-to-Zoom
-                initialPinchDistance = getDistance(e.touches);
+                // Mulai Pinch-to-Zoom dengan ratio agar stabil di Android WebView.
+                e.preventDefault();
+                pinchStartDistance = getDistance(e.touches);
+                pinchStartZoom = currentZoom;
             } else if (e.touches.length === 1 && currentZoom > 1) {
                 // Mulai Panning (geser-geser pas lagi dizoom)
                 lastPanPos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
             }
-        });
+        }, { passive: false });
 
         zoomModal.addEventListener('touchmove', (e) => {
             e.preventDefault(); // Mencegah pull-to-refresh / scrolling browser
             if (e.touches.length === 2) {
-                // Lagi Pinching
                 const currentDistance = getDistance(e.touches);
-                if (initialPinchDistance) {
-                    const delta = currentDistance - initialPinchDistance;
-                    // Adjust factor supaya mulus
-                    currentZoom += delta * 0.005;
-                    initialPinchDistance = currentDistance;
+                if (pinchStartDistance && pinchStartDistance > 0) {
+                    const ratio = currentDistance / pinchStartDistance;
+                    currentZoom = pinchStartZoom * ratio;
                     updateZoomTransform();
                 }
             } else if (e.touches.length === 1 && currentZoom > 1) {
@@ -1494,7 +1560,11 @@
                 return;
             }
             if (e.touches.length < 2) {
-                initialPinchDistance = null;
+                pinchStartDistance = null;
+                pinchStartZoom = currentZoom;
+            }
+            if (target === zoomImg || (target && target.closest && target.closest('#zoomImageObj'))) {
+                return;
             }
             if (e.touches.length === 0 && currentZoom <= 1 && (target === zoomModal || (target && target.classList && target.classList.contains('image-zoom-container')))) {
                 closeImageZoom(e);
@@ -1502,47 +1572,56 @@
         }, { passive: false });
 
         function tryOpenImageZoom(target) {
-            const img = target && target.closest ? target.closest('img.question-image') : null;
+            const img = findZoomableExamImage(target);
             if (!img) return false;
 
-            // Jangan ganggu elemen interaktif lain.
-            if (img.closest('.option-item, .option-btn, .model2-hotspot, button, a, input, textarea, label')) {
-                return false;
-            }
+            const src = img.currentSrc || img.getAttribute('src') || img.src;
+            if (!src) return false;
+            const alt = img.getAttribute('alt') || img.getAttribute('aria-label') || 'Gambar soal';
 
-            openImageZoom(img.currentSrc || img.src);
+            if (openNativeImagePreview(src, alt)) {
+                return true;
+            }
+            openImageZoom(src);
             return true;
         }
 
         // Klik desktop/fallback
         document.body.addEventListener('click', function (e) {
+            if (zoomModal && zoomModal.classList.contains('active')) return;
             if (tryOpenImageZoom(e.target)) {
                 e.preventDefault();
+                e.stopPropagation();
             }
         });
 
         // Tap mobile/WebView (beberapa WebView tidak konsisten memicu click untuk IMG)
         document.body.addEventListener('touchend', function (e) {
+            if (zoomModal && zoomModal.classList.contains('active')) return;
             if (e.touches.length > 0) return;
             if (tryOpenImageZoom(e.target)) {
                 e.preventDefault();
+                e.stopPropagation();
             }
         }, { passive: false });
 
         // Double Tap to zoom reset/in via JS (Optional, but good for UX)
-        let lastTap = 0;
         zoomImg.addEventListener('touchend', function (e) {
             const currentTime = new Date().getTime();
-            const tapLength = currentTime - lastTap;
+            const tapLength = currentTime - lastTouchTapTime;
             if (tapLength < 300 && tapLength > 0) {
-                // Double tap detected!
-                if (currentZoom > 1) { currentZoom = 1; currentPanPos = { x: 0, y: 0 }; }
-                else { currentZoom = 2.5; }
+                if (currentZoom > 1) {
+                    currentZoom = 1;
+                    currentPanPos = { x: 0, y: 0 };
+                } else {
+                    currentZoom = 2.5;
+                }
                 updateZoomTransform();
                 e.preventDefault();
+                e.stopPropagation();
             }
-            lastTap = currentTime;
-        });
+            lastTouchTapTime = currentTime;
+        }, { passive: false });
 
         // Init connection status on load
         document.addEventListener('DOMContentLoaded', () => {
