@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 import sqlalchemy
 from fastapi import HTTPException, Request
-from sqlalchemy import func, select, text, update
+from sqlalchemy import func, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -466,6 +466,18 @@ class AnswerSyncService:
         question_id: int,
         write_fields: Dict[str, Any],
     ) -> None:
+        # Keep direct answer writes idempotent under autosave/retry bursts.
+        # If the same payload is submitted repeatedly, avoid a physical UPDATE
+        # (and WAL/row-version churn) while preserving last-answer semantics for
+        # real changes. Do not compare answered_at because it changes per retry.
+        changed_answer_payload = or_(
+            Answer.selected_option_id.is_distinct_from(write_fields["selected_option_id"]),
+            Answer.selected_option_ids.is_distinct_from(write_fields["selected_option_ids"]),
+            Answer.answer_text.is_distinct_from(write_fields["answer_text"]),
+            Answer.answer_metadata.is_distinct_from(write_fields["answer_metadata"]),
+            Answer.is_correct.is_distinct_from(write_fields["is_correct"]),
+            Answer.points_earned.is_distinct_from(write_fields["points_earned"]),
+        )
         upsert_stmt = (
             pg_insert(Answer)
             .values(
@@ -476,6 +488,7 @@ class AnswerSyncService:
             .on_conflict_do_update(
                 index_elements=[Answer.session_id, Answer.question_id],
                 set_=write_fields,
+                where=changed_answer_payload,
             )
         )
         try:
@@ -512,6 +525,12 @@ class AnswerSyncService:
         exam_id: int,
         answered_count_runtime: Optional[int],
     ) -> None:
+        if bool(getattr(settings, "exam_peak_mode", False)):
+            logger.debug(
+                "SUBMIT-ANSWER | session=%s | progress broadcast skipped during peak mode",
+                session_id,
+            )
+            return
         if not should_publish_progress_update(session_id):
             return
         try:

@@ -329,6 +329,30 @@ async def test_single_answer_direct_write_updates_runtime_count(monkeypatch) -> 
 
 
 @pytest.mark.asyncio
+async def test_single_answer_peak_mode_skips_progress_broadcast(monkeypatch) -> None:
+    monkeypatch.setattr(answer_sync_service.settings, "exam_peak_mode", True)
+
+    def fail_should_publish(_session_id):
+        raise AssertionError("progress throttle should not run in peak mode")
+
+    async def fail_publish(*_args, **_kwargs):
+        raise AssertionError("progress publish should not run in peak mode")
+
+    monkeypatch.setattr(answer_sync_service, "should_publish_progress_update", fail_should_publish)
+    monkeypatch.setattr(answer_sync_service, "_publish_exam_monitor_event", fail_publish)
+
+    db = _FakeSingleAnswerDb()
+    await _single_answer_service(db)._publish_progress_if_needed(
+        session_id=123,
+        exam_id=55,
+        answered_count_runtime=1,
+    )
+
+    assert db.execute_calls == 0
+    assert db.commits == 0
+
+
+@pytest.mark.asyncio
 async def test_single_answer_hybrid_buffer_path_does_not_call_direct_write(monkeypatch) -> None:
     _patch_single_answer_common(monkeypatch)
     called = {}
@@ -743,7 +767,7 @@ async def test_progress_update_skips_db_count_fallback_during_peak_mode(monkeypa
 
 
 @pytest.mark.asyncio
-async def test_progress_update_still_publishes_during_peak_when_runtime_count_exists(monkeypatch) -> None:
+async def test_progress_update_non_peak_publishes_when_runtime_count_exists(monkeypatch) -> None:
     published = {}
 
     async def fake_total_question_count(_db, _exam_id):
@@ -756,7 +780,7 @@ async def test_progress_update_still_publishes_during_peak_when_runtime_count_ex
     monkeypatch.setattr(answer_sync_service, "should_publish_progress_update", lambda _session_id: True)
     monkeypatch.setattr(answer_sync_service, "get_exam_question_count_cached", fake_total_question_count)
     monkeypatch.setattr(answer_sync_service, "_publish_exam_monitor_event", fake_publish)
-    monkeypatch.setattr(answer_sync_service.settings, "exam_peak_mode", True)
+    monkeypatch.setattr(answer_sync_service.settings, "exam_peak_mode", False)
 
     db = _FakeSingleAnswerDb()
     await _single_answer_service(db)._publish_progress_if_needed(

@@ -37,6 +37,20 @@ def test_submit_answer_routes_through_service_and_rechecks_session_under_lock() 
     assert "Retry-After\": \"1\"" in ANSWER_SYNC_SERVICE_SOURCE
 
 
+def test_single_answer_upsert_skips_identical_payload_updates() -> None:
+    assert "changed_answer_payload = or_(" in ANSWER_SYNC_SERVICE_SOURCE
+    assert "is_distinct_from" in ANSWER_SYNC_SERVICE_SOURCE
+    assert "where=changed_answer_payload" in ANSWER_SYNC_SERVICE_SOURCE
+    assert "Do not compare answered_at" in ANSWER_SYNC_SERVICE_SOURCE
+
+
+def test_single_answer_peak_mode_skips_noncritical_progress_broadcast() -> None:
+    progress_fn = _extract_async_function(ANSWER_SYNC_SERVICE_SOURCE, "_publish_progress_if_needed")
+    assert "progress broadcast skipped during peak mode" in progress_fn
+    assert progress_fn.index("exam_peak_mode") < progress_fn.index("should_publish_progress_update")
+    assert "return" in progress_fn.split("should_publish_progress_update", 1)[0]
+
+
 def test_auto_save_batch_serializes_session_writes() -> None:
     endpoint_fn = _extract_async_function(EXAM_ANSWER_SYNC_SOURCE, "auto_save_batch")
     assert "get_answer_sync_service" in endpoint_fn

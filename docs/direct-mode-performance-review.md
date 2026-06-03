@@ -42,6 +42,11 @@ Phase 4 patch:
 - If `EXAM_PEAK_MODE=true` and runtime/Redis answered count is unavailable, skip the DB answered-count fallback for progress broadcast.
 - Saved answers and final submit are unaffected.
 
+Phase 4.3.2G patch:
+
+- Identical duplicate single-answer payloads no longer force a physical PostgreSQL UPDATE; `ON CONFLICT DO UPDATE` now has a `WHERE` condition based on payload/score changes and intentionally excludes `answered_at` from the duplicate comparison.
+- During `EXAM_PEAK_MODE=true`, non-critical progress broadcast is skipped entirely after the answer is safely committed. Runtime answered-count Redis updates remain best-effort, and final submit is unchanged.
+
 ## Batch Autosave Path
 
 Observed flow:
@@ -132,8 +137,8 @@ Expected safe posture:
 
 | Rank | Candidate | Confidence | Impact | Complexity | Current Action |
 |---:|---|---|---|---|---|
-| 1 | Per-answer DB commit/upsert in direct mode | high | high | high to change safely | keep direct; prefer existing batch/journal in client flow; no risky rewrite |
-| 2 | Non-critical progress DB fallback | high | medium under Redis/cache miss | low | patched to skip during peak |
+| 1 | Per-answer DB commit/upsert in direct mode | high | high | high to change safely | keep direct; Phase 4.3.2G skips identical duplicate physical updates; prefer existing batch/journal in client flow |
+| 2 | Non-critical progress broadcast/fallback | high | medium under peak/autosave bursts | low | Phase 4 skipped fallback; Phase 4.3.2G skips broadcast entirely during peak |
 | 3 | Final submit eager load and score/log writes | medium | medium-high during submit wave | medium-high | document, test, keep priority |
 | 4 | Admin monitoring detail queries during peak | medium | medium | low-operational | enforce summary default and docs |
 | 5 | DB/PgBouncer pool saturation | medium | high | infra + tuning | measure in local/staging; no prod change |
@@ -154,4 +159,4 @@ Before and after any further patch:
 
 ## Recommendation
 
-Proceed with review of this small Phase 4 patch and then run local/staging direct-mode synthetic tests. Do not start Phase 5 hybrid rollout until direct 600 is stable and the previous hybrid10 503 issue is explained or mitigated.
+Proceed with Phase 4.3.2G review and rerun direct-mode validation only after explicit deployment/revalidation approval (or in isolated staging). Do not start Phase 5 hybrid rollout until direct 300/600 latency and DB pressure improve materially and the previous hybrid10 503 issue is explained or mitigated.
