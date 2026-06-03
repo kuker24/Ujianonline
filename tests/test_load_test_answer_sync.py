@@ -37,19 +37,19 @@ def _args(**overrides):
         "think_ms_max": 2500,
         "include_violation_burst": False,
         "final_submit_sample_rate": 0.0,
+        "final_submit_endpoint": load_script.DEFAULT_FINAL_SUBMIT_ENDPOINT,
         "summary_json": "",
         "answer_write_mode": "direct",
         "answer_queue_enabled": "false",
         "answer_queue_percentage": 0,
         "runtime_buffer_enabled": "false",
         "execute": False,
-        "allow_production": False,
     }
     values.update(overrides)
     return Namespace(**values)
 
 
-def test_validate_args_rejects_production_host_without_allow_production() -> None:
+def test_validate_args_rejects_production_host() -> None:
     with pytest.raises(SystemExit, match="Refusing production traffic"):
         load_script.validate_args(_args(base_url="https://man1rokanhulu.cloud"))
 
@@ -63,9 +63,24 @@ def test_validate_args_rejects_known_production_like_hosts(base_url) -> None:
         load_script.validate_args(_args(base_url=base_url))
 
 
-@pytest.mark.parametrize("base_url", ["https://man1rokanhulu.cloud", "http://103.175.218.56"])
-def test_validate_args_allows_production_only_with_explicit_flag(base_url) -> None:
-    load_script.validate_args(_args(base_url=base_url, allow_production=True))
+def test_old_allow_production_flag_is_not_supported(monkeypatch) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "load_test_answer_sync.py",
+            "--base-url",
+            "https://man1rokanhulu.cloud",
+            "--session-id",
+            "1001",
+            "--question-id",
+            "2001",
+            "--allow-production",
+        ],
+    )
+
+    with pytest.raises(SystemExit):
+        load_script.parse_args()
 
 
 def test_dry_run_default_does_not_execute_http(monkeypatch, capsys) -> None:
@@ -141,11 +156,57 @@ def test_execute_with_csv_allows_per_row_tokens_without_global_token(tmp_path) -
     load_script.validate_args(_args(sessions_csv=str(csv_file), execute=True), rows)
 
 
+def test_default_final_submit_endpoint_targets_student_apk_hot_path() -> None:
+    assert load_script.DEFAULT_FINAL_SUBMIT_ENDPOINT == "/api/student/exams/submit"
+    args = _args(final_submit_sample_rate=0.1)
+
+    load_script.validate_args(args)
+
+    samples = [load_script.Sample(args.final_submit_endpoint, 200, 10.0, True)]
+    summary = load_script.build_summary(samples, args, [load_script.SessionRow(1001, 2001, 3001, "secret")])
+    assert summary["final_submit_endpoint"] == "/api/student/exams/submit"
+    assert "secret" not in str(summary)
+
+
+@pytest.mark.parametrize("endpoint", ["/api/student/exams/submit", "/api/exams/submit"])
+def test_custom_final_submit_endpoint_accepts_local_absolute_path(endpoint) -> None:
+    load_script.validate_args(_args(final_submit_endpoint=endpoint))
+
+
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "https://man1rokanhulu.cloud/api/student/exams/submit",
+        "http://103.175.218.56/api/student/exams/submit",
+        "api/student/exams/submit",
+        "//man1rokanhulu.cloud/api/student/exams/submit",
+    ],
+)
+def test_invalid_final_submit_endpoint_rejected(endpoint) -> None:
+    with pytest.raises(SystemExit, match="--final-submit-endpoint must be a local absolute path"):
+        load_script.validate_args(_args(final_submit_endpoint=endpoint))
+
+
+def test_sessions_csv_must_be_under_tmp() -> None:
+    load_script.validate_args(_args(sessions_csv="/tmp/ujianonline-direct-sessions.csv"))
+    load_script.validate_args(_args(sessions_csv="/tmp/subdir/sessions.csv"))
+
+    for invalid_path in ["docs/sessions.csv", "sessions.csv", "/home/user/repo/sessions.csv"]:
+        with pytest.raises(SystemExit, match="--sessions-csv must be an absolute path under /tmp"):
+            load_script.validate_args(_args(sessions_csv=invalid_path))
+
+
+def test_load_session_rows_rejects_non_tmp_csv_before_reading() -> None:
+    with pytest.raises(SystemExit, match="--sessions-csv must be an absolute path under /tmp"):
+        load_script.load_session_rows("docs/sessions.csv")
+
+
 def test_summary_json_must_be_under_tmp() -> None:
     load_script.validate_args(_args(summary_json="/tmp/ujianonline-load-summary.json"))
 
-    with pytest.raises(SystemExit, match="--summary-json must be an absolute path under /tmp"):
-        load_script.validate_args(_args(summary_json="docs/summary.json"))
+    for invalid_path in ["docs/summary.json", "summary.json"]:
+        with pytest.raises(SystemExit, match="--summary-json must be an absolute path under /tmp"):
+            load_script.validate_args(_args(summary_json=invalid_path))
 
 
 @pytest.mark.parametrize(
@@ -160,6 +221,31 @@ def test_summary_json_must_be_under_tmp() -> None:
 def test_direct_mode_policy_rejects_hybrid_queue_or_runtime_buffer(overrides, expected) -> None:
     with pytest.raises(SystemExit, match=expected):
         load_script.validate_args(_args(**overrides))
+
+
+def test_dry_run_masks_full_token(monkeypatch, capsys) -> None:
+    token = "abcdefghijklmnopqrstuvwxyz"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "load_test_answer_sync.py",
+            "--base-url",
+            "https://staging.example.test",
+            "--session-id",
+            "1001",
+            "--question-id",
+            "2001",
+            "--token",
+            token,
+        ],
+    )
+
+    load_script.main()
+
+    output = capsys.readouterr().out
+    assert token not in output
+    assert "abcd...wxyz" in output
 
 
 def test_mask_token_does_not_print_full_secret() -> None:

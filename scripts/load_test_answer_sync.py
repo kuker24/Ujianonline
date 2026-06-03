@@ -25,7 +25,7 @@ from urllib.parse import urlparse
 
 PRODUCTION_HOSTS = {"adminujian", "man1rokanhulu.cloud", "103.175.218.56"}
 ANSWER_ENDPOINT = "/api/exams/submit-answer"
-FINAL_SUBMIT_ENDPOINT = "/api/exams/submit"
+DEFAULT_FINAL_SUBMIT_ENDPOINT = "/api/student/exams/submit"
 VIOLATION_ENDPOINT = "/api/exams/log-violation"
 
 
@@ -111,6 +111,7 @@ def build_summary(samples: Iterable[Sample], args: argparse.Namespace, rows: lis
             "sessions_csv_used": bool(args.sessions_csv),
             "unique_sessions_count": len({row.session_id for row in rows}),
             "final_submit_sample_rate": float(args.final_submit_sample_rate),
+            "final_submit_endpoint": str(args.final_submit_endpoint),
         }
     )
     return summary
@@ -143,6 +144,7 @@ def load_session_rows(
     fallback_token: str = "",
     fallback_selected_option_id: int = 1,
 ) -> list[SessionRow]:
+    validate_sessions_csv_path(csv_path)
     path = Path(csv_path)
     if not path.exists():
         raise SystemExit(f"--sessions-csv not found: {path}")
@@ -214,7 +216,12 @@ def parse_args() -> argparse.Namespace:
         "--final-submit-sample-rate",
         type=float,
         default=0.0,
-        help="Experimental: fraction of workers that submit /api/exams/submit at the end (0.0-1.0)",
+        help="Experimental: fraction of workers that submit final-submit at the end (0.0-1.0)",
+    )
+    parser.add_argument(
+        "--final-submit-endpoint",
+        default=DEFAULT_FINAL_SUBMIT_ENDPOINT,
+        help="Local path for final-submit sample; defaults to APK/student hot path",
     )
     parser.add_argument("--summary-json", default="", help="Write summary metrics JSON to this path; must be under /tmp")
     parser.add_argument("--answer-write-mode", default="direct", help="Safety declaration; Phase 4 requires direct")
@@ -224,11 +231,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--user-agent", default="load-test-answer-sync/1.0", help="User-Agent for load traffic")
     parser.add_argument("--seb-config-key-hash", default="", help="Optional SEB config key hash for staging synthetic exams")
     parser.add_argument("--execute", action="store_true", help="Actually send HTTP traffic. Default is dry-run.")
-    parser.add_argument(
-        "--allow-production",
-        action="store_true",
-        help="Allow production host traffic (requires explicit approval outside this script)",
-    )
     return parser.parse_args()
 
 
@@ -249,6 +251,17 @@ def is_safe_output_path(path_value: str | Path) -> bool:
     return path.is_absolute() and path.resolve().is_relative_to(Path("/tmp"))
 
 
+def validate_sessions_csv_path(path_value: str | Path) -> None:
+    if not is_safe_output_path(path_value):
+        raise SystemExit("--sessions-csv must be an absolute path under /tmp to avoid committing tokens")
+
+
+def validate_local_endpoint_path(endpoint: str, *, option_name: str) -> None:
+    parsed = urlparse(str(endpoint or ""))
+    if parsed.scheme or parsed.netloc or not parsed.path.startswith("/") or parsed.path.startswith("//"):
+        raise SystemExit(f"{option_name} must be a local absolute path such as /api/student/exams/submit")
+
+
 def validate_direct_mode_policy(args: argparse.Namespace) -> None:
     answer_write_mode = str(getattr(args, "answer_write_mode", "direct") or "").strip().lower()
     queue_enabled = _parse_boolish(getattr(args, "answer_queue_enabled", False))
@@ -267,9 +280,12 @@ def validate_args(args: argparse.Namespace, session_rows: Optional[list[SessionR
     parsed = urlparse(args.base_url)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise SystemExit("--base-url must be an absolute http(s) URL")
-    if is_production_host(args.base_url) and not args.allow_production:
-        raise SystemExit("Refusing production traffic without --allow-production and explicit operator approval")
+    if is_production_host(args.base_url):
+        raise SystemExit("Refusing production traffic; Phase 4 load tests must target local/staging only")
     validate_direct_mode_policy(args)
+    validate_local_endpoint_path(args.final_submit_endpoint, option_name="--final-submit-endpoint")
+    if args.sessions_csv:
+        validate_sessions_csv_path(args.sessions_csv)
     if args.summary_json and not is_safe_output_path(args.summary_json):
         raise SystemExit("--summary-json must be an absolute path under /tmp to avoid committing artifacts")
     if args.vus <= 0 or args.duration_seconds <= 0:
@@ -408,7 +424,7 @@ async def submit_final_samples(
 ) -> None:
     for session_row in select_final_submit_rows(rows, args.vus, args.final_submit_sample_rate):
         payload = {"session_id": session_row.session_id, "force_submit": False}
-        samples.append(await post_json(client, FINAL_SUBMIT_ENDPOINT, payload, token=session_row.token))
+        samples.append(await post_json(client, args.final_submit_endpoint, payload, token=session_row.token))
         await asyncio.sleep(0.05)
 
 
@@ -454,11 +470,9 @@ def print_plan(args: argparse.Namespace, rows: list[SessionRow]) -> None:
     if args.include_violation_burst:
         print(f"  endpoint={VIOLATION_ENDPOINT} (light burst)")
     if args.final_submit_sample_rate > 0:
-        print(f"  endpoint={FINAL_SUBMIT_ENDPOINT} (experimental final-submit sample)")
+        print(f"  endpoint={args.final_submit_endpoint} (experimental final-submit sample)")
         print(f"  final_submit_sample_rate={args.final_submit_sample_rate}")
     print(f"  first_token={mask_token(rows[0].token if rows else args.token)}")
-    if is_production_host(args.base_url) and args.allow_production:
-        print("!!! WARNING: PRODUCTION HOST ALLOWED. Operator approval is mandatory before traffic. !!!")
 
 
 def main() -> None:

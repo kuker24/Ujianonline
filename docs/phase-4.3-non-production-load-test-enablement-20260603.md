@@ -23,11 +23,13 @@ Production forbidden actions:
 - Tidak mengubah DB schema.
 - Tidak mengubah public endpoint contract.
 
-Production-like host harus ditolak oleh tooling kecuali ada approval eksplisit di luar fase ini:
+Production-like host harus selalu ditolak oleh tooling Phase 4.3/4.3.1:
 
 - `103.175.218.56`
 - `man1rokanhulu.cloud`
 - `adminujian`
+
+`--allow-production` tidak tersedia di load-test helper. Jika operator mencoba flag lama itu, argparse harus menolak. Tidak ada production override untuk Phase 4.
 
 ## Required Safe-Mode Environment
 
@@ -61,7 +63,7 @@ Minimum target:
 - Dataset sintetis dengan exam, questions, options, users, sessions.
 - Tidak ada data siswa asli.
 - Domain/base URL bukan production-like host.
-- Log dan summary output disimpan di `/tmp` atau path ignored lokal.
+- Sessions CSV dan summary output wajib berada di absolute path bawah `/tmp`.
 
 Recommended staging parity:
 
@@ -82,7 +84,7 @@ Rules:
 - Hanya untuk local/staging.
 - Tidak memakai session/token real student.
 - Jangan commit CSV.
-- Simpan di `/tmp`, misalnya `/tmp/ujianonline-direct-sessions-20260603.csv`.
+- Simpan di absolute path bawah `/tmp`, misalnya `/tmp/ujianonline-direct-sessions-20260603.csv`; relative path atau path repo harus ditolak tooling.
 - Token boleh berada di CSV hanya untuk local/staging dan tetap tidak boleh dipush.
 - Jika token tidak di CSV, gunakan fallback `--token` hanya di shell lokal yang aman.
 - Hapus CSV setelah validasi selesai.
@@ -111,6 +113,7 @@ python scripts/load_test_answer_sync.py \
   --vus 100 \
   --duration-seconds 180 \
   --final-submit-sample-rate 0.02 \
+  --final-submit-endpoint /api/student/exams/submit \
   --summary-json /tmp/ujianonline-direct-100-summary.json \
   --execute
 ```
@@ -132,9 +135,10 @@ For every tier:
 
 1. Use only synthetic sessions.
 2. Enable `--final-submit-sample-rate` low enough to avoid submitting all synthetic sessions too early.
-3. Verify all final-submit samples return 2xx.
-4. Retry already-submitted synthetic sessions to confirm idempotent fast path where applicable.
-5. Record latency p50/p95/p99 and failures.
+3. Default final-submit sample endpoint adalah `/api/student/exams/submit` agar menguji hotspot APK/mobile dari laporan production. Jika local/staging hanya mengekspos alias lama `/api/exams/submit`, override boleh digunakan hanya untuk membuktikan alias compatibility, bukan sebagai bukti utama APK/mobile.
+4. Verify all final-submit samples return 2xx.
+5. Retry already-submitted synthetic sessions to confirm idempotent fast path where applicable.
+6. Record latency p50/p95/p99 and failures.
 
 Any repeated 5xx or 499 on final submit is a NO-GO.
 
@@ -168,7 +172,7 @@ For each tier:
 
 - Base URL class: local or staging, not production.
 - Safe-mode env snapshot with secrets redacted.
-- VUs, duration, think time, CSV row count, unique session count.
+- VUs, duration, think time, final-submit endpoint, CSV row count, unique session count.
 - Request count, success/failure, status counts.
 - p50/p95/p99/max latency overall and per endpoint.
 - Final-submit sample result.
@@ -188,7 +192,7 @@ Phase 5 remains blocked if any of these occur:
 - Final-submit sample fails.
 - Answer consistency invalid.
 - Any answer loss indication.
-- Production host used.
+- Production host used or old production override attempted.
 - Real student data used.
 - Queue/hybrid/runtime buffer enabled.
 - DB/PgBouncer unstable under direct load.
