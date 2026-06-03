@@ -43,6 +43,7 @@ from apk_builder_core.environment import (
     build_tool_env,
     ensure_gradle_memory_config,
     find_android_sdk,
+    find_flutter,
     find_jdk,
     get_total_ram_mb,
     recommend_gradle_memory,
@@ -248,9 +249,10 @@ class APKBuilderGUI:
         self.flutter_project = context.flutter_project
         self.config_dart_path = context.config_dart_path
 
-        # Find JDK and SDK paths
+        # Find JDK, Android SDK, and Flutter paths
         self.jdk_path = find_jdk(self.project_root)
         self.android_sdk = find_android_sdk()
+        self.flutter_bin = find_flutter(self.flutter_project, self.project_root)
         
         # App Configuration Variables
         self.app_name_var = tk.StringVar(value="Ujian Online MAN 1 Rokan Hulu")
@@ -569,11 +571,14 @@ class APKBuilderGUI:
         
         jdk_status = "✅" if self.jdk_path else "❌"
         sdk_status = "✅" if self.android_sdk else "❌"
+        flutter_status = "✅" if self.flutter_bin else "❌"
         
         ttk.Label(env_frame, text=f"JDK: {jdk_status} {self.jdk_path or 'Not found'}",
                  foreground="green" if self.jdk_path else "red").pack(anchor=tk.W)
         ttk.Label(env_frame, text=f"Android SDK: {sdk_status} {self.android_sdk or 'Not found'}",
                  foreground="green" if self.android_sdk else "red").pack(anchor=tk.W)
+        ttk.Label(env_frame, text=f"Flutter: {flutter_status} {self.flutter_bin or 'Not found'}",
+                 foreground="green" if self.flutter_bin else "red").pack(anchor=tk.W)
         
         # ========== ACTION BUTTONS ==========
         button_frame = ttk.Frame(main_frame)
@@ -1278,7 +1283,8 @@ class APKBuilderGUI:
         return is_valid_sha256(value)
 
     def _tool_env(self) -> dict:
-        return build_tool_env(self.jdk_path, self.android_sdk)
+        flutter_bin = self.flutter_bin or find_flutter(self.flutter_project, self.project_root)
+        return build_tool_env(self.jdk_path, self.android_sdk, flutter_bin)
 
     def _resolve_keytool(self) -> str:
         return resolve_keytool(self.jdk_path)
@@ -1395,6 +1401,20 @@ class APKBuilderGUI:
         if not self.android_sdk:
             messagebox.showerror("Error", "Android SDK tidak ditemukan!")
             return
+
+        # Re-scan in case local.properties or PATH changed while GUI is open.
+        self.flutter_bin = find_flutter(self.flutter_project, self.project_root)
+        if not self.flutter_bin:
+            messagebox.showerror(
+                "Error",
+                "Flutter SDK tidak ditemukan.\n\n"
+                "Install Flutter atau set salah satu:\n"
+                "• PATH berisi flutter\n"
+                "• FLUTTER_ROOT / FLUTTER_HOME\n"
+                "• flutter_client_code/android/local.properties: flutter.sdk=/path/to/flutter\n\n"
+                "Build belum dijalankan agar tidak gagal di flutter clean."
+            )
+            return
         
         # Save config first
         if not self.save_config():
@@ -1431,8 +1451,14 @@ class APKBuilderGUI:
             self.log("="*60 + "\n")
             
             # Setup environment
-            env = build_tool_env(self.jdk_path, self.android_sdk)
+            flutter_bin = self.flutter_bin or find_flutter(self.flutter_project, self.project_root)
+            if not flutter_bin:
+                raise Exception(
+                    "Flutter SDK tidak ditemukan. Set PATH/FLUTTER_ROOT atau flutter.sdk di android/local.properties."
+                )
+            env = build_tool_env(self.jdk_path, self.android_sdk, flutter_bin)
             build_mode = self.build_mode_var.get()
+            self.log(f"🛠️ Flutter executable: {flutter_bin}")
 
             # Stabilize Gradle memory to avoid Java heap space on release build.
             self._ensure_gradle_memory_config(env, force_high=False)
@@ -1441,18 +1467,18 @@ class APKBuilderGUI:
             if self.clean_build_var.get():
                 self.update_status("Cleaning previous build...")
                 self.log("🧹 Cleaning build cache...")
-                clean_cmd = ["flutter", "clean"]
+                clean_cmd = [flutter_bin, "clean"]
                 clean_result = self.run_command(clean_cmd, cwd=self.flutter_project, env=env)
                 if not clean_result or clean_result.returncode != 0:
                     raise Exception("flutter clean failed")
 
             self.update_status("Running flutter pub get...")
             self.log("📦 Running flutter pub get...")
-            pub_get_result = self.run_command(["flutter", "pub", "get"], cwd=self.flutter_project, env=env)
+            pub_get_result = self.run_command([flutter_bin, "pub", "get"], cwd=self.flutter_project, env=env)
             if not pub_get_result or pub_get_result.returncode != 0:
                 raise Exception("flutter pub get failed")
 
-            self._run_prebuild_checks(env)
+            self._run_prebuild_checks(env, flutter_bin)
             
             # Build artifact
             self.update_status("Building artifact (this may take 2-10 minutes)...")
@@ -1463,10 +1489,10 @@ class APKBuilderGUI:
             self.log(f"   Security: ProGuard + Signature Verification")
             
             if build_mode == "app_bundle":
-                build_cmd = ["flutter", "build", "appbundle", "--release", "--no-pub"]
+                build_cmd = [flutter_bin, "build", "appbundle", "--release", "--no-pub"]
             elif build_mode == "split_apk":
                 build_cmd = [
-                    "flutter",
+                    flutter_bin,
                     "build",
                     "apk",
                     "--release",
@@ -1475,7 +1501,7 @@ class APKBuilderGUI:
                     "--no-pub",
                 ]
             else:
-                build_cmd = ["flutter", "build", "apk", "--release", "--no-pub"]
+                build_cmd = [flutter_bin, "build", "apk", "--release", "--no-pub"]
 
             result = self.run_command(
                 build_cmd,
@@ -1593,7 +1619,7 @@ class APKBuilderGUI:
         finally:
             self.reset_ui()
 
-    def _run_prebuild_checks(self, env):
+    def _run_prebuild_checks(self, env, flutter_bin: str):
         """Run optional pre-build checks to reduce build-time surprises."""
         ran_any_check = False
 
@@ -1602,7 +1628,7 @@ class APKBuilderGUI:
             self.update_status("Pre-build check: flutter analyze...")
             self.log("🧪 Pre-build check #1: flutter analyze (errors only)")
             analyze_cmd = [
-                "flutter",
+                flutter_bin,
                 "analyze",
                 "--no-pub",
                 "--no-fatal-infos",
@@ -1616,7 +1642,7 @@ class APKBuilderGUI:
             ran_any_check = True
             self.update_status("Pre-build check: flutter test...")
             self.log("🧪 Pre-build check #2: flutter test (compact)")
-            test_cmd = ["flutter", "test", "--no-pub", "--reporter", "compact"]
+            test_cmd = [flutter_bin, "test", "--no-pub", "--reporter", "compact"]
             test_result = self.run_command(test_cmd, cwd=self.flutter_project, env=env)
             if not test_result or test_result.returncode != 0:
                 raise Exception("Pre-build check gagal: flutter test tidak lulus")

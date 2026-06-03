@@ -52,6 +52,85 @@ def find_android_sdk() -> str | None:
     return str(found) if found else None
 
 
+def _flutter_executable_from_sdk(sdk_dir: str | Path | None) -> Path | None:
+    if not sdk_dir:
+        return None
+    exe = "flutter.bat" if platform.system().lower().startswith("win") else "flutter"
+    candidate = Path(sdk_dir) / "bin" / exe
+    return candidate if candidate.exists() else None
+
+
+def _read_flutter_sdk_from_local_properties(flutter_project: Path | None) -> str | None:
+    if not flutter_project:
+        return None
+    local_props = Path(flutter_project) / "android" / "local.properties"
+    if not local_props.exists():
+        return None
+    try:
+        for raw_line in local_props.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            if key.strip() == "flutter.sdk" and value.strip():
+                return value.strip()
+    except OSError:
+        return None
+    return None
+
+
+def find_flutter(
+    flutter_project: Path | None = None,
+    project_root: Path | None = None,
+) -> str | None:
+    """Best-effort Flutter executable discovery for GUI/CLI builds.
+
+    Discovery order is intentionally local-first so GUI builds keep working even
+    when Flutter is not exported in the desktop shell PATH.
+    """
+    candidates: list[Path] = []
+
+    # Explicit executable override.
+    env_flutter_bin = os.environ.get("FLUTTER_BIN")
+    if env_flutter_bin:
+        candidates.append(Path(env_flutter_bin))
+
+    # SDK roots from local.properties/env/common install folders.
+    sdk_roots: list[str | Path] = []
+    local_sdk = _read_flutter_sdk_from_local_properties(flutter_project)
+    if local_sdk:
+        sdk_roots.append(local_sdk)
+    for key in ("FLUTTER_ROOT", "FLUTTER_HOME"):
+        value = os.environ.get(key)
+        if value:
+            sdk_roots.append(value)
+    if project_root:
+        sdk_roots.extend([
+            Path(project_root) / "flutter",
+            Path(project_root) / "flutter_sdk",
+            Path(project_root) / ".flutter_sdk",
+        ])
+    home = Path.home()
+    sdk_roots.extend([
+        home / ".cache" / "flutter_sdk",
+        home / "flutter",
+        home / "development" / "flutter",
+        Path("/opt/flutter"),
+    ])
+
+    for sdk_root in sdk_roots:
+        executable = _flutter_executable_from_sdk(sdk_root)
+        if executable:
+            candidates.append(executable)
+
+    path_flutter = shutil.which("flutter")
+    if path_flutter:
+        candidates.append(Path(path_flutter))
+
+    found = _first_existing(candidates)
+    return str(found) if found else None
+
+
 def get_total_ram_mb() -> int:
     """Return total RAM in MB using only stdlib/best-effort probes."""
     try:
@@ -74,7 +153,11 @@ def recommend_gradle_memory(force_high: bool = False) -> tuple[str, str]:
     return "-Xmx2048m -Dfile.encoding=UTF-8", "2048m"
 
 
-def build_tool_env(jdk_path: str | None, android_sdk: str | None) -> dict[str, str]:
+def build_tool_env(
+    jdk_path: str | None,
+    android_sdk: str | None,
+    flutter_bin: str | None = None,
+) -> dict[str, str]:
     """Return environment for subprocess-based Flutter/Android build commands."""
     env = dict(os.environ)
     path_parts: list[str] = []
@@ -88,6 +171,11 @@ def build_tool_env(jdk_path: str | None, android_sdk: str | None) -> dict[str, s
             str(Path(android_sdk) / "platform-tools"),
             str(Path(android_sdk) / "cmdline-tools" / "latest" / "bin"),
         ])
+    if flutter_bin:
+        flutter_path = Path(flutter_bin)
+        path_parts.append(str(flutter_path.parent))
+        if flutter_path.parent.name == "bin":
+            env["FLUTTER_ROOT"] = str(flutter_path.parent.parent)
     if path_parts:
         env["PATH"] = os.pathsep.join(path_parts + [env.get("PATH", "")])
     return env
