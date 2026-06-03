@@ -1427,9 +1427,9 @@ window.apiRequestRaw = apiRequestRaw;
  * Global Keyboard Shortcuts
  * Available on all admin pages
  *
- * Ctrl+Shift+Alt+L = Navigate to Settings page
- * Ctrl+Shift+Alt+K = Toggle APK Token section (only on settings page)
- * Ctrl+Shift+Alt+F = Toggle Freeze section (only on settings page)
+ * Ctrl+Shift+(Alt or Meta/Windows)+L = Toggle General Settings item
+ * Ctrl+Shift+(Alt or Meta/Windows)+K = Toggle APK Token section (only on settings page)
+ * Ctrl+Shift+(Alt or Meta/Windows)+F = Toggle Freeze section (only on settings page)
  */
 /**
  * UNIFIED KEYBOARD SHORTCUTS HANDLER
@@ -1441,12 +1441,53 @@ window.apiRequestRaw = apiRequestRaw;
     let apkTokenVisible = false;
     let freezeSectionVisible = false;
 
-    // Helper function to check admin role
+    // Helper function to check admin/developer role
     function checkAdmin() {
-        const user = JSON.parse(localStorage.getItem('user') || '{}');
-        if (!user || !user.role) return false;
-        const role = user.role.toLowerCase();
-        return role === 'admin' || role === 'developer';
+        try {
+            const user = JSON.parse(localStorage.getItem('user') || '{}');
+            if (!user || !user.role) return false;
+            const role = String(user.role || '').toLowerCase();
+            return role === 'admin' || role === 'developer';
+        } catch (_) {
+            return false;
+        }
+    }
+
+    function showShortcutAccessDenied() {
+        if (typeof showToast === 'function') {
+            showToast('Akses ditolak: hanya admin/developer.', 'error');
+        }
+    }
+
+    function notifyShortcutResult(message, type = 'info') {
+        if (typeof showToast === 'function') {
+            showToast(message, type);
+        }
+    }
+
+    function isHidden(element) {
+        if (!element) return true;
+        return element.style.display === 'none' || window.getComputedStyle(element).display === 'none';
+    }
+
+    function findElementWithRetry(id, attempts = 6, delayMs = 250) {
+        return new Promise((resolve) => {
+            const findNow = (remaining) => {
+                const element = document.getElementById(id);
+                if (element || remaining <= 0) {
+                    resolve(element || null);
+                    return;
+                }
+                setTimeout(() => findNow(remaining - 1), delayMs);
+            };
+            findNow(attempts);
+        });
+    }
+
+    function syncAdvancedApkButtonVisibility() {
+        const button = document.getElementById('show-advanced-apk-settings');
+        if (!button) return;
+        button.style.display = checkAdmin() ? 'inline-flex' : 'none';
     }
 
     // ACTION: Toggle APK Token Section
@@ -1454,8 +1495,8 @@ window.apiRequestRaw = apiRequestRaw;
         apiDebug('[API.JS] toggleApkSection called');
 
         if (!checkAdmin()) {
-            apiDebug('[API.JS] toggleApkSection: User is not admin');
-            if (typeof showToast === 'function') showToast('Akses ditolak: Hanya admin', 'error');
+            apiDebug('[API.JS] toggleApkSection: User is not admin/developer');
+            showShortcutAccessDenied();
             return;
         }
 
@@ -1463,30 +1504,22 @@ window.apiRequestRaw = apiRequestRaw;
         apiDebug('[API.JS] APK Section element:', apkSection ? 'found' : 'not found');
 
         if (apkSection) {
-            if (apkSection.style.display === 'none' || !apkTokenVisible) {
+            if (isHidden(apkSection) || !apkTokenVisible) {
                 apiDebug('[API.JS] Action: Show APK Token');
                 apkSection.style.display = 'block';
                 apkSection.style.animation = 'slideDown 0.3s ease-out';
                 apkTokenVisible = true;
                 apkSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                if (typeof showAlert === 'function') {
-                    showAlert('Mode Keamanan APK Token diaktifkan!', 'warning');
-                } else if (typeof showToast === 'function') {
-                    showToast('APK Token Section ditampilkan!', 'warning');
-                }
+                notifyShortcutResult('Panel Token APK ditampilkan/disembunyikan.', 'warning');
             } else {
                 apiDebug('[API.JS] Action: Hide APK Token');
                 apkSection.style.display = 'none';
                 apkTokenVisible = false;
-                if (typeof showToast === 'function') showToast('APK Token disembunyikan', 'info');
+                notifyShortcutResult('Panel Token APK ditampilkan/disembunyikan.', 'info');
             }
         } else {
             apiDebug('[API.JS] APK Token section not found');
-            if (window.location.pathname.includes('/admin/settings.html')) {
-                if (typeof showToast === 'function') showToast('Element tidak ditemukan. Refresh halaman.', 'error');
-            } else {
-                if (typeof showToast === 'function') showToast('Fitur ini hanya ada di halaman Pengaturan', 'warning');
-            }
+            notifyShortcutResult('Panel token APK tidak ditemukan, refresh halaman atau cek template.', 'error');
         }
     };
 
@@ -1495,8 +1528,8 @@ window.apiRequestRaw = apiRequestRaw;
         apiDebug('[API.JS] toggleFreezeSection called');
 
         if (!checkAdmin()) {
-            apiDebug('[API.JS] toggleFreezeSection: User is not admin');
-            if (typeof showToast === 'function') showToast('Akses ditolak: Hanya admin', 'error');
+            apiDebug('[API.JS] toggleFreezeSection: User is not admin/developer');
+            showShortcutAccessDenied();
             return;
         }
 
@@ -1504,7 +1537,7 @@ window.apiRequestRaw = apiRequestRaw;
         apiDebug('[API.JS] Freeze Section element:', freezeSection ? 'found' : 'not found');
 
         if (freezeSection) {
-            if (freezeSection.style.display === 'none' || !freezeSectionVisible) {
+            if (isHidden(freezeSection) || !freezeSectionVisible) {
                 freezeSection.style.display = 'block';
                 freezeSection.style.animation = 'slideDown 0.3s ease-out';
                 freezeSectionVisible = true;
@@ -1525,17 +1558,18 @@ window.apiRequestRaw = apiRequestRaw;
     };
 
     // ACTION: Show Settings / Navigate
-    window.toggleSettingsNav = function () {
+    window.toggleSettingsNav = async function () {
         apiDebug('%c[API.JS] toggleSettingsNav called', 'color: #ff9900; font-weight: bold');
 
         if (!checkAdmin()) {
-            apiDebug('[API.JS] toggleSettingsNav: User is not admin');
-            if (typeof showToast === 'function') showToast('Akses ditolak: Hanya admin', 'error');
+            apiDebug('[API.JS] toggleSettingsNav: User is not admin/developer');
+            showShortcutAccessDenied();
             return;
         }
 
-        // Target the hidden General Settings Item instead of the whole menu
-        const generalItem = document.getElementById('settings-general-item');
+        // Target the hidden General Settings Item instead of the whole menu.
+        // Sidebar can be injected asynchronously, so retry briefly before failing.
+        const generalItem = await findElementWithRetry('settings-general-item');
         const settingsMenu = document.getElementById('settings-menu-container');
 
         // ENHANCED DEBUGGING
@@ -1560,17 +1594,17 @@ window.apiRequestRaw = apiRequestRaw;
                     apiDebug('  - Parent menu opened');
                 }
 
-                if (typeof showToast === 'function') showToast('Menu Umum ditampilkan', 'success');
+                notifyShortcutResult('Menu Pengaturan Umum ditampilkan/disembunyikan.', 'success');
             } else {
                 apiDebug('%c[API.JS] ⚠️ Action: HIDE General Settings Item', 'color: #ff9900; font-weight: bold');
                 generalItem.style.display = 'none';
-                if (typeof showToast === 'function') showToast('Menu Umum disembunyikan', 'info');
+                notifyShortcutResult('Menu Pengaturan Umum ditampilkan/disembunyikan.', 'info');
             }
         } else {
             console.error('%c[API.JS] ❌ General Settings Item NOT FOUND!', 'color: #ff0000; font-weight: bold');
             apiDebug('  - All elements with ID:', document.querySelectorAll('[id]'));
             apiDebug('  - Sidebar container:', document.getElementById('sidebar-container'));
-            if (typeof showToast === 'function') showToast('Item menu tidak ditemukan (refresh halaman)', 'error');
+            notifyShortcutResult('Item menu tidak ditemukan (refresh halaman)', 'error');
         }
     };
 
@@ -1580,15 +1614,17 @@ window.apiRequestRaw = apiRequestRaw;
         apiDebug('%c[API.JS] 🎹 Initializing keyboard shortcuts...', 'color: #00ffff; font-weight: bold');
 
         document.addEventListener('keydown', function (e) {
-            // Filter for Admin Shortcuts: Ctrl + Shift + Alt + (Key)
-            if (e.ctrlKey && e.shiftKey && e.altKey) {
+            // Filter for Admin Shortcuts: Ctrl + Shift + (Alt OR Meta/Windows) + (Key)
+            const deepModifier = e.altKey || e.metaKey;
+            if (e.ctrlKey && e.shiftKey && deepModifier) {
 
                 // Debug logging
-                apiDebug('%c[API.JS] ⌨️ Ctrl+Shift+Alt combo detected, key:', e.code, 'color: #ffff00; font-weight: bold');
+                apiDebug('%c[API.JS] ⌨️ Ctrl+Shift+(Alt/Meta) combo detected, key:', e.code, 'color: #ffff00; font-weight: bold');
 
                 // Check Admin - with feedback
                 if (!checkAdmin()) {
-                    apiDebug('[API.JS] User is not admin, shortcut ignored');
+                    apiDebug('[API.JS] User is not admin/developer, shortcut ignored');
+                    showShortcutAccessDenied();
                     return;
                 }
 
@@ -1597,7 +1633,7 @@ window.apiRequestRaw = apiRequestRaw;
                     e.preventDefault();
                     e.stopPropagation();
                     e.stopImmediatePropagation();
-                    apiDebug('%c[API.JS] 🔑 Shortcut: Ctrl+Shift+Alt+K triggered', 'color: #ff00ff; font-weight: bold');
+                    apiDebug('%c[API.JS] 🔑 Shortcut: Ctrl+Shift+(Alt/Meta)+K triggered', 'color: #ff00ff; font-weight: bold');
                     window.toggleApkSection();
                     return false;
                 }
@@ -1607,7 +1643,7 @@ window.apiRequestRaw = apiRequestRaw;
                     e.preventDefault();
                     e.stopPropagation();
                     e.stopImmediatePropagation();
-                    apiDebug('%c[API.JS] 🔑 Shortcut: Ctrl+Shift+Alt+F triggered', 'color: #ff4d6d; font-weight: bold');
+                    apiDebug('%c[API.JS] 🔑 Shortcut: Ctrl+Shift+(Alt/Meta)+F triggered', 'color: #ff4d6d; font-weight: bold');
                     window.toggleFreezeSection();
                     return false;
                 }
@@ -1617,7 +1653,7 @@ window.apiRequestRaw = apiRequestRaw;
                     e.preventDefault();
                     e.stopPropagation();
                     e.stopImmediatePropagation();
-                    apiDebug('%c[API.JS] 🔑 Shortcut: Ctrl+Shift+Alt+L triggered', 'color: #00ffff; font-weight: bold');
+                    apiDebug('%c[API.JS] 🔑 Shortcut: Ctrl+Shift+(Alt/Meta)+L triggered', 'color: #00ffff; font-weight: bold');
                     window.toggleSettingsNav();
                     return false;
                 }
@@ -1627,6 +1663,17 @@ window.apiRequestRaw = apiRequestRaw;
         apiDebug('%c[API.JS] ✅ Keyboard shortcuts initialized', 'color: #00ff00; font-weight: bold');
     }
 
+    // Expose a button initializer for settings.html fallback UI.
+    window.initAdvancedApkSettingsButton = function () {
+        syncAdvancedApkButtonVisibility();
+        const button = document.getElementById('show-advanced-apk-settings');
+        if (!button || button.dataset.shortcutBound === '1') return;
+        button.dataset.shortcutBound = '1';
+        button.addEventListener('click', function () {
+            window.toggleApkSection();
+        });
+    };
+
     // Wait for DOM ready before attaching keyboard listeners
     apiDebug('%c[API.JS] 📌 Document readyState:', document.readyState, 'color: #ff9900; font-weight: bold');
     if (document.readyState === 'loading') {
@@ -1634,14 +1681,20 @@ window.apiRequestRaw = apiRequestRaw;
         document.addEventListener('DOMContentLoaded', () => {
             apiDebug('%c[API.JS] ✅ DOMContentLoaded fired, initializing shortcuts', 'color: #00ff00; font-weight: bold');
             initKeyboardShortcuts();
+            if (typeof window.initAdvancedApkSettingsButton === 'function') {
+                window.initAdvancedApkSettingsButton();
+            }
         });
     } else {
         // DOM already loaded, init immediately
         apiDebug('%c[API.JS] ⚡ DOM already ready, initializing shortcuts immediately', 'color: #00ff00; font-weight: bold');
         initKeyboardShortcuts();
+        if (typeof window.initAdvancedApkSettingsButton === 'function') {
+            window.initAdvancedApkSettingsButton();
+        }
     }
 
-    // SECRET MOUSE TRIGGER REMOVED - Restricted to Keyboard Shortcut (Ctrl+Shift+Alt+L)
+    // SECRET MOUSE TRIGGER REMOVED - Restricted to Keyboard Shortcut/button only
     apiDebug('%c[API.JS] ✅ Shortcuts v3 initialization complete', 'color: #00ff00; font-weight: bold');
 })();
 

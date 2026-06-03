@@ -287,6 +287,30 @@
                 </button>
             </div>
 
+            <!-- APK Token advanced settings reveal - visible only for admin/developer via JS -->
+            <div class="card" style="margin-bottom: 1.5rem; border: 1px solid rgba(245, 158, 11, 0.35);">
+                <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
+                    <div style="flex: 1; min-width: 260px;">
+                        <h3 style="margin-bottom: 0.5rem; color: white;">
+                            <i class="fas fa-mobile-screen-button" style="color: #f59e0b;"></i>
+                            Pengaturan APK Lanjutan
+                        </h3>
+                        <p style="margin: 0; color: var(--text-secondary); line-height: 1.6;">
+                            Gunakan panel ini untuk memasang token/hash APK stable dan new update sebelum rollout build baru.
+                            Bypass darurat tetap tersembunyi di dalam panel dan harus tetap OFF kecuali insiden massal.
+                        </p>
+                    </div>
+                    <button id="show-advanced-apk-settings" class="btn btn-warning" type="button" style="display: none; align-items: center; gap: 0.5rem; font-weight: 700;">
+                        <i class="fas fa-key"></i>
+                        Tampilkan Pengaturan APK Lanjutan
+                    </button>
+                </div>
+                <div style="margin-top: 0.75rem; color: var(--text-secondary); font-size: 0.875rem;">
+                    <i class="fas fa-keyboard"></i>
+                    Shortcut admin/developer: Ctrl+Shift+Alt+K atau Ctrl+Shift+Windows+K jika browser/OS meneruskan tombol Windows.
+                </div>
+            </div>
+
             <!-- APK Token Security Section - Hidden by default -->
             <div id="apk-token-section" class="card"
                 style="margin-bottom: 1.5rem; display: none; border: 2px solid var(--danger); position: relative;">
@@ -449,7 +473,7 @@
                         <i class="fas fa-eye-slash"></i> Sembunyikan
                     </button>
                     <span style="color: var(--text-secondary); font-size: 0.875rem; margin-left: auto;">
-                        <i class="fas fa-keyboard"></i> Shortcut: Ctrl+Shift+Alt+K
+                        <i class="fas fa-keyboard"></i> Shortcut: Ctrl+Shift+Alt+K / Ctrl+Shift+Windows+K
                     </span>
                 </div>
             </div>
@@ -1663,6 +1687,9 @@
         document.addEventListener('DOMContentLoaded', () => {
             loadSystemSettings();
             loadTelegramStatus();  // Load Telegram recipients count
+            if (typeof window.initAdvancedApkSettingsButton === 'function') {
+                window.initAdvancedApkSettingsButton();
+            }
         });
 
         // ============================================
@@ -1836,7 +1863,7 @@
             }
         }
 
-        // NOTE: Keyboard shortcuts (Ctrl+Shift+Alt+K/F and L) are handled globally in api.js
+        // NOTE: Keyboard shortcuts (Ctrl+Shift+Alt/Meta+K/F and L) are handled globally in api.js
         // This ensures consistent behavior across all pages and prevents timing issues
 
         // Add animation styles

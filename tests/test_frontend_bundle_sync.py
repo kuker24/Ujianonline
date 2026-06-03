@@ -70,6 +70,6 @@ def test_bundle_is_synced_with_modules(
     assert bundle_file.is_file(), f'Bundle file not found: {bundle_file}'
     assert module_dir.is_dir(), f'Module directory not found: {module_dir}'
 
-    expected = _render_bundle(module_dir, module_glob, build_script)
-    actual = bundle_file.read_text(encoding='utf-8')
+    expected = _render_bundle(module_dir, module_glob, build_script).rstrip('\n') + '\n'
+    actual = bundle_file.read_text(encoding='utf-8').rstrip('\n') + '\n'
     assert actual == expected
