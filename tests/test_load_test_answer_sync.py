@@ -38,6 +38,10 @@ def _args(**overrides):
         "include_violation_burst": False,
         "final_submit_sample_rate": 0.0,
         "summary_json": "",
+        "answer_write_mode": "direct",
+        "answer_queue_enabled": "false",
+        "answer_queue_percentage": 0,
+        "runtime_buffer_enabled": "false",
         "execute": False,
         "allow_production": False,
     }
@@ -48,6 +52,15 @@ def _args(**overrides):
 def test_validate_args_rejects_production_host_without_allow_production() -> None:
     with pytest.raises(SystemExit, match="Refusing production traffic"):
         load_script.validate_args(_args(base_url="https://man1rokanhulu.cloud"))
+
+
+@pytest.mark.parametrize(
+    "base_url",
+    ["https://man1rokanhulu.cloud", "http://103.175.218.56", "https://adminujian"],
+)
+def test_validate_args_rejects_known_production_like_hosts(base_url) -> None:
+    with pytest.raises(SystemExit, match="Refusing production traffic"):
+        load_script.validate_args(_args(base_url=base_url))
 
 
 @pytest.mark.parametrize("base_url", ["https://man1rokanhulu.cloud", "http://103.175.218.56"])
@@ -79,6 +92,7 @@ def test_dry_run_default_does_not_execute_http(monkeypatch, capsys) -> None:
     output = capsys.readouterr().out
     assert "Dry-run only" in output
     assert "endpoint=/api/exams/submit-answer" in output
+    assert "safety_policy=direct_mode queue_disabled runtime_buffer_disabled" in output
 
 
 def test_csv_parser_reads_session_question_option_and_token(tmp_path) -> None:
@@ -125,6 +139,27 @@ def test_execute_with_csv_allows_per_row_tokens_without_global_token(tmp_path) -
     rows = load_script.load_session_rows(csv_file, fallback_token="", fallback_selected_option_id=1)
 
     load_script.validate_args(_args(sessions_csv=str(csv_file), execute=True), rows)
+
+
+def test_summary_json_must_be_under_tmp() -> None:
+    load_script.validate_args(_args(summary_json="/tmp/ujianonline-load-summary.json"))
+
+    with pytest.raises(SystemExit, match="--summary-json must be an absolute path under /tmp"):
+        load_script.validate_args(_args(summary_json="docs/summary.json"))
+
+
+@pytest.mark.parametrize(
+    "overrides,expected",
+    [
+        ({"answer_write_mode": "hybrid"}, "requires --answer-write-mode=direct"),
+        ({"answer_queue_enabled": "true"}, "requires queue disabled"),
+        ({"answer_queue_percentage": 10}, "requires queue disabled"),
+        ({"runtime_buffer_enabled": "true"}, "requires runtime buffer disabled"),
+    ],
+)
+def test_direct_mode_policy_rejects_hybrid_queue_or_runtime_buffer(overrides, expected) -> None:
+    with pytest.raises(SystemExit, match=expected):
+        load_script.validate_args(_args(**overrides))
 
 
 def test_mask_token_does_not_print_full_secret() -> None:

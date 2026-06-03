@@ -23,9 +23,7 @@ from pathlib import Path
 from typing import Iterable, Optional
 from urllib.parse import urlparse
 
-import httpx
-
-PRODUCTION_HOSTS = {"man1rokanhulu.cloud", "103.175.218.56"}
+PRODUCTION_HOSTS = {"adminujian", "man1rokanhulu.cloud", "103.175.218.56"}
 ANSWER_ENDPOINT = "/api/exams/submit-answer"
 FINAL_SUBMIT_ENDPOINT = "/api/exams/submit"
 VIOLATION_ENDPOINT = "/api/exams/log-violation"
@@ -218,7 +216,11 @@ def parse_args() -> argparse.Namespace:
         default=0.0,
         help="Experimental: fraction of workers that submit /api/exams/submit at the end (0.0-1.0)",
     )
-    parser.add_argument("--summary-json", default="", help="Write summary metrics JSON to this path")
+    parser.add_argument("--summary-json", default="", help="Write summary metrics JSON to this path; must be under /tmp")
+    parser.add_argument("--answer-write-mode", default="direct", help="Safety declaration; Phase 4 requires direct")
+    parser.add_argument("--answer-queue-enabled", default="false", help="Safety declaration; Phase 4 requires false")
+    parser.add_argument("--answer-queue-percentage", type=int, default=0, help="Safety declaration; Phase 4 requires 0")
+    parser.add_argument("--runtime-buffer-enabled", default="false", help="Safety declaration; Phase 4 requires false")
     parser.add_argument("--user-agent", default="load-test-answer-sync/1.0", help="User-Agent for load traffic")
     parser.add_argument("--seb-config-key-hash", default="", help="Optional SEB config key hash for staging synthetic exams")
     parser.add_argument("--execute", action="store_true", help="Actually send HTTP traffic. Default is dry-run.")
@@ -232,7 +234,33 @@ def parse_args() -> argparse.Namespace:
 
 def is_production_host(base_url: str) -> bool:
     parsed = urlparse(base_url)
-    return (parsed.hostname or "") in PRODUCTION_HOSTS
+    return (parsed.hostname or "").lower() in PRODUCTION_HOSTS
+
+
+def _parse_boolish(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    text = str(value or "").strip().lower()
+    return text in {"1", "true", "yes", "y", "on"}
+
+
+def is_safe_output_path(path_value: str | Path) -> bool:
+    path = Path(path_value).expanduser()
+    return path.is_absolute() and path.resolve().is_relative_to(Path("/tmp"))
+
+
+def validate_direct_mode_policy(args: argparse.Namespace) -> None:
+    answer_write_mode = str(getattr(args, "answer_write_mode", "direct") or "").strip().lower()
+    queue_enabled = _parse_boolish(getattr(args, "answer_queue_enabled", False))
+    queue_percentage = int(getattr(args, "answer_queue_percentage", 0) or 0)
+    runtime_buffer_enabled = _parse_boolish(getattr(args, "runtime_buffer_enabled", False))
+
+    if answer_write_mode != "direct":
+        raise SystemExit("Phase 4 direct-mode validation requires --answer-write-mode=direct")
+    if queue_enabled or queue_percentage != 0:
+        raise SystemExit("Phase 4 direct-mode validation requires queue disabled and percentage 0")
+    if runtime_buffer_enabled:
+        raise SystemExit("Phase 4 direct-mode validation requires runtime buffer disabled")
 
 
 def validate_args(args: argparse.Namespace, session_rows: Optional[list[SessionRow]] = None) -> None:
@@ -241,6 +269,9 @@ def validate_args(args: argparse.Namespace, session_rows: Optional[list[SessionR
         raise SystemExit("--base-url must be an absolute http(s) URL")
     if is_production_host(args.base_url) and not args.allow_production:
         raise SystemExit("Refusing production traffic without --allow-production and explicit operator approval")
+    validate_direct_mode_policy(args)
+    if args.summary_json and not is_safe_output_path(args.summary_json):
+        raise SystemExit("--summary-json must be an absolute path under /tmp to avoid committing artifacts")
     if args.vus <= 0 or args.duration_seconds <= 0:
         raise SystemExit("--vus and --duration-seconds must be positive")
     if args.think_ms_min < 0 or args.think_ms_max < args.think_ms_min:
@@ -382,6 +413,8 @@ async def submit_final_samples(
 
 
 async def run(args: argparse.Namespace, rows: list[SessionRow]) -> dict[str, object]:
+    import httpx
+
     timeout = httpx.Timeout(connect=10, read=30, write=30, pool=30)
     limits = httpx.Limits(max_connections=max(10, args.vus), max_keepalive_connections=max(10, args.vus // 2))
     samples: list[Sample] = []
@@ -414,6 +447,7 @@ def print_plan(args: argparse.Namespace, rows: list[SessionRow]) -> None:
     print(f"  base_url={args.base_url}")
     print(f"  vus={args.vus} duration_seconds={args.duration_seconds}")
     print(f"  sessions_csv_used={bool(args.sessions_csv)} unique_sessions={len({row.session_id for row in rows})}")
+    print("  safety_policy=direct_mode queue_disabled runtime_buffer_disabled")
     print(f"  endpoint={ANSWER_ENDPOINT}")
     if args.seb_config_key_hash:
         print("  seb_config_key_hash=<provided>")
