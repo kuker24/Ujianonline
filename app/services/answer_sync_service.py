@@ -515,7 +515,6 @@ class AnswerSyncService:
         if not should_publish_progress_update(session_id):
             return
         try:
-            total_questions = await get_exam_question_count_cached(self.db, exam_id)
             answered_count: Optional[int] = answered_count_runtime
             if answered_count is None:
                 try:
@@ -527,6 +526,12 @@ class AnswerSyncService:
                         str(runtime_exc),
                     )
             if answered_count is None:
+                if bool(getattr(settings, "exam_peak_mode", False)):
+                    logger.debug(
+                        "SUBMIT-ANSWER | session=%s | progress DB fallback skipped during peak mode",
+                        session_id,
+                    )
+                    return
                 answered_result = await self.db.execute(
                     select(func.count(func.distinct(Answer.question_id))).where(
                         Answer.session_id == session_id,
@@ -534,6 +539,7 @@ class AnswerSyncService:
                     )
                 )
                 answered_count = int(answered_result.scalar() or 0)
+            total_questions = await get_exam_question_count_cached(self.db, exam_id)
             progress = (answered_count / total_questions * 100) if total_questions > 0 else 0.0
             await self.db.commit()
             await _publish_exam_monitor_event(

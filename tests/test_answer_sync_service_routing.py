@@ -712,3 +712,61 @@ async def test_answer_journal_hybrid_percentage_false_uses_direct_path(monkeypat
     assert response.accepted == 1
     assert response.applied_question_count == 1
     assert db.commits == 1
+
+
+@pytest.mark.asyncio
+async def test_progress_update_skips_db_count_fallback_during_peak_mode(monkeypatch) -> None:
+    async def failing_answered_count(_session_id):
+        raise RuntimeError("redis unavailable")
+
+    async def unexpected_total_question_count(*_args, **_kwargs):
+        raise AssertionError("question-count lookup should be skipped when progress count is unknown")
+
+    async def unexpected_publish(*_args, **_kwargs):
+        raise AssertionError("progress event should not publish without answered_count")
+
+    monkeypatch.setattr(answer_sync_service, "should_publish_progress_update", lambda _session_id: True)
+    monkeypatch.setattr(answer_sync_service, "get_answered_count_from_set", failing_answered_count)
+    monkeypatch.setattr(answer_sync_service, "get_exam_question_count_cached", unexpected_total_question_count)
+    monkeypatch.setattr(answer_sync_service, "_publish_exam_monitor_event", unexpected_publish)
+    monkeypatch.setattr(answer_sync_service.settings, "exam_peak_mode", True)
+
+    db = _FakeSingleAnswerDb()
+    await _single_answer_service(db)._publish_progress_if_needed(
+        session_id=123,
+        exam_id=55,
+        answered_count_runtime=None,
+    )
+
+    assert db.execute_calls == 0
+    assert db.commits == 0
+
+
+@pytest.mark.asyncio
+async def test_progress_update_still_publishes_during_peak_when_runtime_count_exists(monkeypatch) -> None:
+    published = {}
+
+    async def fake_total_question_count(_db, _exam_id):
+        return 40
+
+    async def fake_publish(exam_id, payload):
+        published["exam_id"] = exam_id
+        published["payload"] = payload
+
+    monkeypatch.setattr(answer_sync_service, "should_publish_progress_update", lambda _session_id: True)
+    monkeypatch.setattr(answer_sync_service, "get_exam_question_count_cached", fake_total_question_count)
+    monkeypatch.setattr(answer_sync_service, "_publish_exam_monitor_event", fake_publish)
+    monkeypatch.setattr(answer_sync_service.settings, "exam_peak_mode", True)
+
+    db = _FakeSingleAnswerDb()
+    await _single_answer_service(db)._publish_progress_if_needed(
+        session_id=123,
+        exam_id=55,
+        answered_count_runtime=10,
+    )
+
+    assert db.execute_calls == 0
+    assert db.commits == 1
+    assert published["exam_id"] == 55
+    assert published["payload"]["progress"] == 25.0
+    assert published["payload"]["answered_count"] == 10

@@ -31,6 +31,7 @@ def test_mobile_first_security_defaults_stay_off_or_safe() -> None:
     assert 'os.getenv("APK_BUILD_ENDPOINT_ENABLED", "false").lower() == "true"' in CONFIG_SOURCE
     assert 'os.getenv("TELEGRAM_ALERTING_ENABLED", "false").lower() == "true"' in CONFIG_SOURCE
     assert 'os.getenv("VIOLATION_ASYNC_ENABLED", "true").lower() == "true"' in CONFIG_SOURCE
+    assert 'os.getenv(\n        "ADMIN_MONITORING_DETAIL_LEVEL",\n        "summary",\n    ).lower()' in CONFIG_SOURCE
 
     assert "MOBILE_APK_PRIMARY=${MOBILE_APK_PRIMARY:-true}" in COMPOSE_SOURCE
     assert "SEB_DESKTOP_LEGACY_ENABLED=${SEB_DESKTOP_LEGACY_ENABLED:-false}" in COMPOSE_SOURCE
@@ -38,6 +39,8 @@ def test_mobile_first_security_defaults_stay_off_or_safe() -> None:
     assert "APK_BUILD_ENDPOINT_ENABLED=${APK_BUILD_ENDPOINT_ENABLED:-false}" in COMPOSE_SOURCE
     assert "TELEGRAM_ALERTING_ENABLED=${TELEGRAM_ALERTING_ENABLED:-false}" in COMPOSE_SOURCE
     assert "VIOLATION_ASYNC_ENABLED=${VIOLATION_ASYNC_ENABLED:-true}" in COMPOSE_SOURCE
+    assert "ADMIN_MONITORING_DETAIL_LEVEL=${ADMIN_MONITORING_DETAIL_LEVEL:-summary}" in COMPOSE_SOURCE
+    assert "ADMIN_MONITORING_DETAIL_LEVEL=summary" in ENV_EXAMPLE_SOURCE
 
 
 def test_production_safe_mode_doc_keeps_hybrid_queue_and_apk_build_disabled() -> None:
@@ -49,6 +52,7 @@ def test_production_safe_mode_doc_keeps_hybrid_queue_and_apk_build_disabled() ->
     assert "SEB_QR_ENABLED=false" in SAFE_MODE_DOC
     assert "TELEGRAM_ALERTING_ENABLED=false" in SAFE_MODE_DOC
     assert "VIOLATION_ASYNC_ENABLED=true" in SAFE_MODE_DOC
+    assert "ADMIN_MONITORING_DETAIL_LEVEL=summary" in SAFE_MODE_DOC
     assert "HEAVY_EXPORT_ENABLED=false" in SAFE_MODE_DOC
 
     assert "ANSWER_WRITE_MODE=hybrid    absent" in SAFE_MODE_DOC
