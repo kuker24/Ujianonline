@@ -24,6 +24,13 @@ def test_answer_write_defaults_are_direct_and_queue_off() -> None:
     assert "ANSWER_QUEUE_PERCENTAGE=${ANSWER_QUEUE_PERCENTAGE:-0}" in COMPOSE_SOURCE
 
 
+def test_answer_hot_path_timing_defaults_off() -> None:
+    assert 'os.getenv("ANSWER_HOT_PATH_TIMING_ENABLED", "false").lower() == "true"' in CONFIG_SOURCE
+    assert 'os.getenv("ANSWER_HOT_PATH_TIMING_THRESHOLD_MS", "1000")' in CONFIG_SOURCE
+    assert "ANSWER_HOT_PATH_TIMING_ENABLED=${ANSWER_HOT_PATH_TIMING_ENABLED:-false}" in COMPOSE_SOURCE
+    assert "ANSWER_HOT_PATH_TIMING_THRESHOLD_MS=${ANSWER_HOT_PATH_TIMING_THRESHOLD_MS:-1000}" in COMPOSE_SOURCE
+
+
 def test_mobile_first_security_defaults_stay_off_or_safe() -> None:
     assert 'os.getenv("MOBILE_APK_PRIMARY", "true").lower() == "true"' in CONFIG_SOURCE
     assert 'os.getenv("SEB_DESKTOP_LEGACY_ENABLED", "false").lower() == "true"' in CONFIG_SOURCE

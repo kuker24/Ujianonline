@@ -43,6 +43,7 @@ class Sample:
     status_code: int
     latency_ms: float
     ok: bool
+    error: str = ""
 
 
 def percentile(values: list[float], pct: float) -> float:
@@ -65,6 +66,16 @@ def _status_counts(rows: Iterable[Sample]) -> dict[int, int]:
     return dict(sorted(counts.items()))
 
 
+def _error_counts(rows: Iterable[Sample]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for row in rows:
+        error_name = str(row.error or "").strip()
+        if not error_name:
+            continue
+        counts[error_name] = counts.get(error_name, 0) + 1
+    return dict(sorted(counts.items()))
+
+
 def is_success_status(status_code: int) -> bool:
     """Return True only for HTTP 2xx load-test responses."""
     return 200 <= int(status_code) < 300
@@ -83,6 +94,7 @@ def summarize(samples: Iterable[Sample]) -> dict[str, object]:
             "success": sum(1 for row in endpoint_rows if row.ok),
             "failures": sum(1 for row in endpoint_rows if not row.ok),
             "status_counts": _status_counts(endpoint_rows),
+            "error_counts": _error_counts(endpoint_rows),
             "p50_ms": round(percentile(endpoint_latencies, 0.50), 2),
             "p95_ms": round(percentile(endpoint_latencies, 0.95), 2),
             "p99_ms": round(percentile(endpoint_latencies, 0.99), 2),
@@ -94,6 +106,7 @@ def summarize(samples: Iterable[Sample]) -> dict[str, object]:
         "success": sum(1 for row in rows if row.ok),
         "failures": sum(1 for row in rows if not row.ok),
         "status_counts": _status_counts(rows),
+        "error_counts": _error_counts(rows),
         "p50_ms": round(percentile(latencies, 0.50), 2),
         "p95_ms": round(percentile(latencies, 0.95), 2),
         "p99_ms": round(percentile(latencies, 0.99), 2),
@@ -351,9 +364,15 @@ async def post_json(
             latency_ms=latency_ms,
             ok=is_success_status(response.status_code),
         )
-    except Exception:
+    except Exception as exc:
         latency_ms = (time.perf_counter() - started) * 1000
-        return Sample(endpoint=endpoint, status_code=0, latency_ms=latency_ms, ok=False)
+        return Sample(
+            endpoint=endpoint,
+            status_code=0,
+            latency_ms=latency_ms,
+            ok=False,
+            error=exc.__class__.__name__,
+        )
 
 
 async def answer_worker(

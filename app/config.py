@@ -53,6 +53,12 @@ class Settings(BaseSettings):
     )
     answer_queue_flush_batch_size: int = int(os.getenv("ANSWER_QUEUE_FLUSH_BATCH_SIZE", "300"))
     answer_queue_flush_max_rounds: int = int(os.getenv("ANSWER_QUEUE_FLUSH_MAX_ROUNDS", "4"))
+    answer_hot_path_timing_enabled: bool = (
+        os.getenv("ANSWER_HOT_PATH_TIMING_ENABLED", "false").lower() == "true"
+    )
+    answer_hot_path_timing_threshold_ms: int = int(
+        os.getenv("ANSWER_HOT_PATH_TIMING_THRESHOLD_MS", "1000")
+    )
     monitoring_delta_stream_enabled: bool = (
         os.getenv("MONITORING_DELTA_STREAM_ENABLED", "true").lower() == "true"
     )

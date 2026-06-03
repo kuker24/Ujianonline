@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -115,6 +116,53 @@ def _busy_answer_response() -> HTTPException:
     )
 
 
+def _answer_hot_path_timing_enabled() -> bool:
+    return bool(getattr(settings, "answer_hot_path_timing_enabled", False))
+
+
+def _answer_hot_path_timing_threshold_ms() -> float:
+    try:
+        return max(0.0, float(getattr(settings, "answer_hot_path_timing_threshold_ms", 1000)))
+    except (TypeError, ValueError):
+        return 1000.0
+
+
+def _record_timing_ms(timings: Optional[Dict[str, float]], key: str, started_at: float) -> None:
+    if timings is None:
+        return
+    timings[key] = round((time.perf_counter() - started_at) * 1000, 2)
+
+
+def _record_timing_value(timings: Optional[Dict[str, float]], key: str, value: float) -> None:
+    if timings is None:
+        return
+    timings[key] = round(float(value), 2)
+
+
+def _log_answer_hot_path_timing(
+    *,
+    session_id: int,
+    question_id: int,
+    timings: Optional[Dict[str, float]],
+    total_started_at: float,
+) -> None:
+    if timings is None:
+        return
+    total_ms = round((time.perf_counter() - total_started_at) * 1000, 2)
+    threshold_ms = _answer_hot_path_timing_threshold_ms()
+    if total_ms < threshold_ms:
+        return
+    timing_parts = " ".join(f"{key}={value}" for key, value in sorted(timings.items()))
+    logger.info(
+        "SUBMIT-ANSWER-TIMING | session=%s Q%s | total_ms=%s threshold_ms=%s %s",
+        session_id,
+        question_id,
+        total_ms,
+        threshold_ms,
+        timing_parts,
+    )
+
+
 def _already_submitted_answer_response(question_id: int) -> AnswerResponse:
     return AnswerResponse(
         status="saved",
@@ -178,9 +226,16 @@ class AnswerSyncService:
         request: Request,
     ) -> AnswerResponse:
         """Persist one hot-path answer while preserving the public endpoint contract."""
-        await self._check_answer_rate_limit(answer_data.session_id)
+        timings: Optional[Dict[str, float]] = {} if _answer_hot_path_timing_enabled() else None
+        total_timing_started_at = time.perf_counter()
 
+        timing_started_at = time.perf_counter()
+        await self._check_answer_rate_limit(answer_data.session_id)
+        _record_timing_ms(timings, "rate_limit_ms", timing_started_at)
+
+        timing_started_at = time.perf_counter()
         session_probe = await self._probe_single_answer_session(answer_data.session_id)
+        _record_timing_ms(timings, "session_probe_ms", timing_started_at)
         if session_probe is None:
             raise HTTPException(status_code=404, detail="Sesi ujian tidak ditemukan")
 
@@ -192,23 +247,31 @@ class AnswerSyncService:
 
         exam_id = int(session_probe["exam_id"])
         session_id = int(session_probe["id"])
+        timing_started_at = time.perf_counter()
         await self.db.commit()
+        _record_timing_ms(timings, "probe_commit_ms", timing_started_at)
 
+        timing_started_at = time.perf_counter()
         await validate_seb_headers(request, exam_id, self.db, require_seb=True)
+        _record_timing_ms(timings, "seb_validation_ms", timing_started_at)
+        timing_started_at = time.perf_counter()
         question_payload = await self._load_question_validation_payload(
             exam_id=exam_id,
             question_id=int(answer_data.question_id),
         )
+        _record_timing_ms(timings, "question_validation_payload_ms", timing_started_at)
         if not question_payload:
             raise HTTPException(status_code=404, detail="Soal tidak ditemukan")
 
         question_id = int(question_payload["id"])
         final_metadata, statement_answers = self._build_single_answer_metadata(answer_data)
+        timing_started_at = time.perf_counter()
         is_correct, points_earned = self._validate_single_answer(
             question_payload,
             answer_data,
             statement_answers,
         )
+        _record_timing_ms(timings, "answer_validation_ms", timing_started_at)
         write_timestamp = datetime.now(timezone.utc)
         write_fields = {
             "selected_option_id": answer_data.selected_option_id,
@@ -222,7 +285,14 @@ class AnswerSyncService:
 
         answered_count_runtime: Optional[int] = None
         try:
-            locked_session = await self._lock_session_for_single_answer(session_id, question_id)
+            if timings is not None:
+                locked_session = await self._lock_session_for_single_answer(
+                    session_id,
+                    question_id,
+                    timings=timings,
+                )
+            else:
+                locked_session = await self._lock_session_for_single_answer(session_id, question_id)
             if locked_session is None:
                 await self.db.rollback()
                 return _already_submitted_answer_response(question_id)
@@ -272,19 +342,31 @@ class AnswerSyncService:
                 persisted_via_queue = True
 
             if not persisted_via_queue:
-                await self._write_single_answer_direct(
-                    session_id=session_id,
-                    question_id=question_id,
-                    write_fields=write_fields,
-                )
+                if timings is not None:
+                    await self._write_single_answer_direct(
+                        session_id=session_id,
+                        question_id=question_id,
+                        write_fields=write_fields,
+                        timings=timings,
+                    )
+                else:
+                    await self._write_single_answer_direct(
+                        session_id=session_id,
+                        question_id=question_id,
+                        write_fields=write_fields,
+                    )
 
+            timing_started_at = time.perf_counter()
             await self.db.commit()
+            _record_timing_ms(timings, "commit_ms", timing_started_at)
             invalidate_session_answer_count_cache(session_id)
+            timing_started_at = time.perf_counter()
             answered_count_runtime = await self._update_runtime_answered_count(
                 session_id,
                 [question_id],
                 log_prefix="SUBMIT-ANSWER",
             )
+            _record_timing_ms(timings, "runtime_marker_ms", timing_started_at)
         except HTTPException:
             await self.db.rollback()
             raise
@@ -306,17 +388,27 @@ class AnswerSyncService:
             raise HTTPException(status_code=409, detail="Konflik penyimpanan jawaban, silakan coba lagi")
 
         try:
+            timing_started_at = time.perf_counter()
             await update_session_answers(session_id, {str(question_id): True})
+            _record_timing_ms(timings, "legacy_cache_marker_ms", timing_started_at)
         except Exception as cache_exc:
             logger.debug(
                 "SUBMIT-ANSWER | session=%s | cached answer marker skipped: %s",
                 session_id,
                 str(cache_exc),
             )
+        timing_started_at = time.perf_counter()
         await self._publish_progress_if_needed(
             session_id=session_id,
             exam_id=exam_id,
             answered_count_runtime=answered_count_runtime,
+        )
+        _record_timing_ms(timings, "progress_publish_ms", timing_started_at)
+        _log_answer_hot_path_timing(
+            session_id=session_id,
+            question_id=question_id,
+            timings=timings,
+            total_started_at=total_timing_started_at,
         )
 
         return AnswerResponse(
@@ -433,8 +525,12 @@ class AnswerSyncService:
         self,
         session_id: int,
         question_id: int,
+        timings: Optional[Dict[str, float]] = None,
     ) -> Optional[ExamSession]:
+        timing_started_at = time.perf_counter()
         await _acquire_session_write_lock(self.db, session_id)
+        _record_timing_ms(timings, "session_advisory_lock_wait_ms", timing_started_at)
+        timing_started_at = time.perf_counter()
         result = await self.db.execute(
             select(ExamSession)
             .where(
@@ -443,6 +539,7 @@ class AnswerSyncService:
             )
             .with_for_update()
         )
+        _record_timing_ms(timings, "session_row_lock_wait_ms", timing_started_at)
         session = result.scalar_one_or_none()
         if session is None:
             raise HTTPException(status_code=404, detail="Sesi ujian tidak ditemukan")
@@ -465,6 +562,7 @@ class AnswerSyncService:
         session_id: int,
         question_id: int,
         write_fields: Dict[str, Any],
+        timings: Optional[Dict[str, float]] = None,
     ) -> None:
         # Keep direct answer writes idempotent under autosave/retry bursts.
         # If the same payload is submitted repeatedly, avoid a physical UPDATE
@@ -492,14 +590,21 @@ class AnswerSyncService:
             )
         )
         try:
-            await self.db.execute(upsert_stmt)
+            timing_started_at = time.perf_counter()
+            upsert_result = await self.db.execute(upsert_stmt)
+            _record_timing_ms(timings, "upsert_execute_ms", timing_started_at)
+            rowcount = getattr(upsert_result, "rowcount", None)
+            if rowcount is not None:
+                _record_timing_value(timings, "upsert_rowcount", float(rowcount or 0))
         except sqlalchemy.exc.DBAPIError as upsert_exc:
             if "no unique or exclusion constraint" not in str(upsert_exc).lower():
                 raise
+            timing_started_at = time.perf_counter()
             await self.db.execute(
                 text("SELECT pg_advisory_xact_lock(:session_id, :question_id)"),
                 {"session_id": session_id, "question_id": question_id},
             )
+            _record_timing_ms(timings, "fallback_answer_lock_wait_ms", timing_started_at)
             update_stmt = (
                 update(Answer)
                 .where(
@@ -508,7 +613,9 @@ class AnswerSyncService:
                 )
                 .values(**write_fields)
             )
+            timing_started_at = time.perf_counter()
             update_result = await self.db.execute(update_stmt)
+            _record_timing_ms(timings, "fallback_update_execute_ms", timing_started_at)
             if (update_result.rowcount or 0) == 0:
                 self.db.add(
                     Answer(

@@ -280,6 +280,39 @@ def test_success_status_counts_only_2xx() -> None:
         assert load_script.is_success_status(status_code) is False
 
 
+def test_summarize_includes_sanitized_exception_counts_for_status_zero() -> None:
+    samples = [
+        load_script.Sample(
+            "/api/exams/submit-answer",
+            0,
+            30000.0,
+            False,
+            error="ReadTimeout",
+        ),
+        load_script.Sample(
+            "/api/exams/submit-answer",
+            0,
+            30000.0,
+            False,
+            error="ReadTimeout",
+        ),
+        load_script.Sample(
+            "/api/student/exams/submit",
+            0,
+            1000.0,
+            False,
+            error="ConnectError",
+        ),
+    ]
+
+    summary = load_script.summarize(samples)
+
+    assert summary["status_counts"] == {0: 3}
+    assert summary["error_counts"] == {"ConnectError": 1, "ReadTimeout": 2}
+    assert summary["per_endpoint"]["/api/exams/submit-answer"]["error_counts"] == {"ReadTimeout": 2}
+    assert "token" not in str(summary).lower()
+
+
 def test_summarize_counts_4xx_as_failure() -> None:
     samples = [
         load_script.Sample(

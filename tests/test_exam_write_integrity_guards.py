@@ -44,6 +44,20 @@ def test_single_answer_upsert_skips_identical_payload_updates() -> None:
     assert "Do not compare answered_at" in ANSWER_SYNC_SERVICE_SOURCE
 
 
+def test_single_answer_hot_path_timing_is_opt_in_and_sanitized() -> None:
+    assert "answer_hot_path_timing_enabled" in ANSWER_SYNC_SERVICE_SOURCE
+    assert "SUBMIT-ANSWER-TIMING" in ANSWER_SYNC_SERVICE_SOURCE
+    assert "upsert_execute_ms" in ANSWER_SYNC_SERVICE_SOURCE
+    assert "session_advisory_lock_wait_ms" in ANSWER_SYNC_SERVICE_SOURCE
+    assert "session_row_lock_wait_ms" in ANSWER_SYNC_SERVICE_SOURCE
+    assert "commit_ms" in ANSWER_SYNC_SERVICE_SOURCE
+    assert "runtime_marker_ms" in ANSWER_SYNC_SERVICE_SOURCE
+    log_helper = ANSWER_SYNC_SERVICE_SOURCE.split("def _log_answer_hot_path_timing", 1)[1].split("async def", 1)[0]
+    assert "timing_parts" in log_helper
+    assert "write_fields" not in log_helper
+    assert "answer_text" not in log_helper
+
+
 def test_single_answer_peak_mode_skips_noncritical_progress_broadcast() -> None:
     progress_fn = _extract_async_function(ANSWER_SYNC_SERVICE_SOURCE, "_publish_progress_if_needed")
     assert "progress broadcast skipped during peak mode" in progress_fn

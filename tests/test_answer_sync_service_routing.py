@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
@@ -326,6 +327,52 @@ async def test_single_answer_direct_write_updates_runtime_count(monkeypatch) -> 
     assert runtime["added"] == (123, [9])
     assert runtime["snapshot"][1]["answered_count"] == 4
     assert runtime["answers"] == (123, {"9": True})
+
+
+@pytest.mark.asyncio
+async def test_single_answer_hot_path_timing_logs_only_when_enabled(monkeypatch, caplog) -> None:
+    _patch_single_answer_common(monkeypatch)
+    monkeypatch.setattr(answer_sync_service.settings, "answer_hot_path_timing_enabled", True)
+    monkeypatch.setattr(answer_sync_service.settings, "answer_hot_path_timing_threshold_ms", 0)
+
+    async def fake_write(self, *, session_id, question_id, write_fields, timings=None):
+        assert timings is not None
+        timings["upsert_execute_ms"] = 1.23
+        timings["upsert_rowcount"] = 0.0
+
+    async def fake_add_answered(_session_id, _question_ids):
+        return 1
+
+    async def fake_update_snapshot(*_args, **_kwargs):
+        return None
+
+    async def fake_update_session_answers(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(answer_sync_service.AnswerSyncService, "_write_single_answer_direct", fake_write)
+    monkeypatch.setattr(answer_sync_service, "add_answered_questions_and_count", fake_add_answered)
+    monkeypatch.setattr(answer_sync_service, "update_runtime_snapshot_answered_count", fake_update_snapshot)
+    monkeypatch.setattr(answer_sync_service, "update_session_answers", fake_update_session_answers)
+
+    locked_session = SimpleNamespace(id=123, exam_id=55, status="in_progress")
+    db = _FakeSingleAnswerDb(
+        results=[
+            _FirstResult((123, 55, "in_progress")),
+            _ScalarResult(None),
+            _ScalarResult(locked_session),
+        ]
+    )
+
+    with caplog.at_level(logging.INFO, logger=answer_sync_service.logger.name):
+        response = await _single_answer_service(db).accept_single_answer(
+            AnswerSubmit(session_id=123, question_id=9, selected_option_id=2),
+            request=None,
+        )
+
+    assert response.status == "saved"
+    assert "SUBMIT-ANSWER-TIMING" in caplog.text
+    assert "upsert_execute_ms=1.23" in caplog.text
+    assert "upsert_rowcount=0.0" in caplog.text
 
 
 @pytest.mark.asyncio
