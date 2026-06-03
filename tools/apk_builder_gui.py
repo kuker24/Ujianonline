@@ -66,6 +66,176 @@ try:
 except ImportError:
     PIL_AVAILABLE = False
 
+
+RUNTIME_TUNING_PROFILES = {
+    "strict_security": {
+        "reconnect_probe_interval_seconds": 5,
+        "emergency_exit_min_outage_minutes": 5,
+        "emergency_exit_min_failed_probes": 10,
+        "risk_auto_submit_threshold": 7.0,
+        "answer_journal_sync_interval_seconds": 4,
+        "answer_journal_batch_size": 120,
+        "timer_guard_max_drift_seconds": 8,
+    },
+    "balanced": {
+        "reconnect_probe_interval_seconds": 6,
+        "emergency_exit_min_outage_minutes": 4,
+        "emergency_exit_min_failed_probes": 8,
+        "risk_auto_submit_threshold": 8.0,
+        "answer_journal_sync_interval_seconds": 5,
+        "answer_journal_batch_size": 100,
+        "timer_guard_max_drift_seconds": 10,
+    },
+    "ux_offline_first": {
+        # Safer for real exam Wi-Fi bursts: avoid old 6s/6s rollback.
+        "reconnect_probe_interval_seconds": 10,
+        "emergency_exit_min_outage_minutes": 3,
+        "emergency_exit_min_failed_probes": 6,
+        "risk_auto_submit_threshold": 8.5,
+        "answer_journal_sync_interval_seconds": 8,
+        "answer_journal_batch_size": 80,
+        "timer_guard_max_drift_seconds": 12,
+    },
+}
+
+_UX_OFFLINE_FIRST_MINIMUMS = {
+    "reconnect_probe_interval_seconds": 10,
+    "answer_journal_sync_interval_seconds": 8,
+}
+
+_DART_TUNING_NAMES = {
+    "reconnect_probe_interval_seconds": "reconnectProbeIntervalSeconds",
+    "emergency_exit_min_outage_minutes": "emergencyExitMinOutageMinutes",
+    "emergency_exit_min_failed_probes": "emergencyExitMinFailedProbes",
+    "risk_auto_submit_threshold": "riskAutoSubmitThreshold",
+    "answer_journal_sync_interval_seconds": "answerJournalSyncIntervalSeconds",
+    "answer_journal_batch_size": "answerJournalBatchSize",
+    "timer_guard_max_drift_seconds": "timerGuardMaxDriftSeconds",
+}
+
+
+def _resolve_runtime_tuning(
+    resilience_profile: str,
+    runtime_overrides: dict | None = None,
+) -> tuple[str, dict]:
+    profile = (resilience_profile or "ux_offline_first").strip()
+    if profile not in RUNTIME_TUNING_PROFILES:
+        profile = "ux_offline_first"
+
+    tuning = dict(RUNTIME_TUNING_PROFILES[profile])
+    for key, value in (runtime_overrides or {}).items():
+        if key in tuning and value is not None:
+            tuning[key] = value
+
+    if profile == "ux_offline_first":
+        for key, minimum in _UX_OFFLINE_FIRST_MINIMUMS.items():
+            try:
+                tuning[key] = max(int(tuning[key]), minimum)
+            except (TypeError, ValueError):
+                tuning[key] = minimum
+
+    return profile, tuning
+
+
+def _dart_bool(value: bool) -> str:
+    return str(bool(value)).lower()
+
+
+def render_config_dart_content(
+    *,
+    normalized_url: str,
+    app_name: str,
+    force_https: bool,
+    cleartext_allowed: bool,
+    build_mode: str,
+    build_token: str,
+    build_timestamp: int,
+    security_settings: dict,
+    generated_at: str,
+    resilience_profile: str = "ux_offline_first",
+    runtime_overrides: dict | None = None,
+) -> tuple[str, str, dict]:
+    """Render Flutter config.dart content without opening the GUI or building APK."""
+    profile, tuning = _resolve_runtime_tuning(resilience_profile, runtime_overrides)
+    safe_app_name = (app_name or "").replace('"', '\\"')
+
+    content = f'''// Auto-generated configuration by APK Builder GUI
+// Generated: {generated_at}
+// Build Token: {build_token}
+
+class AppConfig {{
+  static const String serverUrl = "{normalized_url}";
+  static const String appName = "{safe_app_name}";
+  static const bool forceHttps = {_dart_bool(force_https)};
+  static const bool allowCleartextTraffic = {_dart_bool(cleartext_allowed)};
+  static const String buildMode = "{build_mode}";
+  static const String resilienceProfile = "{profile}";
+  
+  // Build Token for Version Control
+  static const String buildToken = "{build_token}";
+  static const int buildTimestamp = {int(build_timestamp)};
+
+  // UX-first offline runtime tuning
+  static const bool enableOfflineFirstRuntime = true;
+  static const bool showConnectionBadge = true;
+  static const bool enableAdaptiveViolationDetection = true;
+  static const bool enableDiagnosticsQuickExport = true;
+  static const int reconnectProbeIntervalSeconds = {int(tuning["reconnect_probe_interval_seconds"])};
+  static const int emergencyExitMinOutageMinutes = {int(tuning["emergency_exit_min_outage_minutes"])};
+  static const int emergencyExitMinFailedProbes = {int(tuning["emergency_exit_min_failed_probes"])};
+  static const double riskAutoSubmitThreshold = {float(tuning["risk_auto_submit_threshold"])};
+  static const int answerJournalSyncIntervalSeconds = {int(tuning["answer_journal_sync_interval_seconds"])};
+  static const int answerJournalBatchSize = {int(tuning["answer_journal_batch_size"])};
+  static const int timerGuardMaxDriftSeconds = {int(tuning["timer_guard_max_drift_seconds"])};
+  
+  // Security Settings
+  static const bool enableKiosk = {_dart_bool(security_settings.get("enable_kiosk", True))};
+  static const bool blockScreenshot = {_dart_bool(security_settings.get("block_screenshot", True))};
+  static const bool detectRoot = {_dart_bool(security_settings.get("detect_root", True))};
+  static const bool blockTaskSwitch = {_dart_bool(security_settings.get("block_task_switch", True))};
+}}
+'''
+    return content, profile, tuning
+
+
+def extract_runtime_tuning_from_config(config_text: str) -> dict:
+    """Extract runtime tuning constants from generated config.dart text."""
+    values = {}
+    for snake_name, dart_name in _DART_TUNING_NAMES.items():
+        match = re.search(
+            rf"static const (?:int|double) {dart_name}\s*=\s*([0-9]+(?:\.[0-9]+)?);",
+            config_text or "",
+        )
+        if not match:
+            continue
+        raw_value = match.group(1)
+        values[snake_name] = float(raw_value) if "." in raw_value else int(raw_value)
+    return values
+
+
+def validate_generated_config_text(
+    config_text: str,
+    *,
+    expected_profile: str = "ux_offline_first",
+) -> tuple[bool, list[str]]:
+    """Validate generated config text for safety-sensitive runtime tuning."""
+    errors: list[str] = []
+    text = config_text or ""
+    if f'static const String resilienceProfile = "{expected_profile}";' not in text:
+        errors.append(f"resilienceProfile harus {expected_profile}")
+
+    tuning = extract_runtime_tuning_from_config(text)
+    if expected_profile == "ux_offline_first":
+        reconnect = int(tuning.get("reconnect_probe_interval_seconds", 0) or 0)
+        answer_sync = int(tuning.get("answer_journal_sync_interval_seconds", 0) or 0)
+        if reconnect < _UX_OFFLINE_FIRST_MINIMUMS["reconnect_probe_interval_seconds"]:
+            errors.append("reconnectProbeIntervalSeconds minimal 10 untuk ux_offline_first")
+        if answer_sync < _UX_OFFLINE_FIRST_MINIMUMS["answer_journal_sync_interval_seconds"]:
+            errors.append("answerJournalSyncIntervalSeconds minimal 8 untuk ux_offline_first")
+
+    return not errors, errors
+
+
 class APKBuilderGUI:
     def __init__(self, root):
         self.root = root
@@ -721,75 +891,28 @@ class APKBuilderGUI:
         build_timestamp = int(time.time())
         normalized_url = self._normalize_server_url(self.server_url_var.get())
         self.server_url_var.set(normalized_url)
-        safe_app_name = self.app_name_var.get().replace('"', '\\"')
         force_https = self.use_https_var.get()
         cleartext_allowed = not force_https
         build_mode = self.build_mode_var.get()
         resilience_profile = self.resilience_profile_var.get().strip() or "ux_offline_first"
 
-        if resilience_profile == "strict_security":
-            reconnect_probe_interval_seconds = 5
-            emergency_exit_min_outage_minutes = 5
-            emergency_exit_min_failed_probes = 10
-            risk_auto_submit_threshold = 7.0
-            answer_journal_sync_interval_seconds = 4
-            answer_journal_batch_size = 120
-            timer_guard_max_drift_seconds = 8
-        elif resilience_profile == "balanced":
-            reconnect_probe_interval_seconds = 6
-            emergency_exit_min_outage_minutes = 4
-            emergency_exit_min_failed_probes = 8
-            risk_auto_submit_threshold = 8.0
-            answer_journal_sync_interval_seconds = 5
-            answer_journal_batch_size = 100
-            timer_guard_max_drift_seconds = 10
-        else:
-            # UX offline-first profile (recommended for unstable network exam env)
-            resilience_profile = "ux_offline_first"
-            reconnect_probe_interval_seconds = 6
-            emergency_exit_min_outage_minutes = 3
-            emergency_exit_min_failed_probes = 6
-            risk_auto_submit_threshold = 8.5
-            answer_journal_sync_interval_seconds = 6
-            answer_journal_batch_size = 80
-            timer_guard_max_drift_seconds = 12
-        
-        config_content = f'''// Auto-generated configuration by APK Builder GUI
-// Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
-// Build Token: {current_token}
-
-class AppConfig {{
-  static const String serverUrl = "{normalized_url}";
-  static const String appName = "{safe_app_name}";
-  static const bool forceHttps = {str(force_https).lower()};
-  static const bool allowCleartextTraffic = {str(cleartext_allowed).lower()};
-  static const String buildMode = "{build_mode}";
-  static const String resilienceProfile = "{resilience_profile}";
-  
-  // Build Token for Version Control
-  static const String buildToken = "{current_token}";
-  static const int buildTimestamp = {build_timestamp};
-
-  // UX-first offline runtime tuning
-  static const bool enableOfflineFirstRuntime = true;
-  static const bool showConnectionBadge = true;
-  static const bool enableAdaptiveViolationDetection = true;
-  static const bool enableDiagnosticsQuickExport = true;
-  static const int reconnectProbeIntervalSeconds = {reconnect_probe_interval_seconds};
-  static const int emergencyExitMinOutageMinutes = {emergency_exit_min_outage_minutes};
-  static const int emergencyExitMinFailedProbes = {emergency_exit_min_failed_probes};
-  static const double riskAutoSubmitThreshold = {risk_auto_submit_threshold};
-  static const int answerJournalSyncIntervalSeconds = {answer_journal_sync_interval_seconds};
-  static const int answerJournalBatchSize = {answer_journal_batch_size};
-  static const int timerGuardMaxDriftSeconds = {timer_guard_max_drift_seconds};
-  
-  // Security Settings
-  static const bool enableKiosk = {str(self.enable_kiosk_var.get()).lower()};
-  static const bool blockScreenshot = {str(self.block_screenshot_var.get()).lower()};
-  static const bool detectRoot = {str(self.detect_root_var.get()).lower()};
-  static const bool blockTaskSwitch = {str(self.block_task_switch_var.get()).lower()};
-}}
-'''
+        config_content, resilience_profile, tuning = render_config_dart_content(
+            normalized_url=normalized_url,
+            app_name=self.app_name_var.get(),
+            force_https=force_https,
+            cleartext_allowed=cleartext_allowed,
+            build_mode=build_mode,
+            build_token=current_token,
+            build_timestamp=build_timestamp,
+            security_settings={
+                "enable_kiosk": self.enable_kiosk_var.get(),
+                "block_screenshot": self.block_screenshot_var.get(),
+                "detect_root": self.detect_root_var.get(),
+                "block_task_switch": self.block_task_switch_var.get(),
+            },
+            generated_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            resilience_profile=resilience_profile,
+        )
         
         with open(self.config_dart_path, 'w', encoding='utf-8') as f:
             f.write(config_content)
