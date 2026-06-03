@@ -723,22 +723,43 @@
         }
 
         .zoom-close-btn {
-            position: absolute;
-            top: 1rem;
-            right: 1rem;
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            position: fixed;
+            top: calc(env(safe-area-inset-top, 0px) + 0.75rem);
+            right: calc(env(safe-area-inset-right, 0px) + 0.75rem);
+            background: rgba(255, 255, 255, 0.14);
+            border: 1px solid rgba(255, 255, 255, 0.35);
             color: white;
-            width: 44px;
-            height: 44px;
+            width: 52px;
+            height: 52px;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
             font-size: 1.5rem;
-            z-index: 10000;
+            z-index: 10002;
             cursor: pointer;
             backdrop-filter: blur(4px);
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .zoom-exit-btn {
+            position: fixed;
+            left: 50%;
+            bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem);
+            transform: translateX(-50%);
+            min-width: 156px;
+            min-height: 48px;
+            padding: 0.75rem 1.25rem;
+            border-radius: 999px;
+            border: 1px solid rgba(255, 255, 255, 0.28);
+            background: rgba(15, 23, 42, 0.88);
+            color: white;
+            font-weight: 700;
+            z-index: 10002;
+            cursor: pointer;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
         }
 
         .zoom-hint {
@@ -1082,12 +1103,13 @@
     </style>
 
     <!-- Image Zoom Modal HTML -->
-    <div id="imageZoomModal" class="image-zoom-modal">
-        <div class="zoom-close-btn" onclick="closeImageZoom()"><i class="fas fa-times"></i></div>
+    <div id="imageZoomModal" class="image-zoom-modal" role="dialog" aria-modal="true" aria-label="Preview gambar diperbesar">
+        <button type="button" class="zoom-close-btn" aria-label="Tutup gambar" onclick="closeImageZoom(event)" ontouchend="closeImageZoom(event)"><i class="fas fa-times"></i></button>
         <div class="zoom-hint">Bisa di-zoom (Pinch) 🔍</div>
-        <div class="image-zoom-container">
+        <div class="image-zoom-container" aria-label="Area gambar, ketuk area gelap untuk menutup">
             <img id="zoomImageObj" src="" alt="Zoomed Image">
         </div>
+        <button type="button" class="zoom-exit-btn" onclick="closeImageZoom(event)" ontouchend="closeImageZoom(event)">Tutup gambar</button>
     </div>
 
     <!-- Core Dependencies -->
@@ -1371,8 +1393,10 @@
         let initialPinchDistance = null;
         let lastPanPos = { x: 0, y: 0 };
         let currentPanPos = { x: 0, y: 0 };
+        let zoomCloseTimer = null;
 
         function openImageZoom(src) {
+            if (!zoomModal || !zoomImg || !src) return;
             zoomImg.src = src;
             zoomModal.classList.add('active');
 
@@ -1382,9 +1406,18 @@
             updateZoomTransform();
         }
 
-        function closeImageZoom() {
+        function closeImageZoom(event) {
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            if (!zoomModal || !zoomImg) return;
             zoomModal.classList.remove('active');
-            setTimeout(() => { zoomImg.src = ''; }, 300); // clear after fade out
+            currentZoom = 1;
+            currentPanPos = { x: 0, y: 0 };
+            updateZoomTransform();
+            if (zoomCloseTimer) clearTimeout(zoomCloseTimer);
+            zoomCloseTimer = setTimeout(() => { zoomImg.src = ''; }, 300); // clear after fade out
         }
 
         function updateZoomTransform() {
@@ -1407,6 +1440,17 @@
                 touches[0].clientY - touches[1].clientY
             );
         }
+
+        zoomModal.addEventListener('click', (e) => {
+            const target = e.target;
+            if (target && target.closest && target.closest('.zoom-close-btn, .zoom-exit-btn')) {
+                closeImageZoom(e);
+                return;
+            }
+            if (currentZoom <= 1 && (target === zoomModal || (target && target.classList && target.classList.contains('image-zoom-container')))) {
+                closeImageZoom(e);
+            }
+        });
 
         zoomModal.addEventListener('touchstart', (e) => {
             if (e.touches.length === 2) {
@@ -1444,10 +1488,18 @@
         }, { passive: false });
 
         zoomModal.addEventListener('touchend', (e) => {
+            const target = e.target;
+            if (target && target.closest && target.closest('.zoom-close-btn, .zoom-exit-btn')) {
+                closeImageZoom(e);
+                return;
+            }
             if (e.touches.length < 2) {
                 initialPinchDistance = null;
             }
-        });
+            if (e.touches.length === 0 && currentZoom <= 1 && (target === zoomModal || (target && target.classList && target.classList.contains('image-zoom-container')))) {
+                closeImageZoom(e);
+            }
+        }, { passive: false });
 
         function tryOpenImageZoom(target) {
             const img = target && target.closest ? target.closest('img.question-image') : null;
