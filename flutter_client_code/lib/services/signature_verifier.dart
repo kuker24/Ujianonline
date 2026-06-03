@@ -240,6 +240,16 @@ class SignatureVerifier {
   // UTILITY METHODS
   // ============================================================
   
+  /// Normalize a platform signature for HTTP headers/server comparison.
+  /// Returns a 64-character lowercase SHA-256 hex string, or null when invalid.
+  static String? normalizeSignatureForHeader(String? value) {
+    final normalized = (value ?? '').trim().replaceAll(':', '').toLowerCase();
+    if (RegExp(r'^[0-9a-f]{64}$').hasMatch(normalized)) {
+      return normalized;
+    }
+    return null;
+  }
+
   /// Get actual app signature (for setup/debugging only)
   static Future<String> getActualSignature() async {
     try {

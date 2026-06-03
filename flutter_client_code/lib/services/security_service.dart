@@ -263,6 +263,13 @@ class SecurityService {
     }
   }
 
+  /// Compatibility hook for restoring clipboard behavior after exam exit.
+  /// Flutter cannot re-enable a platform clipboard permission it never disabled,
+  /// so this intentionally performs no privileged action.
+  static Future<void> enableClipboard() async {
+    return;
+  }
+
   /// Check keyboard risk. Platform-channel keyboard identification is not yet
   /// available, so unknown keyboards are reported as non-blocking unknown—not
   /// as verified safe. ExamPage only warns for dangerous keyboards.
