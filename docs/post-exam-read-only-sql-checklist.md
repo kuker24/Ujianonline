@@ -98,15 +98,15 @@ GROUP BY status
 ORDER BY session_count DESC;
 ```
 
-Validasi: `submitted` count sesuai ekspektasi. `in_progress` = 0 setelah ujian selesai.
+Validasi: terminal status (`submitted` + `completed`) sesuai ekspektasi. `in_progress` = 0 setelah ujian selesai.
 
-## Query 2: Submitted Count
+## Query 2: Terminal Count (Submitted + Completed)
 
 ```sql
-SELECT COUNT(*) AS submitted_count
+SELECT COUNT(*) AS terminal_count
 FROM exam_sessions
 WHERE exam_id = :exam_id
-  AND status = 'submitted';
+  AND status IN ('submitted', 'completed');
 ```
 
 ## Query 3: In-Progress / Stuck Sessions
@@ -128,7 +128,7 @@ LIMIT 50;
 
 Jika ada setelah ujian selesai: anomaly, perlu catat.
 
-## Query 4: Answer Count per Submitted Session (Bottom 50)
+## Query 4: Answer Count per Terminal Session (Bottom 50)
 
 ```sql
 SELECT
@@ -139,13 +139,13 @@ SELECT
 FROM exam_sessions es
 LEFT JOIN answers a ON a.session_id = es.id
 WHERE es.exam_id = :exam_id
-  AND es.status = 'submitted'
+  AND es.status IN ('submitted', 'completed')
 GROUP BY es.id, es.user_id, es.status
 ORDER BY answer_count ASC
 LIMIT 50;
 ```
 
-Validasi: semua submitted session memiliki answer_count > 0.
+Validasi: semua terminal session (`submitted`/`completed`) memiliki answer_count > 0.
 
 ## Query 5: Question Count per Exam
 
@@ -171,7 +171,7 @@ SELECT
 FROM exam_sessions es
 LEFT JOIN answers a ON a.session_id = es.id
 WHERE es.exam_id = :exam_id
-  AND es.status = 'submitted'
+  AND es.status IN ('submitted', 'completed')
   AND a.id IS NULL;
 ```
 
@@ -206,7 +206,7 @@ SELECT
 FROM exam_sessions es
 JOIN answers a ON a.session_id = es.id
 WHERE es.exam_id = :exam_id
-  AND es.status = 'submitted'
+  AND es.status IN ('submitted', 'completed')
 GROUP BY es.id, es.user_id, es.end_time
 HAVING es.end_time IS NULL
     OR MAX(a.answered_at) > es.end_time + INTERVAL '5 minutes'
@@ -224,7 +224,7 @@ SELECT
 FROM answers a
 JOIN exam_sessions es ON es.id = a.session_id
 WHERE es.exam_id = :exam_id
-  AND es.status = 'submitted'
+  AND es.status IN ('submitted', 'completed')
   AND es.end_time IS NOT NULL
   AND a.answered_at > es.end_time
 LIMIT 50;
@@ -232,7 +232,7 @@ LIMIT 50;
 
 Jika ada: timestamp anomaly, perlu review.
 
-## Query 10: Sessions with Submitted but Score NULL
+## Query 10: Terminal Sessions with Score NULL
 
 ```sql
 SELECT
@@ -244,7 +244,7 @@ SELECT
     violation_count
 FROM exam_sessions
 WHERE exam_id = :exam_id
-  AND status = 'submitted'
+  AND status IN ('submitted', 'completed')
   AND score IS NULL
 LIMIT 50;
 ```
@@ -263,7 +263,7 @@ SELECT
 FROM exam_sessions es
 JOIN answers a ON a.session_id = es.id
 WHERE es.exam_id = :exam_id
-  AND es.status = 'submitted'
+  AND es.status IN ('submitted', 'completed')
 GROUP BY es.id, es.status, es.score
 HAVING COUNT(CASE WHEN a.is_correct IS NULL THEN 1 END) > 0
 LIMIT 50;
@@ -350,6 +350,8 @@ SELECT
     e.has_ever_had_results,
     COUNT(DISTINCT es.id) AS total_sessions,
     COUNT(DISTINCT CASE WHEN es.status = 'submitted' THEN es.id END) AS submitted_sessions,
+    COUNT(DISTINCT CASE WHEN es.status = 'completed' THEN es.id END) AS completed_sessions,
+    COUNT(DISTINCT CASE WHEN es.status IN ('submitted', 'completed') THEN es.id END) AS terminal_sessions,
     COUNT(DISTINCT CASE WHEN es.status = 'in_progress' THEN es.id END) AS in_progress_sessions,
     COUNT(DISTINCT CASE WHEN es.status = 'abandoned' THEN es.id END) AS abandoned_sessions,
     COUNT(DISTINCT a.id) AS total_answers,
@@ -377,7 +379,7 @@ SELECT
     COUNT(*) AS student_count
 FROM exam_sessions
 WHERE exam_id = :exam_id
-  AND status = 'submitted'
+  AND status IN ('submitted', 'completed')
   AND score IS NOT NULL
 GROUP BY grade_band
 ORDER BY grade_band;

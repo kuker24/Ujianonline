@@ -48,7 +48,7 @@ Prioritas audit:
 1. **Answer safety**: semua jawaban siswa tersimpan.
 2. **Final-submit integrity**: semua final submit tercatat dengan benar.
 3. **Session consistency**: status session konsisten.
-4. **Grading completeness**: skor tersimpan untuk semua submitted session.
+4. **Grading completeness**: skor tersimpan untuk semua terminal session (`submitted` + `completed`).
 5. **Violation availability**: cheating/violation data tersedia untuk review.
 6. **No residue**: tidak ada data synthetic/test yang tertinggal.
 
@@ -167,17 +167,17 @@ ORDER BY session_count DESC;
 
 Validasi:
 
-- `submitted` count sesuai ekspektasi.
+- Terminal count (`submitted` + `completed`) sesuai ekspektasi.
 - `in_progress` = 0 setelah ujian selesai.
 - `abandoned` masuk akal.
 
-### 7.2 Submitted/Completed Count
+### 7.2 Terminal Count (Submitted + Completed)
 
 ```sql
-SELECT COUNT(*) AS submitted_count
+SELECT COUNT(*) AS terminal_count
 FROM exam_sessions
 WHERE exam_id = :exam_id
-  AND status = 'submitted';
+  AND status IN ('submitted', 'completed');
 ```
 
 ### 7.3 In-Progress / Stuck Sessions
@@ -214,13 +214,13 @@ SELECT
     COUNT(a.id) AS answer_count
 FROM exam_sessions es
 LEFT JOIN answers a ON a.session_id = es.id
-WHERE es.exam_id = :exam_id AND es.status = 'submitted'
+WHERE es.exam_id = :exam_id AND es.status IN ('submitted', 'completed')
 GROUP BY es.id, es.status
 ORDER BY answer_count ASC
 LIMIT 50;
 ```
 
-Validasi: semua submitted session memiliki answer_count > 0.
+Validasi: semua terminal session (`submitted`/`completed`) memiliki answer_count > 0.
 
 ### 7.5 Sessions with Zero Answers
 
@@ -234,7 +234,7 @@ SELECT
 FROM exam_sessions es
 LEFT JOIN answers a ON a.session_id = es.id
 WHERE es.exam_id = :exam_id
-  AND es.status = 'submitted'
+  AND es.status IN ('submitted', 'completed')
   AND a.id IS NULL;
 ```
 
@@ -269,7 +269,7 @@ SELECT
     MAX(a.answered_at) AS last_answer_time
 FROM exam_sessions es
 JOIN answers a ON a.session_id = es.id
-WHERE es.exam_id = :exam_id AND es.status = 'submitted'
+WHERE es.exam_id = :exam_id AND es.status IN ('submitted', 'completed')
 GROUP BY es.id, es.user_id, es.end_time
 HAVING es.end_time IS NULL
     OR MAX(a.answered_at) > es.end_time + INTERVAL '5 minutes';
@@ -288,13 +288,13 @@ SELECT
 FROM answers a
 JOIN exam_sessions es ON es.id = a.session_id
 WHERE es.exam_id = :exam_id
-  AND es.status = 'submitted'
+  AND es.status IN ('submitted', 'completed')
   AND es.end_time IS NOT NULL
   AND a.answered_at > es.end_time
 LIMIT 50;
 ```
 
-### 7.9 Sessions with Final Submit but Missing Score
+### 7.9 Terminal Sessions with Missing Score
 
 ```sql
 SELECT
@@ -305,7 +305,7 @@ SELECT
     end_time
 FROM exam_sessions
 WHERE exam_id = :exam_id
-  AND status = 'submitted'
+  AND status IN ('submitted', 'completed')
   AND score IS NULL;
 ```
 
@@ -322,7 +322,7 @@ SELECT
     COUNT(a.id) AS total_answers
 FROM exam_sessions es
 JOIN answers a ON a.session_id = es.id
-WHERE es.exam_id = :exam_id AND es.status = 'submitted'
+WHERE es.exam_id = :exam_id AND es.status IN ('submitted', 'completed')
 GROUP BY es.id, es.status, es.score
 HAVING COUNT(CASE WHEN a.is_correct IS NULL THEN 1 END) > 0
 LIMIT 50;
@@ -403,6 +403,8 @@ SELECT
     e.has_ever_had_results,
     COUNT(DISTINCT es.id) AS total_sessions,
     COUNT(DISTINCT CASE WHEN es.status = 'submitted' THEN es.id END) AS submitted_sessions,
+    COUNT(DISTINCT CASE WHEN es.status = 'completed' THEN es.id END) AS completed_sessions,
+    COUNT(DISTINCT CASE WHEN es.status IN ('submitted', 'completed') THEN es.id END) AS terminal_sessions,
     COUNT(DISTINCT CASE WHEN es.status = 'in_progress' THEN es.id END) AS in_progress_sessions,
     COUNT(DISTINCT a.id) AS total_answers,
     AVG(es.score) AS avg_score,
@@ -449,8 +451,8 @@ Tindakan: catat, tidak perlu remediasi.
 
 ### Needs Manual Review
 
-- Session `submitted` tapi `score` NULL (grading belum jalan).
-- Session `submitted` tapi answer_count = 0.
+- Terminal session (`submitted`/`completed`) tapi `score` NULL (grading belum jalan).
+- Terminal session (`submitted`/`completed`) tapi answer_count = 0.
 - Banyak session `in_progress` setelah ujian selesai.
 - Jawaban setelah `end_time`.
 
@@ -459,7 +461,7 @@ Tindakan: catat, investigasi, eskalasi ke backend reviewer.
 ### High Risk / Data Safety
 
 - Banyak final submit hilang/tidak tercatat.
-- Banyak jawaban hilang untuk submitted session.
+- Banyak jawaban hilang untuk terminal session (`submitted`/`completed`).
 - Score tidak terhitung untuk sebagian besar session.
 - Data integrity constraint violation.
 - Synthetic residue di production data.

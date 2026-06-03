@@ -26,6 +26,8 @@ from scripts.post_exam_audit_readonly import (
     _is_production_url,
     _parse_args,
     _check_production_safety,
+    _terminal_status_sql,
+    _TERMINAL_STATUSES,
     _q_session_status_distribution,
     _q_submitted_count,
     _q_in_progress_stuck,
@@ -260,7 +262,7 @@ class TestAuditorReportStructure:
         auditor = PostExamAuditor(exam_id=1)
         auditor.anomalies.append({
             "severity": "high_risk",
-            "description": "Zero-answer submitted session found.",
+            "description": "Zero-answer terminal session found.",
         })
         report = auditor._build_report()
         assert report["data_safety_concern"] is True
@@ -322,7 +324,7 @@ class TestAuditorAnomalyDetection:
         auditor.results["sessions_zero_answers"] = [{"session_id": 1, "user_id": 10}]
         auditor.anomalies.append({
             "severity": "high_risk",
-            "description": "Submitted session with zero answers.",
+            "description": "Terminal session with zero answers.",
         })
         report = auditor._build_report()
         assert report["data_safety_concern"] is True
@@ -340,13 +342,13 @@ class TestAuditorAnomalyDetection:
 
     def test_score_null_detected(self):
         auditor = PostExamAuditor(exam_id=1)
-        auditor.results["submitted_score_null"] = [{"id": 1, "user_id": 10}]
+        auditor.results["terminal_score_null"] = [{"id": 1, "user_id": 10}]
         auditor.anomalies.append({
             "severity": "needs_review",
-            "description": "Submitted session with NULL score.",
+            "description": "Terminal session with NULL score.",
         })
         report = auditor._build_report()
-        assert report["submitted_score_null_count"] == 1
+        assert report["terminal_score_null_count"] == 1
 
     def test_synthetic_residue_detected(self):
         auditor = PostExamAuditor(exam_id=1)
@@ -370,7 +372,8 @@ class TestAuditorHappyPath:
         auditor = PostExamAuditor(exam_id=1)
         auditor.results["exam_summary"] = [{
             "exam_id": 1, "title": "Ujian Test", "total_sessions": 200,
-            "submitted_sessions": 200, "in_progress_sessions": 0,
+            "submitted_sessions": 200, "completed_sessions": 0,
+            "terminal_sessions": 200, "in_progress_sessions": 0,
             "abandoned_sessions": 0, "total_answers": 2000,
             "avg_score": 85.5, "min_score": 40.0, "max_score": 100.0,
         }]
@@ -379,9 +382,158 @@ class TestAuditorHappyPath:
         auditor.results["duplicate_answers"] = []
         auditor.results["final_submit_anomalies"] = []
         auditor.results["answers_after_submit"] = []
-        auditor.results["submitted_score_null"] = []
+        auditor.results["terminal_score_null"] = []
         auditor.results["ungraded_answers"] = []
         auditor.results["synthetic_residue"] = []
         report = auditor._build_report()
         assert report["data_safety_concern"] is False
         assert report["anomalies"] == []
+
+
+# ---------------------------------------------------------------------------
+# Read-only transaction pattern (source-level)
+# ---------------------------------------------------------------------------
+
+class TestReadOnlyTransactionPattern:
+    """Ensure script uses explicit read-only transaction, not AUTOCOMMIT."""
+
+    @pytest.fixture(autouse=False)
+    def source(self):
+        return Path("scripts/post_exam_audit_readonly.py").read_text(encoding="utf-8")
+
+    def test_no_autocommit(self, source):
+        assert "AUTOCOMMIT" not in source, "Script must not use AUTOCOMMIT isolation_level"
+
+    def test_begin_read_only(self, source):
+        assert "BEGIN READ ONLY" in source, "Script must use BEGIN READ ONLY"
+
+    def test_rollback(self, source):
+        assert "ROLLBACK" in source, "Script must use ROLLBACK in finally block"
+
+    def test_no_commit(self, source):
+        import re
+        # Allow COMMIT in comments/docstrings but not in runtime code
+        # Check that no conn.execute(text("COMMIT")) or similar pattern exists
+        for match in re.finditer(r'COMMIT', source.upper()):
+            start = match.start()
+            line_start = source.rfind('\n', 0, start) + 1
+            line_end = source.find('\n', start)
+            line = source[line_start:line_end].strip()
+            # If COMMIT appears in an execute() call, fail
+            if 'execute' in line.lower() and 'COMMIT' in line.upper():
+                assert False, f"Script must not execute COMMIT: {line}"
+
+    def test_engine_no_isolation_level_autocommit(self, source):
+        import re
+        pattern = r'isolation_level\s*=\s*["\']AUTOCOMMIT["\']'
+        assert not re.search(pattern, source, re.IGNORECASE), \
+            "Script must not set isolation_level='AUTOCOMMIT' on engine"
+
+    def test_dispose_called(self, source):
+        assert "engine.dispose()" in source, "Script must call engine.dispose()"
+
+    def test_read_only_before_run(self, source):
+        """BEGIN READ ONLY must appear before auditor.run()."""
+        begin_pos = source.find('"BEGIN READ ONLY"')
+        run_pos = source.find('auditor.run(')
+        assert begin_pos > 0, "BEGIN READ ONLY not found"
+        assert run_pos > 0, "auditor.run not found"
+        assert begin_pos < run_pos, "BEGIN READ ONLY must come before auditor.run"
+
+    def test_rollback_in_finally(self, source):
+        """ROLLBACK must be inside a finally block."""
+        import re
+        # Find all try/finally blocks
+        pattern = r'finally:\s*\n(?:.*\n)*?\s*conn\.execute\(text\(["\']ROLLBACK["\']\)\)'
+        assert re.search(pattern, source), "ROLLBACK must be in a finally block"
+
+
+# ---------------------------------------------------------------------------
+# Terminal status helper
+# ---------------------------------------------------------------------------
+
+class TestTerminalStatusHelper:
+    """Test _terminal_status_sql and _TERMINAL_STATUSES."""
+
+    def test_terminal_statuses_tuple(self):
+        assert "submitted" in _TERMINAL_STATUSES
+        assert "completed" in _TERMINAL_STATUSES
+        assert len(_TERMINAL_STATUSES) == 2
+
+    def test_terminal_status_sql_without_alias(self):
+        result = _terminal_status_sql()
+        assert result == "status IN ('submitted', 'completed')"
+
+    def test_terminal_status_sql_with_alias(self):
+        result = _terminal_status_sql("es")
+        assert result == "es.status IN ('submitted', 'completed')"
+
+    def test_terminal_status_sql_contains_both(self):
+        result = _terminal_status_sql()
+        assert "submitted" in result
+        assert "completed" in result
+
+
+# ---------------------------------------------------------------------------
+# Terminal status in key queries
+# ---------------------------------------------------------------------------
+
+class TestTerminalStatusInQueries:
+    """Key audit queries must cover submitted + completed (terminal statuses)."""
+
+    def test_answer_count_per_submitted_uses_terminal(self):
+        sql, _ = _q_answer_count_per_submitted(1)
+        assert "IN ('submitted', 'completed')" in sql
+
+    def test_sessions_zero_answers_uses_terminal(self):
+        sql, _ = _q_sessions_zero_answers(1)
+        assert "IN ('submitted', 'completed')" in sql
+
+    def test_final_submit_anomalies_uses_terminal(self):
+        sql, _ = _q_final_submit_anomalies(1)
+        assert "IN ('submitted', 'completed')" in sql
+
+    def test_answers_after_submit_uses_terminal(self):
+        sql, _ = _q_answers_after_submit(1)
+        assert "IN ('submitted', 'completed')" in sql
+
+    def test_submitted_score_null_uses_terminal(self):
+        sql, _ = _q_submitted_score_null(1)
+        assert "IN ('submitted', 'completed')" in sql
+
+    def test_ungraded_answers_uses_terminal(self):
+        sql, _ = _q_ungraded_answers(1)
+        assert "IN ('submitted', 'completed')" in sql
+
+    def test_score_distribution_uses_terminal(self):
+        sql, _ = _q_score_distribution(1)
+        assert "IN ('submitted', 'completed')" in sql
+
+    def test_exam_summary_has_completed_sessions(self):
+        sql, _ = _q_exam_summary(1)
+        assert "completed_sessions" in sql
+        assert "terminal_sessions" in sql
+        assert "IN ('submitted', 'completed')" in sql
+
+    def test_submitted_count_uses_terminal(self):
+        sql, _ = _q_submitted_count(1)
+        assert "IN ('submitted', 'completed')" in sql
+        assert "terminal_count" in sql
+
+    def test_in_progress_stuck_still_only_in_progress(self):
+        """In-progress check should NOT use terminal statuses."""
+        sql, _ = _q_in_progress_stuck(1)
+        assert "in_progress" in sql
+        assert "submitted" not in sql
+        assert "completed" not in sql
+
+    def test_exam_summary_preserves_submitted_count(self):
+        """Exam summary should still have submitted_sessions for backward compat."""
+        sql, _ = _q_exam_summary(1)
+        assert "submitted_sessions" in sql
+
+    def test_session_status_distribution_not_terminal(self):
+        """Status distribution should list all statuses, not filter terminal."""
+        sql, _ = _q_session_status_distribution(1)
+        assert "GROUP BY status" in sql
+        assert "IN ('submitted', 'completed')" not in sql

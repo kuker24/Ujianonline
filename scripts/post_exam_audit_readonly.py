@@ -18,7 +18,8 @@ Safety:
     - Rejects production URLs unless --allow-production-readonly is set
     - All queries are SELECT-only with LIMIT/bounds
     - Does not print raw answer_text, password_hash, or PII
-    - Uses read-only transaction mode
+    - Uses explicit BEGIN READ ONLY / ROLLBACK transaction
+    - Terminal audit covers both submitted + completed sessions
 """
 from __future__ import annotations
 
@@ -46,6 +47,10 @@ _STATUS_SUBMITTED = "submitted"
 _STATUS_IN_PROGRESS = "in_progress"
 _STATUS_ABANDONED = "abandoned"
 _STATUS_COMPLETED = "completed"
+
+# Terminal statuses — session yang sudah final (tidak bisa lanjut jawab)
+# submitted = siswa sudah final-submit, completed = admin/sistem sudah finalize
+_TERMINAL_STATUSES = (_STATUS_SUBMITTED, _STATUS_COMPLETED)
 
 # Production-like URL patterns
 _PRODUCTION_URL_PATTERNS = [
@@ -126,12 +131,19 @@ def _q_session_status_distribution(exam_id: int) -> Tuple[str, dict]:
     return sql, {"exam_id": exam_id}
 
 
+def _terminal_status_sql(alias: Optional[str] = None) -> str:
+    """Build SQL clause for terminal statuses (submitted + completed)."""
+    column = "status" if not alias else f"{alias}.status"
+    statuses = ", ".join(f"'{s}'" for s in _TERMINAL_STATUSES)
+    return f"{column} IN ({statuses})"
+
+
 def _q_submitted_count(exam_id: int) -> Tuple[str, dict]:
-    """Submitted session count."""
+    """Terminal session count (submitted + completed)."""
     sql = f"""
-        SELECT COUNT(*) AS submitted_count
+        SELECT COUNT(*) AS terminal_count
         FROM {_TABLE_EXAM_SESSIONS}
-        WHERE exam_id = :exam_id AND status = '{_STATUS_SUBMITTED}';
+        WHERE exam_id = :exam_id AND {_terminal_status_sql()};
     """
     return sql, {"exam_id": exam_id}
 
@@ -149,13 +161,13 @@ def _q_in_progress_stuck(exam_id: int, limit: int = 50) -> Tuple[str, dict]:
 
 
 def _q_answer_count_per_submitted(exam_id: int, limit: int = 50) -> Tuple[str, dict]:
-    """Answer count per submitted session, ordered lowest first."""
+    """Answer count per terminal session (submitted + completed), ordered lowest first."""
     sql = f"""
         SELECT es.id AS session_id, es.user_id, es.status,
                COUNT(a.id) AS answer_count
         FROM {_TABLE_EXAM_SESSIONS} es
         LEFT JOIN {_TABLE_ANSWERS} a ON a.session_id = es.id
-        WHERE es.exam_id = :exam_id AND es.status = '{_STATUS_SUBMITTED}'
+        WHERE es.exam_id = :exam_id AND {_terminal_status_sql("es")}
         GROUP BY es.id, es.user_id, es.status
         ORDER BY answer_count ASC
         LIMIT {limit};
@@ -175,14 +187,14 @@ def _q_question_count(exam_id: int) -> Tuple[str, dict]:
 
 
 def _q_sessions_zero_answers(exam_id: int, limit: int = 50) -> Tuple[str, dict]:
-    """Submitted sessions with zero answers — high risk anomaly."""
+    """Terminal sessions with zero answers — high risk anomaly."""
     sql = f"""
         SELECT es.id AS session_id, es.user_id, es.status,
                es.start_time, es.end_time, es.score
         FROM {_TABLE_EXAM_SESSIONS} es
         LEFT JOIN {_TABLE_ANSWERS} a ON a.session_id = es.id
         WHERE es.exam_id = :exam_id
-          AND es.status = '{_STATUS_SUBMITTED}'
+          AND {_terminal_status_sql("es")}
           AND a.id IS NULL
         LIMIT {limit};
     """
@@ -205,14 +217,14 @@ def _q_duplicate_answers(exam_id: int, limit: int = 50) -> Tuple[str, dict]:
 
 
 def _q_final_submit_anomalies(exam_id: int, limit: int = 50) -> Tuple[str, dict]:
-    """Sessions with final submit but missing end_time or timestamp mismatch."""
+    """Terminal sessions with missing end_time or timestamp mismatch."""
     sql = f"""
         SELECT es.id AS session_id, es.user_id,
                es.end_time AS session_end_time,
                MAX(a.answered_at) AS last_answer_time
         FROM {_TABLE_EXAM_SESSIONS} es
         JOIN {_TABLE_ANSWERS} a ON a.session_id = es.id
-        WHERE es.exam_id = :exam_id AND es.status = '{_STATUS_SUBMITTED}'
+        WHERE es.exam_id = :exam_id AND {_terminal_status_sql("es")}
         GROUP BY es.id, es.user_id, es.end_time
         HAVING es.end_time IS NULL
             OR MAX(a.answered_at) > es.end_time + INTERVAL '5 minutes'
@@ -222,13 +234,13 @@ def _q_final_submit_anomalies(exam_id: int, limit: int = 50) -> Tuple[str, dict]
 
 
 def _q_answers_after_submit(exam_id: int, limit: int = 50) -> Tuple[str, dict]:
-    """Answers recorded after final submit."""
+    """Answers recorded after terminal session end_time."""
     sql = f"""
         SELECT a.session_id, a.question_id, a.answered_at, es.end_time
         FROM {_TABLE_ANSWERS} a
         JOIN {_TABLE_EXAM_SESSIONS} es ON es.id = a.session_id
         WHERE es.exam_id = :exam_id
-          AND es.status = '{_STATUS_SUBMITTED}'
+          AND {_terminal_status_sql("es")}
           AND es.end_time IS NOT NULL
           AND a.answered_at > es.end_time
         LIMIT {limit};
@@ -237,12 +249,12 @@ def _q_answers_after_submit(exam_id: int, limit: int = 50) -> Tuple[str, dict]:
 
 
 def _q_submitted_score_null(exam_id: int, limit: int = 50) -> Tuple[str, dict]:
-    """Submitted sessions with NULL score — grading not complete."""
+    """Terminal sessions with NULL score — grading not complete."""
     sql = f"""
         SELECT id, user_id, status, score, end_time, violation_count
         FROM {_TABLE_EXAM_SESSIONS}
         WHERE exam_id = :exam_id
-          AND status = '{_STATUS_SUBMITTED}'
+          AND {_terminal_status_sql()}
           AND score IS NULL
         LIMIT {limit};
     """
@@ -250,14 +262,14 @@ def _q_submitted_score_null(exam_id: int, limit: int = 50) -> Tuple[str, dict]:
 
 
 def _q_ungraded_answers(exam_id: int, limit: int = 50) -> Tuple[str, dict]:
-    """Submitted sessions with ungraded answers."""
+    """Terminal sessions with ungraded answers."""
     sql = f"""
         SELECT es.id AS session_id, es.status, es.score,
                COUNT(CASE WHEN a.is_correct IS NULL THEN 1 END) AS ungraded_answers,
                COUNT(a.id) AS total_answers
         FROM {_TABLE_EXAM_SESSIONS} es
         JOIN {_TABLE_ANSWERS} a ON a.session_id = es.id
-        WHERE es.exam_id = :exam_id AND es.status = '{_STATUS_SUBMITTED}'
+        WHERE es.exam_id = :exam_id AND {_terminal_status_sql("es")}
         GROUP BY es.id, es.status, es.score
         HAVING COUNT(CASE WHEN a.is_correct IS NULL THEN 1 END) > 0
         LIMIT {limit};
@@ -327,6 +339,8 @@ def _q_exam_summary(exam_id: int) -> Tuple[str, dict]:
             e.is_published, e.is_deleted, e.has_ever_had_results,
             COUNT(DISTINCT es.id) AS total_sessions,
             COUNT(DISTINCT CASE WHEN es.status = '{_STATUS_SUBMITTED}' THEN es.id END) AS submitted_sessions,
+            COUNT(DISTINCT CASE WHEN es.status = '{_STATUS_COMPLETED}' THEN es.id END) AS completed_sessions,
+            COUNT(DISTINCT CASE WHEN {_terminal_status_sql('es')} THEN es.id END) AS terminal_sessions,
             COUNT(DISTINCT CASE WHEN es.status = '{_STATUS_IN_PROGRESS}' THEN es.id END) AS in_progress_sessions,
             COUNT(DISTINCT CASE WHEN es.status = '{_STATUS_ABANDONED}' THEN es.id END) AS abandoned_sessions,
             COUNT(DISTINCT a.id) AS total_answers,
@@ -344,7 +358,7 @@ def _q_exam_summary(exam_id: int) -> Tuple[str, dict]:
 
 
 def _q_score_distribution(exam_id: int) -> Tuple[str, dict]:
-    """Score distribution bands."""
+    """Score distribution bands (terminal sessions only)."""
     sql = f"""
         SELECT
             CASE
@@ -357,7 +371,7 @@ def _q_score_distribution(exam_id: int) -> Tuple[str, dict]:
             COUNT(*) AS student_count
         FROM {_TABLE_EXAM_SESSIONS}
         WHERE exam_id = :exam_id
-          AND status = '{_STATUS_SUBMITTED}'
+          AND {_terminal_status_sql()}
           AND score IS NOT NULL
         GROUP BY grade_band
         ORDER BY grade_band;
@@ -414,18 +428,13 @@ class PostExamAuditor:
             })
             return self._build_report()
 
-        exam_info = exam_rows[0]
-        total_sessions = int(exam_info.get("total_sessions", 0))
-        submitted_sessions = int(exam_info.get("submitted_sessions", 0))
-        in_progress_sessions = int(exam_info.get("in_progress_sessions", 0))
-
         # 2. Session status distribution
         sql, params = _q_session_status_distribution(exam_id)
         self._run_query(conn, "session_status_distribution", sql, params)
 
-        # 3. Submitted count
+        # 3. Terminal count (submitted + completed)
         sql, params = _q_submitted_count(exam_id)
-        self._run_query(conn, "submitted_count", sql, params)
+        self._run_query(conn, "terminal_count", sql, params)
 
         # 4. In-progress / stuck
         sql, params = _q_in_progress_stuck(exam_id)
@@ -440,23 +449,23 @@ class PostExamAuditor:
         sql, params = _q_question_count(exam_id)
         self._run_query(conn, "question_count", sql, params)
 
-        # 6. Answer count per submitted session
+        # 6. Answer count per terminal session (submitted + completed)
         sql, params = _q_answer_count_per_submitted(exam_id)
-        answer_count_rows = self._run_query(conn, "answer_count_per_submitted", sql, params)
+        answer_count_rows = self._run_query(conn, "answer_count_per_terminal", sql, params)
         zero_answer_sessions = [r for r in answer_count_rows if int(r.get("answer_count", 0)) == 0]
         if zero_answer_sessions:
             self.anomalies.append({
                 "severity": "high_risk",
-                "description": f"{len(zero_answer_sessions)} submitted session(s) with zero answers.",
+                "description": f"{len(zero_answer_sessions)} terminal session(s) with zero answers.",
             })
 
-        # 7. Sessions with zero answers (explicit check)
+        # 7. Terminal sessions with zero answers (explicit check)
         sql, params = _q_sessions_zero_answers(exam_id)
         zero_rows = self._run_query(conn, "sessions_zero_answers", sql, params)
         if zero_rows and not zero_answer_sessions:
             self.anomalies.append({
                 "severity": "high_risk",
-                "description": f"{len(zero_rows)} submitted session(s) with zero answers (explicit check).",
+                "description": f"{len(zero_rows)} terminal session(s) with zero answers (explicit check).",
             })
 
         # 8. Duplicate answers
@@ -486,22 +495,22 @@ class PostExamAuditor:
                 "description": f"{len(after_rows)} answer(s) recorded after final submit.",
             })
 
-        # 11. Submitted but score NULL
+        # 11. Terminal sessions with score NULL
         sql, params = _q_submitted_score_null(exam_id)
-        score_null_rows = self._run_query(conn, "submitted_score_null", sql, params)
+        score_null_rows = self._run_query(conn, "terminal_score_null", sql, params)
         if score_null_rows:
             self.anomalies.append({
                 "severity": "needs_review",
-                "description": f"{len(score_null_rows)} submitted session(s) with NULL score.",
+                "description": f"{len(score_null_rows)} terminal session(s) with NULL score.",
             })
 
-        # 12. Ungraded answers
+        # 12. Ungraded answers in terminal sessions
         sql, params = _q_ungraded_answers(exam_id)
         ungraded_rows = self._run_query(conn, "ungraded_answers", sql, params)
         if ungraded_rows:
             self.anomalies.append({
                 "severity": "needs_review",
-                "description": f"{len(ungraded_rows)} session(s) with ungraded answers.",
+                "description": f"{len(ungraded_rows)} terminal session(s) with ungraded answers.",
             })
 
         # 13. Violation log aggregate
@@ -548,14 +557,14 @@ class PostExamAuditor:
             },
             "exam_summary": self.results.get("exam_summary", []),
             "session_status_distribution": self.results.get("session_status_distribution", []),
-            "submitted_count": self.results.get("submitted_count", []),
+            "terminal_count": self.results.get("terminal_count", []),
             "in_progress_stuck_count": len(self.results.get("in_progress_stuck", [])),
             "question_count": self.results.get("question_count", []),
             "sessions_zero_answers_count": len(self.results.get("sessions_zero_answers", [])),
             "duplicate_answers_count": len(self.results.get("duplicate_answers", [])),
             "final_submit_anomalies_count": len(self.results.get("final_submit_anomalies", [])),
             "answers_after_submit_count": len(self.results.get("answers_after_submit", [])),
-            "submitted_score_null_count": len(self.results.get("submitted_score_null", [])),
+            "terminal_score_null_count": len(self.results.get("terminal_score_null", [])),
             "ungraded_answers_count": len(self.results.get("ungraded_answers", [])),
             "violation_log_aggregate": self.results.get("violation_log_aggregate", []),
             "security_events_aggregate": self.results.get("security_events_aggregate", []),
@@ -589,6 +598,8 @@ def _print_summary(report: Dict[str, Any]) -> None:
     print("-" * 40)
     print(f"Total Sessions:       {exam_info.get('total_sessions', 0)}")
     print(f"Submitted:            {exam_info.get('submitted_sessions', 0)}")
+    print(f"Completed:            {exam_info.get('completed_sessions', 0)}")
+    print(f"Terminal (sum):       {exam_info.get('terminal_sessions', exam_info.get('submitted_sessions', 0))}")
     print(f"In Progress:          {exam_info.get('in_progress_sessions', 0)}")
     print(f"Abandoned:            {exam_info.get('abandoned_sessions', 0)}")
     print(f"Total Answers:        {exam_info.get('total_answers', 0)}")
@@ -604,7 +615,7 @@ def _print_summary(report: Dict[str, Any]) -> None:
     print(f"Duplicate Answers:    {report.get('duplicate_answers_count', 0)}")
     print(f"Submit Anomalies:     {report.get('final_submit_anomalies_count', 0)}")
     print(f"Answers After Submit: {report.get('answers_after_submit_count', 0)}")
-    print(f"Score NULL:           {report.get('submitted_score_null_count', 0)}")
+    print(f"Terminal Score NULL:  {report.get('terminal_score_null_count', 0)}")
     print(f"Ungraded Answers:     {report.get('ungraded_answers_count', 0)}")
     print(f"Synthetic Residue:    {report.get('synthetic_residue_count', 0)}")
     print()
@@ -666,25 +677,31 @@ def main(argv: Optional[List[str]] = None) -> int:
         print("ERROR: sqlalchemy is required. pip install sqlalchemy psycopg2-binary")
         return 1
 
-    # Use autocommit read-only transaction
+    # Explicit read-only transaction — no write risk
     engine = create_engine(
         database_url,
-        isolation_level="AUTOCOMMIT",
         pool_pre_ping=True,
     )
 
     auditor = PostExamAuditor(exam_id=args.exam_id, verbose=args.verbose)
 
+    report = None
     try:
         with engine.connect() as conn:
-            # Set transaction read-only
-            conn.execute(text("SET TRANSACTION READ ONLY"))
-            report = auditor.run(conn)
+            conn.execute(text("BEGIN READ ONLY"))
+            try:
+                report = auditor.run(conn)
+            finally:
+                conn.execute(text("ROLLBACK"))
     except Exception as exc:
         print(f"ERROR during audit: {exc}")
         return 1
     finally:
         engine.dispose()
+
+    if report is None:
+        print("ERROR: audit did not produce a report.")
+        return 1
 
     _print_summary(report)
 
