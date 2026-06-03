@@ -245,3 +245,67 @@ Phase 5 remains blocked until all are true:
 - Answer consistency is valid.
 - No answer loss indication.
 - Hybrid10 600 503 root cause is understood or mitigated.
+
+## Superseding Execution Evidence — Phase 4.3.2F Production-Live Direct Validation (2026-06-04)
+
+Operator explicitly approved controlled production-live direct-mode validation after a fresh backup.
+See full sanitized report:
+
+```text
+docs/phase-4.3.2f-fresh-backup-production-live-validation-20260604.md
+```
+
+Fresh backup gate:
+
+| Item | Result |
+|---|---|
+| Fresh backup | `backup_20260604_005915_pre_phase432f.sql.gz` |
+| Timestamp | 2026-06-04 00:59:20 WIB |
+| Size | 11,892,705 bytes |
+| Integrity | `gzip -t`: pass |
+| Backup committed/exported | no |
+
+Production preflight:
+
+| Check | Result |
+|---|---:|
+| Active published exam windows | 0 |
+| In-progress sessions before synthetic data | 0 |
+| Safe-mode direct/off | pass |
+| API/DB/PgBouncer/Redis/Nginx health | healthy |
+
+Direct-mode execution summary:
+
+| Tier | Requests | Failures | Status | Answer p95 | Answer p99 | Answer max | Final submit | Consistency |
+|---|---:|---:|---|---:|---:|---:|---|---|
+| direct-100 | 10,224 | 0 | all 200 | 492.22ms | 1,903.34ms | 5,109.23ms | 2/2 success | valid |
+| direct-300 | 10,999 | 0 | all 200 | 18,498.30ms | 28,242.70ms | 53,663.94ms | 6/6 success | valid |
+| direct-600 | 11,033 | 0 | all 200 | 45,344.45ms | 70,218.83ms | 164,139.81ms | 6/6 success | valid |
+
+DB/Redis observation:
+
+| Tier | Load1 max | DB active max | DB idle-tx max | DB active >5s max | Redis rejected | Redis evicted |
+|---|---:|---:|---:|---:|---:|---:|
+| direct-100 | 10.63 | 12 | 16 | 0 | 0 | 0 |
+| direct-300 | 11.93 | 38 | 57 | 0 | 0 | 0 |
+| direct-600 | 57.56 | 143 | 138 | 1 | 0 | 0 |
+
+Cleanup:
+
+- Synthetic users/sessions/exam/questions/options/answers were deleted by exact prefix.
+- Remaining synthetic users: 0.
+- Remaining synthetic exams: 0.
+- Global in-progress sessions after cleanup: 0.
+- Temporary CSV/summary JSON/token artifacts under `/tmp` were deleted after sanitized extraction.
+
+Updated Phase 5 decision:
+
+```text
+NO-GO / blocked
+```
+
+Reason:
+
+- Functional/data integrity passed: no HTTP failures, final-submit samples succeeded, and answer consistency was valid through direct-600.
+- Performance confidence did **not** pass: direct-300 and direct-600 answer-write latency and DB/load pressure were too high for rollout confidence.
+- Do not start Phase 5 or enable hybrid/queue/runtime-buffer until direct answer-write latency is remediated and revalidated.
