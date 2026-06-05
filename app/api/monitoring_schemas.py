@@ -90,7 +90,7 @@ class RestartSystemRequest(BaseModel):
     reason: Optional[str] = None
     restart_buffer_minutes: int = 30
     full_restart: bool = True
-    include_data_services: bool = True
+    include_data_services: bool = False
     restart_timeout_seconds: int = 300
     dry_run: bool = False
 

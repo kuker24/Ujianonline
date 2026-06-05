@@ -860,51 +860,70 @@
         async function restartSystemSafelyFromOps() {
             if (isTeacher || opsRestartInFlight || opsAutoControlInFlight || opsAutoHealRunInFlight) return;
             const restartBackendVisual = getRestartBackendVisual(opsSummaryState);
-
-            const confirmed = await showConfirm(
-                restartBackendVisual.confirmBody,
-                {
-                    title: restartBackendVisual.confirmTitle,
-                    type: 'warning',
-                    confirmText: restartBackendVisual.confirmText,
-                    cancelText: 'Batal'
-                }
-            );
-            if (!confirmed) return;
+            const reason = restartBackendVisual.fullRestartAvailable
+                ? 'Manual FULL restart antar sesi dari Monitoring Inti Sistem'
+                : 'Manual runtime reset antar sesi dari Monitoring Inti Sistem';
+            const restartBufferMinutes = 30;
+            const fullRestart = restartBackendVisual.fullRestartAvailable;
+            // Default antar sesi: recycle app plane only. DB/Redis/PgBouncer require a separate explicit ops decision.
+            const includeDataServices = false;
+            const restartTimeoutSeconds = fullRestart ? 300 : 120;
 
             opsRestartInFlight = true;
             try {
-                let result;
-                if (api && typeof api.restartSystemSafely === 'function') {
-                    result = await api.restartSystemSafely(
-                        restartBackendVisual.fullRestartAvailable
-                            ? 'Manual FULL restart antar sesi dari Monitoring Inti Sistem'
-                            : 'Manual runtime reset antar sesi dari Monitoring Inti Sistem',
-                        30,
-                        false,
-                        restartBackendVisual.fullRestartAvailable,
-                        restartBackendVisual.fullRestartAvailable,
-                        restartBackendVisual.fullRestartAvailable ? 300 : 120
-                    );
-                } else {
-                    result = await apiRequest('/api/monitoring/system/restart-safe', 'POST', {
-                        reason: restartBackendVisual.fullRestartAvailable
-                            ? 'Manual FULL restart antar sesi dari Monitoring Inti Sistem'
-                            : 'Manual runtime reset antar sesi dari Monitoring Inti Sistem',
-                        restart_buffer_minutes: 30,
-                        full_restart: restartBackendVisual.fullRestartAvailable,
-                        include_data_services: restartBackendVisual.fullRestartAvailable,
-                        restart_timeout_seconds: restartBackendVisual.fullRestartAvailable ? 300 : 120,
-                        dry_run: false
+                const runRestartRequest = async (dryRun) => {
+                    if (api && typeof api.restartSystemSafely === 'function') {
+                        return api.restartSystemSafely(
+                            reason,
+                            restartBufferMinutes,
+                            dryRun,
+                            fullRestart,
+                            includeDataServices,
+                            restartTimeoutSeconds
+                        );
+                    }
+                    return apiRequest('/api/monitoring/system/restart-safe', 'POST', {
+                        reason,
+                        restart_buffer_minutes: restartBufferMinutes,
+                        full_restart: fullRestart,
+                        include_data_services: includeDataServices,
+                        restart_timeout_seconds: restartTimeoutSeconds,
+                        dry_run: !!dryRun
                     });
-                }
+                };
+
+                const preflight = await runRestartRequest(true);
+                const checks = preflight?.checks || {};
+                const warnings = Array.isArray(preflight?.warnings) ? preflight.warnings : [];
+                const preflightLines = [
+                    `Sesi aktif: ${checks.active_sessions_count ?? 0}`,
+                    `Ujian berjalan: ${checks.running_exams_count ?? 0}`,
+                    `Ujian dalam ${checks.buffer_minutes ?? restartBufferMinutes} menit: ${checks.upcoming_exams_count ?? 0}`,
+                    `Ujian <= ${checks.minimum_gap_minutes ?? 5} menit: ${checks.imminent_exams_count ?? 0}`,
+                    `Next exam: ${checks.next_exam_start ? formatWIB(checks.next_exam_start) : '-'}`,
+                    `Restart DB/Redis/PgBouncer: ${includeDataServices ? 'YA' : 'TIDAK'}`
+                ];
+                const warningText = warnings.length ? `\n\nPeringatan:\n- ${warnings.join('\n- ')}` : '';
+
+                const confirmed = await showConfirm(
+                    `${restartBackendVisual.confirmBody}\n\nPreflight aman:\n- ${preflightLines.join('\n- ')}${warningText}`,
+                    {
+                        title: restartBackendVisual.confirmTitle,
+                        type: warnings.length ? 'warning' : 'info',
+                        confirmText: restartBackendVisual.confirmText,
+                        cancelText: 'Batal'
+                    }
+                );
+                if (!confirmed) return;
+
+                const result = await runRestartRequest(false);
                 await loadRuntimePolicy();
                 startMainRefreshLoop();
                 await loadOpsSummary(true);
                 const restarted = result?.full_restart?.services_restarted || [];
                 if (restartBackendVisual.fullRestartAvailable) {
                     showAlert(
-                        `Restart FULL selesai. Redis key dibersihkan: ${result?.redis_deleted_keys || 0}. Service di-restart: ${restarted.length}`,
+                        `Restart FULL selesai. Redis key dibersihkan: ${result?.redis_deleted_keys || 0}. Service app-plane di-restart: ${restarted.length}`,
                         'success'
                     );
                 } else {

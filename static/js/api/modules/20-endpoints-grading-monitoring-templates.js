@@ -155,7 +155,7 @@
         restartBufferMinutes = 30,
         dryRun = false,
         fullRestart = true,
-        includeDataServices = true,
+        includeDataServices = false,
         restartTimeoutSeconds = 300
     ) {
         return this.request('POST', '/monitoring/system/restart-safe', {

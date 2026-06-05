@@ -1852,11 +1852,17 @@ async def restart_system_safely(
     Guardrails:
     - No active in-progress sessions
     - No currently running exams
-    - No near-future exams within restart buffer window
+    - No imminent exams within the minimum restart gap
+
+    Exams within the operator buffer window are reported as warnings instead of
+    hard-blocking. This keeps the inter-session refresh usable for short gaps
+    (for example 20-30 minutes) while still blocking dangerously close starts.
     """
     now = datetime.now(timezone.utc)
     buffer_minutes = max(5, min(int(payload.restart_buffer_minutes or 30), 180))
     buffer_until = now + timedelta(minutes=buffer_minutes)
+    minimum_gap_minutes = 5
+    minimum_gap_until = now + timedelta(minutes=minimum_gap_minutes)
     restart_lock_acquired = False
 
     if not payload.dry_run:
@@ -1909,11 +1915,39 @@ async def restart_system_safely(
             ).scalar()
             or 0
         )
+        imminent_exams_count = int(
+            (
+                await db.execute(
+                    select(func.count(Exam.id)).where(
+                        Exam.is_deleted == False,
+                        Exam.is_published == True,
+                        Exam.start_time > now,
+                        Exam.start_time <= minimum_gap_until,
+                    )
+                )
+            ).scalar()
+            or 0
+        )
+        next_exam_start = (
+            await db.execute(
+                select(func.min(Exam.start_time)).where(
+                    Exam.is_deleted == False,
+                    Exam.is_published == True,
+                    Exam.start_time > now,
+                )
+            )
+        ).scalar()
+        warnings: List[str] = []
+        if upcoming_exams_count > 0:
+            warnings.append(
+                "Ada ujian terjadwal dalam buffer operator; restart tetap boleh "
+                "karena tidak ada sesi aktif, tetapi pantau health setelah restart."
+            )
 
         guard_ok = (
             active_sessions_count == 0
             and running_exams_count == 0
-            and upcoming_exams_count == 0
+            and imminent_exams_count == 0
         )
 
         if not guard_ok:
@@ -1923,12 +1957,16 @@ async def restart_system_safely(
                     "error": "RESTART_GUARD_BLOCKED",
                     "message": (
                         "Restart diblokir karena masih ada sesi aktif/ujian berjalan atau "
-                        "ujian terjadwal dalam waktu dekat."
+                        "ujian akan mulai dalam batas minimum aman."
                     ),
                     "active_sessions_count": active_sessions_count,
                     "running_exams_count": running_exams_count,
                     "upcoming_exams_count": upcoming_exams_count,
+                    "imminent_exams_count": imminent_exams_count,
                     "buffer_minutes": buffer_minutes,
+                    "minimum_gap_minutes": minimum_gap_minutes,
+                    "next_exam_start": next_exam_start.isoformat() if next_exam_start else None,
+                    "warnings": warnings,
                 },
             )
 
@@ -1972,8 +2010,12 @@ async def restart_system_safely(
                     "active_sessions_count": active_sessions_count,
                     "running_exams_count": running_exams_count,
                     "upcoming_exams_count": upcoming_exams_count,
+                    "imminent_exams_count": imminent_exams_count,
                     "buffer_minutes": buffer_minutes,
+                    "minimum_gap_minutes": minimum_gap_minutes,
+                    "next_exam_start": next_exam_start.isoformat() if next_exam_start else None,
                 },
+                "warnings": warnings,
                 "cooldown": cooldown_state,
                 "redis_patterns": redis_patterns,
                 "restart_plan": restart_plan if payload.full_restart else [],
@@ -2049,6 +2091,16 @@ async def restart_system_safely(
             if payload.full_restart
             else cooldown_state,
             "redis_deleted_keys": deleted_keys,
+            "warnings": warnings,
+            "checks": {
+                "active_sessions_count": active_sessions_count,
+                "running_exams_count": running_exams_count,
+                "upcoming_exams_count": upcoming_exams_count,
+                "imminent_exams_count": imminent_exams_count,
+                "buffer_minutes": buffer_minutes,
+                "minimum_gap_minutes": minimum_gap_minutes,
+                "next_exam_start": next_exam_start.isoformat() if next_exam_start else None,
+            },
             "full_restart": full_restart_result if payload.full_restart else None,
             "resource_mode": await get_resource_mode_state(force_refresh=True),
             "policy": await get_runtime_policy(force_refresh=True),
