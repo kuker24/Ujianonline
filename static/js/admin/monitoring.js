@@ -145,7 +145,7 @@
             const fullRestartAvailable = !!restartBackend.full_restart_available;
             return {
                 fullRestartAvailable,
-                label: fullRestartAvailable ? 'Restart Full Antar Sesi' : 'Reset Runtime Antar Sesi',
+                label: fullRestartAvailable ? 'Refresh Server Antar Sesi' : 'Reset Runtime Antar Sesi',
                 pendingLabel: fullRestartAvailable ? 'Restarting Full...' : 'Resetting Runtime...',
                 confirmTitle: fullRestartAvailable ? 'Restart Full Antar Sesi' : 'Reset Runtime Antar Sesi',
                 confirmText: fullRestartAvailable ? 'Ya, Restart' : 'Ya, Reset',
@@ -386,6 +386,50 @@
                 minute: '2-digit',
                 second: '2-digit'
             });
+        }
+
+        function renderViolationPipelineHealth(payload) {
+            const detailEl = document.getElementById('ops-violation-pipeline-detail');
+            if (!detailEl) return;
+            if (!payload || typeof payload !== 'object') {
+                detailEl.textContent = 'Status pipeline pelanggaran belum tersedia.';
+                return;
+            }
+            const warnings = Array.isArray(payload.warnings) ? payload.warnings : [];
+            const warningHtml = warnings.length > 0
+                ? `<div><strong>Peringatan:</strong> ${escapeHtml(warnings.slice(0, 3).join(' • '))}</div>`
+                : '<div><strong>Peringatan:</strong> Tidak ada.</div>';
+            const statusLabel = payload.worker_alive ? 'OK' : 'PERLU CEK';
+            const apkRejects = Number(payload.apk_token_rejected_last_24h || 0);
+            const violationEvents = Number(payload.db_events_last_24h || 0);
+            const issueHint = apkRejects > 0 && violationEvents === 0
+                ? 'APK token/signature issue terdeteksi; ini dipisah dari pelanggaran ujian.'
+                : 'Pelanggaran ujian dihitung dari event violation_*.';
+            detailEl.innerHTML = `
+                <div><strong>Violation Pipeline:</strong> ${escapeHtml(statusLabel)} • Mode ${escapeHtml(String(payload.mode || '-').toUpperCase())}</div>
+                <div><strong>DB violation 24j:</strong> ${escapeHtml(String(violationEvents))} • <strong>15m:</strong> ${escapeHtml(String(payload.db_events_last_15m || 0))} • <strong>Redis pending/deadletter:</strong> ${escapeHtml(String(payload.redis_pending || 0))}/${escapeHtml(String(payload.redis_deadletter || 0))}</div>
+                <div><strong>Security events 24j:</strong> ${escapeHtml(String(payload.security_events_last_24h || 0))} • <strong>APK token reject:</strong> ${escapeHtml(String(apkRejects))}</div>
+                <div><strong>Sesi violation/suspicious 24j:</strong> ${escapeHtml(String(payload.sessions_with_violation_count_last_24h || 0))}/${escapeHtml(String(payload.suspicious_sessions_last_24h || 0))} • <strong>Last violation:</strong> ${escapeHtml(formatOpsTime(payload.last_violation_event_at))} • <strong>Last security:</strong> ${escapeHtml(formatOpsTime(payload.last_security_event_at))}</div>
+                <div>${escapeHtml(issueHint)}</div>
+                ${warningHtml}
+            `;
+        }
+
+        async function loadViolationPipelineHealth() {
+            const detailEl = document.getElementById('ops-violation-pipeline-detail');
+            if (!detailEl || isTeacher) return;
+            try {
+                let payload;
+                if (api && typeof api.getViolationPipelineHealth === 'function') {
+                    payload = await api.getViolationPipelineHealth();
+                } else {
+                    payload = await apiRequest('/api/monitoring/violation-pipeline-health', 'GET');
+                }
+                renderViolationPipelineHealth(payload);
+            } catch (error) {
+                const message = error?.message || String(error);
+                detailEl.textContent = `Gagal memuat violation pipeline health: ${message}`;
+            }
         }
 
         function renderOpsSummary(summary) {
@@ -643,6 +687,7 @@
                     summary = await apiRequest('/api/monitoring/system/ops-summary', 'GET');
                 }
                 renderOpsSummary(summary);
+                await loadViolationPipelineHealth();
             } catch (error) {
                 const message = error?.message || String(error);
                 if (messageEl) {

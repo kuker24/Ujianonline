@@ -989,6 +989,10 @@ class ApiClient {
         return this.request('GET', '/monitoring/system/ops-summary');
     }
 
+    async getViolationPipelineHealth() {
+        return this.request('GET', '/monitoring/violation-pipeline-health');
+    }
+
     async setDegradeMode(enabled, reason = 'Manual toggle from monitoring', ttlMinutes = 120) {
         return this.request('POST', '/monitoring/system/degrade-mode', {
             enabled: !!enabled,

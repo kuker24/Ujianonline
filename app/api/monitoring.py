@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, select, text
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,6 +21,7 @@ from app.models.user import User
 from app.models.exam import Exam
 from app.models.question import Question
 from app.models.session import Answer, ExamSession, ExamLog
+from app.models.security_event import SecurityEvent
 from app.api.monitoring_restart import (
     _build_full_restart_services,
     _delete_redis_keys_by_patterns,
@@ -1533,6 +1534,157 @@ async def get_system_ops_summary(
         }
         return payload
     return summary
+
+@router.get("/violation-pipeline-health")
+async def get_violation_pipeline_health(
+    current_user: User = Depends(get_current_active_admin),
+    db: AsyncSession = Depends(get_db_read),
+):
+    """Return sanitized aggregate health for the violation telemetry pipeline."""
+    _ = current_user
+    # Live PostgreSQL timestamp columns for exam/security logs are stored as
+    # TIMESTAMP WITHOUT TIME ZONE, so use naive UTC cutoffs for DB filters.
+    now = datetime.utcnow()
+    since_15m = now - timedelta(minutes=15)
+    since_24h = now - timedelta(hours=24)
+
+    redis_pending = 0
+    redis_deadletter = 0
+    redis_ok = True
+    warnings: List[str] = []
+
+    try:
+        redis = await get_redis()
+        redis_pending = int(await redis.llen("runtime:violation:pending") or 0)
+        redis_deadletter = int(await redis.llen("runtime:violation:deadletter") or 0)
+    except Exception as exc:
+        redis_ok = False
+        warnings.append("Redis violation queue tidak dapat dibaca")
+        logger.warning("Violation pipeline health Redis read failed: %s", str(exc))
+
+    db_events_last_15m = int(
+        (
+            await db.execute(
+                select(func.count(ExamLog.id)).where(
+                    ExamLog.created_at >= since_15m,
+                    ExamLog.event_type.ilike("violation_%"),
+                )
+            )
+        ).scalar()
+        or 0
+    )
+    db_events_last_24h = int(
+        (
+            await db.execute(
+                select(func.count(ExamLog.id)).where(
+                    ExamLog.created_at >= since_24h,
+                    ExamLog.event_type.ilike("violation_%"),
+                )
+            )
+        ).scalar()
+        or 0
+    )
+    last_violation_event_at = (
+        await db.execute(
+            select(func.max(ExamLog.created_at)).where(ExamLog.event_type.ilike("violation_%"))
+        )
+    ).scalar()
+
+    security_events_last_24h = int(
+        (
+            await db.execute(
+                select(func.count(SecurityEvent.id)).where(SecurityEvent.timestamp >= since_24h)
+            )
+        ).scalar()
+        or 0
+    )
+    apk_token_rejected_last_24h = int(
+        (
+            await db.execute(
+                select(func.count(SecurityEvent.id)).where(
+                    SecurityEvent.timestamp >= since_24h,
+                    SecurityEvent.event_type == "APK_TOKEN_REJECTED",
+                )
+            )
+        ).scalar()
+        or 0
+    )
+    last_security_event_at = (
+        await db.execute(select(func.max(SecurityEvent.timestamp)))
+    ).scalar()
+
+    sessions_with_violation_count_last_24h = int(
+        (
+            await db.execute(
+                select(func.count(ExamSession.id)).where(
+                    ExamSession.start_time >= since_24h,
+                    func.coalesce(ExamSession.violation_count, 0) > 0,
+                )
+            )
+        ).scalar()
+        or 0
+    )
+    suspicious_column = getattr(ExamSession, "is_suspicious", None)
+    if suspicious_column is not None:
+        suspicious_sessions_last_24h = int(
+            (
+                await db.execute(
+                    select(func.count(ExamSession.id)).where(
+                        ExamSession.start_time >= since_24h,
+                        suspicious_column == True,
+                    )
+                )
+            ).scalar()
+            or 0
+        )
+    else:
+        suspicious_sessions_last_24h = int(
+            (
+                await db.execute(
+                    text(
+                        "select count(*) from exam_sessions "
+                        "where start_time >= :since_24h and is_suspicious = true"
+                    ),
+                    {"since_24h": since_24h},
+                )
+            ).scalar()
+            or 0
+        )
+
+    if redis_pending > 0:
+        warnings.append("Masih ada violation event pending di Redis")
+    if redis_deadletter > 0:
+        warnings.append("Ada violation event deadletter yang perlu diaudit")
+    if apk_token_rejected_last_24h > 0 and db_events_last_24h == 0:
+        warnings.append(
+            "Ada APK token/signature reject, tetapi belum ada violation ujian tercatat"
+        )
+    if settings.violation_async_enabled and not redis_ok:
+        warnings.append("Async violation aktif tetapi Redis tidak sehat/terbaca")
+
+    return {
+        "enabled": bool(settings.violation_async_enabled),
+        "mode": "async" if settings.violation_async_enabled else "sync",
+        "redis_pending": redis_pending,
+        "redis_deadletter": redis_deadletter,
+        "db_events_last_15m": db_events_last_15m,
+        "db_events_last_24h": db_events_last_24h,
+        "security_events_last_24h": security_events_last_24h,
+        "apk_token_rejected_last_24h": apk_token_rejected_last_24h,
+        "sessions_with_violation_count_last_24h": sessions_with_violation_count_last_24h,
+        "suspicious_sessions_last_24h": suspicious_sessions_last_24h,
+        "last_violation_event_at": (
+            _ensure_aware_datetime(last_violation_event_at).isoformat()
+            if last_violation_event_at else None
+        ),
+        "last_security_event_at": (
+            _ensure_aware_datetime(last_security_event_at).isoformat()
+            if last_security_event_at else None
+        ),
+        "worker_alive": bool(settings.violation_async_enabled and redis_ok),
+        "warnings": warnings,
+    }
+
 
 @router.get("/system/metrics")
 async def get_system_metrics(
