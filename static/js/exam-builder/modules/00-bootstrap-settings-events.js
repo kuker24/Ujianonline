@@ -212,7 +212,7 @@ window.addEventListener('unhandledrejection', (event) => {
 });
 
 // Check auth
-if (!auth.requireAuth(['admin', 'teacher'])) { }
+if (!auth.requireAuth(['admin', 'developer', 'teacher'])) { }
 
 const DEFAULT_BUILDER_SETTINGS = Object.freeze({
     default_mc_key_only: true,

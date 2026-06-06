@@ -350,7 +350,6 @@ class CheatDetectionAlarm {
     }
 }
 
-
 /* ===== Module: 10-alarm-bootstrap.js ===== */
 
 // Initialize on exam pages

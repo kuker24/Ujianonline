@@ -57,11 +57,8 @@ class DashboardWidgets {
     }
 }
 
-
 /* ===== Module: 10-dashboard-widgets-bootstrap.js ===== */
 
 document.addEventListener('DOMContentLoaded', () => {
     new DashboardWidgets();
 });
-
-

@@ -280,13 +280,9 @@ class UserManagement {
     }
 }
 
-
-
 /* ===== Module: 10-user-management-bootstrap.js ===== */
 
 // Initializer
 document.addEventListener('DOMContentLoaded', () => {
     window.userManagement = new UserManagement();
 });
-
-

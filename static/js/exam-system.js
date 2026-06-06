@@ -572,7 +572,6 @@ if ('serviceWorker' in navigator) {
 let storageManager = null;
 let syncWorker = null;
 
-
 /* ===== Module: 10-exam-core-security-websocket.js ===== */
 
 class ExamSystem {
@@ -1726,7 +1725,6 @@ class ExamSystem {
             this.wsHeartbeatInterval = null;
         }
     }
-
 
 /* ===== Module: 20-exam-qa-submit-navigation.js ===== */
 
@@ -2968,5 +2966,3 @@ class ExamSystem {
 }
 
 window.examSystem = null;
-
-

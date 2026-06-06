@@ -957,7 +957,6 @@ async function loadExam(id) {
 // Save functions moved to end of file to prevent duplication
 // Set active question highlight
 
-
 /* ===== Module: 10-question-core-rendering.js ===== */
 
 function setActiveQuestion(index) {
@@ -2518,7 +2517,6 @@ function toggleManualGrading(questionIndex, isManual) {
     triggerAutoSave();
 }
 
-
 /* ===== Module: 20-advanced-preview-publish-validate.js ===== */
 
 // ============== PERFORMANCE OPTIMIZATION: TARGETED UI UPDATE HELPERS ==============
@@ -4054,7 +4052,6 @@ async function simulateSingleQuestion(questionIndex) {
         showAlert('Simulasi soal gagal: ' + (error.message || 'Unknown error'), 'danger');
     }
 }
-
 
 /* ===== Module: 30-media-modal-publish-time-points.js ===== */
 

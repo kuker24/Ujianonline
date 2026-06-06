@@ -4,7 +4,7 @@
  * - X button (close button)
  * - Backdrop click (clicking outside modal)
  * - ESC key
- * 
+ *
  * This script auto-detects and fixes modal close functionality issues
  * Works with both modern-modals.js and custom inline modals
  */
@@ -203,13 +203,13 @@
                 z-index: 999999 !important;
                 pointer-events: auto !important;
             }
-            
+
             .modern-modal-overlay.active,
             .confirm-modal-overlay[style*="display: block"],
             .modal-overlay[style*="display: block"] {
                 pointer-events: auto !important;
             }
-            
+
             /* Ensure all close buttons are clickable */
             .modern-modal-close,
             .modal-close,
@@ -225,7 +225,7 @@
                 z-index: 10 !important;
                 position: relative;
             }
-            
+
             /* Ensure modal content doesn't block clicks on overlay */
             .modern-modal,
             .confirm-modal,
@@ -276,4 +276,3 @@
     initialize();
 
 })();
-

@@ -301,8 +301,6 @@ ${JSON.stringify(template.template_data, null, 2)}
     }
 }
 
-
-
 /* ===== Module: 10-exam-templates-bootstrap.js ===== */
 
 // Global instance

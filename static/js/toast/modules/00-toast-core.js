@@ -1,6 +1,6 @@
 /**
  * Toast Notification System
- * 
+ *
  * Usage:
  *   Toast.success('Data berhasil disimpan');
  *   Toast.error('Terjadi kesalahan');
@@ -244,4 +244,3 @@ class ToastNotification {
         return this.show({ type: 'info', title, message, duration });
     }
 }
-

@@ -347,7 +347,6 @@ async function saveAsTemplate() {
     }
 }
 
-
 /* ===== Module: 10-seb-pc-history-utils-init.js ===== */
 
 // ============================================================================
@@ -567,7 +566,6 @@ style.textContent = `
     }
 `;
 document.head.appendChild(style);
-
 
 /* ===== Module: 20-seb-android-apk.js ===== */
 

@@ -408,7 +408,6 @@ ${JSON.stringify(log.event_data, null, 2)}
 
 // Global instance
 
-
 /* ===== Module: 10-activity-dashboard-bootstrap.js ===== */
 
 let activityDashboard;

@@ -57,4 +57,3 @@ function renderSafeImageMarkup(url, altText, extraAttributes = '') {
     }
     return `<img src="${escapeAttribute(safeUrl)}" alt="${escapeAttribute(altText)}"${extraAttributes}>`;
 }
-

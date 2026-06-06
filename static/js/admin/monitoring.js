@@ -736,12 +736,15 @@
 
                 opsAutoRestartToggleInFlight = true;
                 syncOpsAutoRestartModalActionState();
+                // Default antar sesi: app-plane only. DB/Redis/PgBouncer restart
+                // requires a separate explicit ops decision outside this dashboard flow.
+                const includeDataServices = false;
                 const payload = {
                     enabled: true,
                     time_wib: String(autoRestart.time_wib || opsSummaryState?.policy?.auto_restart_time_wib || '00:30'),
                     restart_buffer_minutes: Number(autoRestart.restart_buffer_minutes || 30),
                     full_restart: restartBackendVisual.fullRestartAvailable,
-                    include_data_services: restartBackendVisual.fullRestartAvailable,
+                    include_data_services: includeDataServices,
                     restart_timeout_seconds: restartBackendVisual.fullRestartAvailable
                         ? Number(autoRestart.restart_timeout_seconds || 300)
                         : 120,
@@ -1395,7 +1398,6 @@
                 refreshDataInFlight = false;
             }
         }
-
 
 /* ===== Module: 10-pause-websocket-student-detail.js ===== */
 
@@ -2359,7 +2361,6 @@
             }
         }
 
-
 /* ===== Module: 15-recovery-center-student-detail.js ===== */
 
         // ============== RECOVERY CENTER & STUDENT DETAIL ==============
@@ -3096,7 +3097,6 @@
             }
         }
         // ========================================
-
 
 /* ===== Module: 20-fullscreen-and-cleanup.js ===== */
 

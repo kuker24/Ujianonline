@@ -241,8 +241,6 @@ const PerformanceOptimizer = {
     }
 };
 
-
-
 /* ===== Module: 10-performance-optimizer-bootstrap-export.js ===== */
 
 // Auto-initialize

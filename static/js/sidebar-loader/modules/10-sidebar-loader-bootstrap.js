@@ -2,4 +2,3 @@
 document.addEventListener('DOMContentLoaded', () => {
     SidebarLoader.load();
 });
-

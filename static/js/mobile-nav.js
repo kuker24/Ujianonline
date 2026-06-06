@@ -168,7 +168,6 @@ const MobileNav = {
     }
 };
 
-
 /* ===== Module: 10-mobile-nav-bootstrap-export.js ===== */
 
 // Auto-initialize when DOM is ready
@@ -182,5 +181,3 @@ if (document.readyState === 'loading') {
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = MobileNav;
 }
-
-

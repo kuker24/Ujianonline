@@ -134,9 +134,6 @@ function runSebAuthDiagnostic() {
     console.log('='.repeat(60));
 }
 
-
 /* ===== Module: 10-seb-auth-diagnostic-run.js ===== */
 
 runSebAuthDiagnostic();
-
-

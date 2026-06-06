@@ -192,7 +192,6 @@ const AdminCore = {
     }
 };
 
-
 /* ===== Module: 10-admin-core-bootstrap.js ===== */
 
 // Auto-init on load

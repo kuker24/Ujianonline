@@ -20,11 +20,18 @@ fi
 
 HEADER
 
+  first_module=1
   for module in "$MODULE_DIR"/*.js; do
     [ -f "$module" ] || continue
-    printf '/* ===== Module: %s ===== */\n\n' "$(basename "$module")"
+    if [ "$first_module" -eq 0 ]; then
+      printf '
+'
+    fi
+    first_module=0
+    printf '/* ===== Module: %s ===== */
+
+' "$(basename "$module")"
     cat "$module"
-    printf '\n\n'
   done
 } > "$OUT_FILE"
 

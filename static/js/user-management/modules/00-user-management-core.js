@@ -271,4 +271,3 @@ class UserManagement {
         this.tableBody.innerHTML = `<tr><td colspan="7" class="text-center py-4 text-danger"><i class="fas fa-exclamation-triangle me-2"></i>${msg}</td></tr>`;
     }
 }
-

@@ -82,7 +82,6 @@ class EmptyState {
     }
 }
 
-
 /* ===== Module: 10-empty-state-presets-export.js ===== */
 
 // Pre-configured empty states
@@ -151,5 +150,3 @@ const EmptyStates = {
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = { EmptyState, EmptyStates };
 }
-
-

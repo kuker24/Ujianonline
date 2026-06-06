@@ -226,4 +226,3 @@ window.showCustomConfirm = function (message, title = 'Konfirmasi') {
         modal.addEventListener('click', handleClickOutside);
     });
 };
-

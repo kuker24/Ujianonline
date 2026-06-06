@@ -4,6 +4,9 @@ from pathlib import Path
 MONITORING_SOURCE = Path("app/api/monitoring.py").read_text(encoding="utf-8")
 SCHEMAS_SOURCE = Path("app/api/monitoring_schemas.py").read_text(encoding="utf-8")
 MONITORING_JS_SOURCE = Path("static/js/admin/monitoring.js").read_text(encoding="utf-8")
+MONITORING_MODULE_SOURCE = Path(
+    "static/js/admin/monitoring/modules/00-core-ops-and-sessions.js"
+).read_text(encoding="utf-8")
 API_MODULE_SOURCE = Path("static/js/api/modules/20-endpoints-grading-monitoring-templates.js").read_text(encoding="utf-8")
 
 
@@ -31,10 +34,22 @@ def test_restart_safe_defaults_do_not_restart_data_services() -> None:
     assert "include_data_services: bool = False" in SCHEMAS_SOURCE
     assert "includeDataServices = false" in API_MODULE_SOURCE
     assert "const includeDataServices = false" in MONITORING_JS_SOURCE
+    assert "const includeDataServices = false" in MONITORING_MODULE_SOURCE
+    assert "include_data_services: restartBackendVisual.fullRestartAvailable" not in MONITORING_JS_SOURCE
+    assert "include_data_services: restartBackendVisual.fullRestartAvailable" not in MONITORING_MODULE_SOURCE
     assert "Restart DB/Redis/PgBouncer" in MONITORING_JS_SOURCE
+    assert "Restart DB/Redis/PgBouncer" in MONITORING_MODULE_SOURCE
 
 
 def test_restart_button_runs_dry_run_preflight_before_execution() -> None:
     assert "const preflight = await runRestartRequest(true)" in MONITORING_JS_SOURCE
     assert "const result = await runRestartRequest(false)" in MONITORING_JS_SOURCE
     assert "Preflight aman" in MONITORING_JS_SOURCE
+    assert "const preflight = await runRestartRequest(true)" in MONITORING_MODULE_SOURCE
+    assert "const result = await runRestartRequest(false)" in MONITORING_MODULE_SOURCE
+    assert "Preflight aman" in MONITORING_MODULE_SOURCE
+
+
+def test_restart_success_text_is_app_plane_only() -> None:
+    assert "Service app-plane di-restart" in MONITORING_JS_SOURCE
+    assert "Service app-plane di-restart" in MONITORING_MODULE_SOURCE

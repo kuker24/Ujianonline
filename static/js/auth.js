@@ -248,8 +248,6 @@ class AuthManager {
     }
 }
 
-
-
 /* ===== Module: 10-auth-bootstrap-utils.js ===== */
 
 // Global auth instance

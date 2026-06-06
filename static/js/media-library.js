@@ -66,8 +66,6 @@ function renderSafeImageMarkup(url, altText, extraAttributes = '') {
     return `<img src="${escapeAttribute(safeUrl)}" alt="${escapeAttribute(altText)}"${extraAttributes}>`;
 }
 
-
-
 /* ===== Module: 10-media-library-class.js ===== */
 
 class MediaLibrary {
@@ -222,25 +220,25 @@ class MediaLibrary {
                         <div class="upload-zone" id="upload-dropzone">
                             <i class="fas fa-cloud-upload-alt fa-3x"></i>
                             <p>Drag & drop file di sini atau</p>
-                            <input type="file" id="file-input" hidden 
+                            <input type="file" id="file-input" hidden
                                    accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx">
                             <button class="btn btn-primary" onclick="document.getElementById('file-input').click()">
                                 Pilih File
                             </button>
                             <p class="upload-hint">Maksimal 10MB per file</p>
                         </div>
-                        
+
                         <div id="file-preview" style="display: none;">
                             <h5>File yang dipilih:</h5>
                             <div id="preview-content"></div>
                         </div>
-                        
+
                         <div class="form-group">
                             <label for="upload-tags">Tags (pisahkan dengan koma)</label>
                             <input type="text" id="upload-tags" class="form-control"
                                    placeholder="Contoh: matematika, soal, kelas-12">
                         </div>
-                        
+
                         <div class="form-group">
                             <label for="upload-description">Deskripsi</label>
                             <textarea id="upload-description" class="form-control" rows="2"
@@ -449,7 +447,7 @@ class MediaLibrary {
                                 <div class="file-preview-large">
                                     ${safePreviewMarkup}
                                 </div>
-                                
+
                                 <div class="file-metadata">
                                     <div class="metadata-item">
                                         <label>URL:</label>
@@ -460,39 +458,39 @@ class MediaLibrary {
                                             </button>
                                         </div>
                                     </div>
-                                    
+
                                     <div class="metadata-item">
                                         <label>Ukuran:</label>
                                         <span>${this.formatFileSize(file.file_size)}</span>
                                     </div>
-                                    
+
                                     ${file.width && file.height ? `
                                         <div class="metadata-item">
                                             <label>Dimensi:</label>
                                             <span>${file.width} x ${file.height} px</span>
                                         </div>
                                     ` : ''}
-                                    
+
                                     <div class="metadata-item">
                                         <label>Diupload:</label>
                                         <span>${new Date(file.created_at).toLocaleString('id-ID')}</span>
                                     </div>
-                                    
+
                                     <div class="metadata-item">
                                         <label>Oleh:</label>
                                         <span>${safeUploaderName}</span>
                                     </div>
-                                    
+
                                     <div class="metadata-item">
                                         <label>Tags:</label>
                                         <span>${safeTags}</span>
                                     </div>
-                                    
+
                                     <div class="metadata-item">
                                         <label>Deskripsi:</label>
                                         <span>${safeDescription}</span>
                                     </div>
-                                    
+
                                     <div class="metadata-item">
                                         <label>Digunakan:</label>
                                         <span>${file.usage_count || 0} kali</span>
@@ -642,8 +640,6 @@ class MediaLibrary {
     }
 }
 
-
-
 /* ===== Module: 20-media-library-bootstrap.js ===== */
 
 // Global instance
@@ -667,5 +663,3 @@ function copyFileUrl() {
         UIComponents.showToast('Tautan berhasil disalin ke clipboard.', 'success');
     }
 }
-
-

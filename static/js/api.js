@@ -486,7 +486,6 @@ class ApiClient {
         }
     }
 
-
 /* ===== Module: 10-endpoints-auth-users-exams.js ===== */
 
     // Auth endpoints
@@ -886,7 +885,6 @@ class ApiClient {
 
     // === GRADING ===
 
-
 /* ===== Module: 20-endpoints-grading-monitoring-templates.js ===== */
 
 
@@ -1196,7 +1194,6 @@ class ApiClient {
 // Global API instance
 window.api = new ApiClient();
 const api = window.api; // Maintain local reference for file internal usage if any
-
 
 /* ===== Module: 30-ui-shortcuts.js ===== */
 

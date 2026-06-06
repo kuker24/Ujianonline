@@ -84,21 +84,21 @@ class ExamScheduler {
                             <label for="publish-datetime">
                                 <i class="fas fa-calendar-check"></i> Waktu Publikasi Otomatis *
                             </label>
-                            <input type="datetime-local" 
-                                   id="publish-datetime" 
-                                   class="form-control" 
+                            <input type="datetime-local"
+                                   id="publish-datetime"
+                                   class="form-control"
                                    required>
                             <small class="text-muted">
                                 Ujian akan otomatis dipublish pada waktu ini
                             </small>
                         </div>
-                        
+
                         <div class="form-group">
                             <label for="unpublish-datetime">
                                 <i class="fas fa-calendar-times"></i> Waktu Unpublish Otomatis (Opsional)
                             </label>
-                            <input type="datetime-local" 
-                                   id="unpublish-datetime" 
+                            <input type="datetime-local"
+                                   id="unpublish-datetime"
                                    class="form-control">
                             <small class="text-muted">
                                 Ujian akan otomatis ditutup pada waktu ini (kosongkan jika tidak perlu)
@@ -107,7 +107,7 @@ class ExamScheduler {
 
                         <div class="alert alert-info" style="margin-top: 1rem;">
                             <i class="fas fa-info-circle"></i>
-                            <strong>Catatan:</strong> Sistem akan memproses jadwal setiap 1 menit. 
+                            <strong>Catatan:</strong> Sistem akan memproses jadwal setiap 1 menit.
                             Publikasi mungkin terjadi 1-2 menit setelah waktu yang ditentukan.
                         </div>
                     </div>
@@ -204,7 +204,7 @@ class ExamScheduler {
                 </div>
                 ${schedule.status === 'pending' ? `
                     <div class="schedule-actions">
-                        <button class="btn btn-sm btn-danger" 
+                        <button class="btn btn-sm btn-danger"
                                 onclick="examScheduler.cancelSchedule(${schedule.id})">
                             <i class="fas fa-times"></i> Batalkan
                         </button>
@@ -237,8 +237,6 @@ class ExamScheduler {
     }
 }
 
-
-
 /* ===== Module: 10-exam-scheduling-bootstrap.js ===== */
 
 // Global functions
@@ -257,5 +255,3 @@ function closeScheduleModal() {
     const modal = document.getElementById('schedule-modal');
     if (modal) modal.remove();
 }
-
-

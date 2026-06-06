@@ -8,7 +8,7 @@
 
 /**
  * Toast Notification System
- * 
+ *
  * Usage:
  *   Toast.success('Data berhasil disimpan');
  *   Toast.error('Terjadi kesalahan');
@@ -253,8 +253,6 @@ class ToastNotification {
     }
 }
 
-
-
 /* ===== Module: 10-toast-bootstrap-export.js ===== */
 
 // Global instance
@@ -264,5 +262,3 @@ const Toast = new ToastNotification();
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = Toast;
 }
-
-

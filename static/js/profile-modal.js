@@ -392,7 +392,6 @@
         return cropperAssetsPromise;
     }
 
-
 /* ===== Module: 10-profile-modal-core.js ===== */
 
 
@@ -675,7 +674,6 @@
                 btn.innerHTML = originalText;
                 btn.disabled = false;
             }
-
 
 /* ===== Module: 20-avatar-sync-and-bootstrap.js ===== */
 

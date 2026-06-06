@@ -235,8 +235,6 @@ window.showCustomConfirm = function (message, title = 'Konfirmasi') {
     });
 };
 
-
-
 /* ===== Module: 10-custom-confirm-bootstrap.js ===== */
 
 // Auto-initialize on DOM ready
@@ -245,5 +243,3 @@ if (document.readyState === 'loading') {
 } else {
     initCustomConfirmModal();
 }
-
-

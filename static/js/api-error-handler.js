@@ -197,13 +197,9 @@ const apiClient = {
     }
 };
 
-
-
 /* ===== Module: 10-api-error-handler-export.js ===== */
 
 // Export for use in other modules
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = { apiClient, APIError, NetworkError, TimeoutError };
 }
-
-

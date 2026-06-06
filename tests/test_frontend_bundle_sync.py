@@ -19,10 +19,11 @@ def _render_bundle(module_dir: Path, source_hint: str, script_hint: str) -> str:
     )
 
     parts = [header]
-    for module in sorted(module_dir.glob('*.js')):
+    for index, module in enumerate(sorted(module_dir.glob('*.js'))):
+        if index > 0:
+            parts.append('\n')
         parts.append(f'/* ===== Module: {module.name} ===== */\n\n')
         parts.append(module.read_text(encoding='utf-8'))
-        parts.append('\n\n')
     return ''.join(parts)
 
 

@@ -372,7 +372,6 @@ class SidebarLoader {
 // SECURITY LAYER: Handled by api.js
 // (function initSecurityLayer() { ... })();
 
-
 /* ===== Module: 10-sidebar-loader-bootstrap.js ===== */
 
 // Auto-load when DOM ready

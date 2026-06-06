@@ -14,6 +14,9 @@ def test_auto_restart_scheduler_uses_modal_editor() -> None:
 
 def test_auto_restart_scheduler_save_stays_synced_with_restart_backend() -> None:
     assert "full_restart: restartBackendVisual.fullRestartAvailable" in MONITORING_PAGE_JS_SOURCE
-    assert "include_data_services: restartBackendVisual.fullRestartAvailable" in MONITORING_PAGE_JS_SOURCE
+    assert "include_data_services: includeDataServices" in MONITORING_PAGE_JS_SOURCE
+    assert "include_data_services: restartBackendVisual.fullRestartAvailable" not in MONITORING_PAGE_JS_SOURCE
+    assert "DB/Redis/PgBouncer restart" in MONITORING_PAGE_JS_SOURCE
+    assert "requires a separate explicit ops decision" in MONITORING_PAGE_JS_SOURCE
     assert "replace_runs: true" in MONITORING_PAGE_JS_SOURCE
     assert "Scheduler ini akan menjalankan jalur full restart antar sesi" in MONITORING_PAGE_JS_SOURCE

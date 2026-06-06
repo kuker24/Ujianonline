@@ -319,7 +319,6 @@ class NotificationManager {
     }
 }
 
-
 /* ===== Module: 10-notification-bootstrap.js ===== */
 
 // Global instance

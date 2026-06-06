@@ -124,7 +124,6 @@
         }
     }
 
-
 /* ===== Module: 10-header-user-bootstrap.js ===== */
 
     // Initialize on DOM ready
