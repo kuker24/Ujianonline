@@ -145,15 +145,15 @@ class MainActivity: FlutterActivity() {
      */
     
     // Obfuscated expected signature (split into chunks)
-    // Original: EA:98:DB:9D:EC:38:51:2B:59:92:67:B3:DA:8B:94:86:93:C7:E8:6D:C8:A6:26:F5:FA:C0:56:F7:20:EE:2D:CE
-    private val sigChunk1 = byteArrayOf(0xEA.toByte(), 0x98.toByte(), 0xDB.toByte(), 0x9D.toByte())
-    private val sigChunk2 = byteArrayOf(0xEC.toByte(), 0x38.toByte(), 0x51.toByte(), 0x2B.toByte())
-    private val sigChunk3 = byteArrayOf(0x59.toByte(), 0x92.toByte(), 0x67.toByte(), 0xB3.toByte())
-    private val sigChunk4 = byteArrayOf(0xDA.toByte(), 0x8B.toByte(), 0x94.toByte(), 0x86.toByte())
-    private val sigChunk5 = byteArrayOf(0x93.toByte(), 0xC7.toByte(), 0xE8.toByte(), 0x6D.toByte())
-    private val sigChunk6 = byteArrayOf(0xC8.toByte(), 0xA6.toByte(), 0x26.toByte(), 0xF5.toByte())
-    private val sigChunk7 = byteArrayOf(0xFA.toByte(), 0xC0.toByte(), 0x56.toByte(), 0xF7.toByte())
-    private val sigChunk8 = byteArrayOf(0x20.toByte(), 0xEE.toByte(), 0x2D.toByte(), 0xCE.toByte())
+    // Release keystore SHA-256: 29:7A:D1:BF:C6:ED:35:86:84:AD:69:95:69:DA:F4:A6:56:58:47:79:02:11:CE:72:6B:F5:3D:A5:80:EF:31:87
+    private val sigChunk1 = byteArrayOf(0x29.toByte(), 0x7A.toByte(), 0xD1.toByte(), 0xBF.toByte())
+    private val sigChunk2 = byteArrayOf(0xC6.toByte(), 0xED.toByte(), 0x35.toByte(), 0x86.toByte())
+    private val sigChunk3 = byteArrayOf(0x84.toByte(), 0xAD.toByte(), 0x69.toByte(), 0x95.toByte())
+    private val sigChunk4 = byteArrayOf(0x69.toByte(), 0xDA.toByte(), 0xF4.toByte(), 0xA6.toByte())
+    private val sigChunk5 = byteArrayOf(0x56.toByte(), 0x58.toByte(), 0x47.toByte(), 0x79.toByte())
+    private val sigChunk6 = byteArrayOf(0x02.toByte(), 0x11.toByte(), 0xCE.toByte(), 0x72.toByte())
+    private val sigChunk7 = byteArrayOf(0x6B.toByte(), 0xF5.toByte(), 0x3D.toByte(), 0xA5.toByte())
+    private val sigChunk8 = byteArrayOf(0x80.toByte(), 0xEF.toByte(), 0x31.toByte(), 0x87.toByte())
     
     /**
      * Reconstruct expected signature from obfuscated chunks
