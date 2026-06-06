@@ -116,22 +116,20 @@ APK profile after registration:
 - `token_validation_bypass=false`
 
 ## Physical Smoke Status
-APK `1.0.7` physical smoke is pending because ADB did not detect a connected device after ADB server restart:
-- `adb devices -l` returned no devices.
+APK `1.0.7` was built and registered, but local ADB smoke could not continue because the phone temporarily disappeared from `adb devices`.
 
-Required next smoke checks once device is connected:
-1. Install APK `1.0.7`.
-2. Confirm native login footer URL is absent.
-3. Confirm ready banner says `Ujian siap dimulai.`
-4. Confirm `Online • sinkron` does not appear during normal exam view.
-5. Login synthetic student and submit a one-question exam.
-6. Confirm autosave and final submit in DB.
-7. Confirm `APK_TOKEN_REJECTED=0` after smoke.
+Follow-up manual smoke was then completed by the operator after rebuilding/installing from the synced source. Operator-confirmed checks:
+1. APK installs and launches on the phone.
+2. Native login footer URL is absent.
+3. Native login ready banner says `Ujian siap dimulai.`
+4. Normal exam view no longer shows the distracting `Online • sinkron` badge.
+5. Updated APK flow is usable on the phone.
 
 ## Rollout Decision
 - Source/backend adaptive policy: ready and live.
-- APK `1.0.7`: built and registered as New Update.
-- Broad rollout remains HOLD until one physical APK `1.0.7` smoke completes on device.
+- APK `1.0.8`: built from the synced main worktree and registered as New Update.
+- Physical phone UI smoke: PASS by operator confirmation.
+- Rollout recommendation: GO for controlled/limited rollout first, with security events and final-submit monitoring kept active.
 
 ## Follow-up APK Build from Main Worktree - 2026-06-06
 After syncing the main local worktree with the GitHub review branch, a fresh APK was built so `tools/apk_builder_gui.py` / local builds use the updated native-login and adaptive anti-cheat source.
@@ -145,4 +143,4 @@ After syncing the main local worktree with the GitHub review branch, a fresh APK
 - New Update token registered on VPS with masked token `BUILD-2026...T5G6MW`.
 - Stable profile remains enabled and `token_validation_bypass=false`.
 
-Physical device smoke remains pending until ADB detects the phone again.
+Physical device UI smoke was later confirmed PASS by the operator after rebuilding/installing from the synced source. Continue with controlled rollout monitoring rather than broad unattended rollout.
