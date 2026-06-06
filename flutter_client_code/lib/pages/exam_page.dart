@@ -104,36 +104,42 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
   Future<void> _prepareAuthScript() async {
     final token = await _apiService.getToken();
     final userData = await _apiService.getStoredUserData();
+    String? appSignature;
 
-    if (token != null && userData != null) {
-      final encodedUserData = base64Encode(utf8.encode(userData));
-
-      final source = _buildAuthInjectionSource(
-        token: token,
-        encodedUserData: encodedUserData,
-        appSignature: null,
+    try {
+      final appSignatureRaw = await SignatureVerifier.getActualSignature();
+      appSignature = SignatureVerifier.normalizeSignatureForHeader(
+        appSignatureRaw,
       );
-
-      if (!mounted) return;
-      setState(() {
-        _authScript = UserScript(
-          source: source,
-          injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
-        );
-        _authPrepared = true;
-      });
-      if (_webViewController != null) {
-        await _injectAuthNow(_webViewController!);
-      }
-      // Load signature asynchronously to avoid blocking initial WebView render.
-      unawaited(_injectSignatureIntoWebContext());
-      return;
+    } catch (e) {
+      debugPrint('SXB signature preload skipped: $e');
     }
+
+    String? encodedUserData;
+    if (token != null && userData != null) {
+      encodedUserData = base64Encode(utf8.encode(userData));
+    }
+
+    final source = _buildAuthInjectionSource(
+      token: token,
+      encodedUserData: encodedUserData,
+      appSignature: appSignature,
+    );
 
     if (!mounted) return;
     setState(() {
+      _authScript = UserScript(
+        source: source,
+        injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
+      );
       _authPrepared = true;
     });
+    if (_webViewController != null) {
+      await _injectAuthNow(_webViewController!);
+    }
+    if (appSignature == null) {
+      unawaited(_injectSignatureIntoWebContext());
+    }
   }
 
   Future<void> _injectSignatureIntoWebContext() async {
@@ -172,12 +178,13 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
   }
 
   String _buildAuthInjectionSource({
-    required String token,
-    required String encodedUserData,
+    String? token,
+    String? encodedUserData,
     String? appSignature,
   }) {
-    final tokenLiteral = jsonEncode(token);
-    final userDataLiteral = jsonEncode(encodedUserData);
+    final tokenLiteral = token == null ? 'null' : jsonEncode(token);
+    final userDataLiteral =
+        encodedUserData == null ? 'null' : jsonEncode(encodedUserData);
     final buildTokenLiteral = jsonEncode(AppConfig.buildToken);
     final signatureLiteral =
         appSignature == null ? 'null' : jsonEncode(appSignature);
@@ -189,19 +196,25 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
         const buildToken = $buildTokenLiteral;
         const appSig = $signatureLiteral;
 
-        localStorage.setItem('access_token', token);
-
-        // Robust UTF-8 base64 decode for user JSON.
-        let userJson = '';
-        try {
-          const raw = atob(userB64);
-          userJson = decodeURIComponent(Array.prototype.map.call(raw, function(c) {
-            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-          }).join(''));
-        } catch (_) {
-          userJson = atob(userB64);
+        if (token) {
+          localStorage.setItem('access_token', token);
         }
-        localStorage.setItem('user', userJson);
+
+        if (userB64) {
+          // Robust UTF-8 base64 decode for user JSON.
+          let userJson = '';
+          try {
+            const raw = atob(userB64);
+            userJson = decodeURIComponent(Array.prototype.map.call(raw, function(c) {
+              return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+            }).join(''));
+          } catch (_) {
+            userJson = atob(userB64);
+          }
+          localStorage.setItem('user', userJson);
+        }
+
+        // Always seed APK security headers before the web login page makes API calls.
         localStorage.setItem('sxb_build_token', buildToken);
 
         if (appSig) {
@@ -935,7 +948,8 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
   /// Start polling server for admin commands (emergency exit, terminate)
   void _startServerCommandPolling() {
     _serverCommandTimer?.cancel();
-    _serverCommandTimer = Timer.periodic(Duration(seconds: _commandPollSeconds), (_) {
+    _serverCommandTimer =
+        Timer.periodic(Duration(seconds: _commandPollSeconds), (_) {
       _checkServerCommands();
     });
     debugPrint('🔄 Server command polling started (${_commandPollSeconds}s)');
@@ -2008,7 +2022,9 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
       if (resolvedUrl == null || resolvedUrl.isEmpty) return false;
 
       final uri = Uri.tryParse(resolvedUrl);
-      if (uri == null || !uri.hasScheme || !['http', 'https'].contains(uri.scheme.toLowerCase())) {
+      if (uri == null ||
+          !uri.hasScheme ||
+          !['http', 'https'].contains(uri.scheme.toLowerCase())) {
         return false;
       }
 
@@ -2037,7 +2053,8 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
 
     try {
       final currentUrl = await _webViewController?.getUrl();
-      final base = currentUrl != null ? Uri.tryParse(currentUrl.toString()) : null;
+      final base =
+          currentUrl != null ? Uri.tryParse(currentUrl.toString()) : null;
       if (base != null) {
         return base.resolveUri(parsed).toString();
       }
@@ -2053,7 +2070,8 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
   }
 
   Future<Map<String, String>> _buildImagePreviewHeaders(String imageUrl) async {
-    final headers = Map<String, String>.from(_apiService.getSebHeaders(imageUrl));
+    final headers =
+        Map<String, String>.from(_apiService.getSebHeaders(imageUrl));
     final token = await _apiService.getToken();
     if (token != null && token.isNotEmpty) {
       headers['Authorization'] = 'Bearer $token';

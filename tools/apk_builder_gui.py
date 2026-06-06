@@ -1055,7 +1055,17 @@ class APKBuilderGUI:
                 self.log(f"   Version: {pubspec_version}")
             
             # 6. Process icon if provided
-            if self.icon_path_var.get() and PIL_AVAILABLE:
+            if self.icon_path_var.get():
+                if not PIL_AVAILABLE:
+                    message = (
+                        "Pillow/PIL belum terinstall, jadi icon APK tidak bisa diproses.\n\n"
+                        "Install dependency terlebih dahulu:\n"
+                        "  python -m pip install -r tools/requirements-gui.txt\n\n"
+                        "Build dibatalkan agar APK tidak memakai icon lama tanpa disadari."
+                    )
+                    self.log("❌ Icon tidak diproses: Pillow/PIL belum terinstall")
+                    messagebox.showerror("Icon Processing Required", message)
+                    return False
                 self.process_icon(self.icon_path_var.get())
             
             # 7. Update Security Signature (NEW)
@@ -1730,8 +1740,38 @@ class APKBuilderGUI:
         
         self.root.after(0, _reset)
 
+def _reexec_with_project_venv_if_icon_deps_missing():
+    """Use project venv when system Python lacks Pillow for icon processing."""
+    if PIL_AVAILABLE:
+        return
+
+    project_root = TOOLS_DIR.parent
+    venv_python = project_root / ".venv" / "bin" / "python"
+    if not venv_python.exists():
+        return
+
+    current_python = Path(sys.executable).resolve()
+    if current_python == venv_python.resolve():
+        return
+
+    probe = subprocess.run(
+        [str(venv_python), "-c", "import PIL"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    if probe.returncode != 0:
+        return
+
+    os.execv(
+        str(venv_python),
+        [str(venv_python), str(Path(__file__).resolve()), *sys.argv[1:]],
+    )
+
+
 def main():
     """Main entry point"""
+    _reexec_with_project_venv_if_icon_deps_missing()
     root = tk.Tk()
     
     # Set icon if available
