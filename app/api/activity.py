@@ -3,7 +3,6 @@ User Activity Logging API endpoints.
 Dashboard and audit trail for user activities.
 """
 
-import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
@@ -11,11 +10,10 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.core.security import get_current_active_admin, get_current_user
-from app.database import get_db, get_db_write
+from app.database import get_db_read, get_db_write
 from app.models.activity_log import UserActivityLog
 from app.models.user import User
 
@@ -24,10 +22,6 @@ logger = logging.getLogger(__name__)
 
 # WIB timezone constant (UTC+7)
 WIB = timezone(timedelta(hours=7))
-
-_auto_prune_lock = asyncio.Lock()
-_last_auto_prune_run_utc: Optional[datetime] = None
-
 
 def format_timestamp_wib(dt: datetime) -> Optional[str]:
     """
@@ -159,49 +153,6 @@ async def _smart_prune_activity_logs(
     }
 
 
-async def _maybe_auto_prune_activity_logs(db: AsyncSession) -> None:
-    """
-    Opportunistic cleanup so activity table does not keep growing forever.
-    Runs at most once per worker per configured interval.
-    """
-    if not settings.activity_log_auto_prune_enabled:
-        return
-
-    interval_seconds = max(60, int(settings.activity_log_auto_prune_interval_seconds))
-    now_utc = datetime.now(timezone.utc)
-
-    global _last_auto_prune_run_utc
-    if _last_auto_prune_run_utc and (
-        now_utc - _last_auto_prune_run_utc
-    ).total_seconds() < interval_seconds:
-        return
-
-    async with _auto_prune_lock:
-        now_utc = datetime.now(timezone.utc)
-        if _last_auto_prune_run_utc and (
-            now_utc - _last_auto_prune_run_utc
-        ).total_seconds() < interval_seconds:
-            return
-
-        try:
-            report = await _smart_prune_activity_logs(
-                db,
-                retention_days=settings.activity_log_retention_days,
-                max_rows=settings.activity_log_max_rows,
-                batch_size=settings.activity_log_prune_batch_size,
-                max_rounds=1,
-            )
-            _last_auto_prune_run_utc = now_utc
-            if report["deleted_total"] > 0:
-                logger.info(
-                    "Auto-pruned activity logs: deleted=%s remaining=%s",
-                    report["deleted_total"],
-                    report["remaining_total"],
-                )
-        except Exception:
-            logger.warning("Automatic activity log prune failed", exc_info=True)
-
-
 @router.get("/logs")
 async def get_activity_logs(
     user_id: Optional[int] = None,
@@ -211,49 +162,71 @@ async def get_activity_logs(
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=200),
     current_user: User = Depends(get_current_active_admin),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_read),
 ):
     """
     Get user activity logs with filters (admin only).
+
+    This listing endpoint is intentionally read-only. Cleanup/pruning is kept
+    on the explicit `/logs/reset?mode=smart` maintenance path so dashboard
+    polling cannot perform writes or hold write-pool connections.
 
     **Filters:**
     - user_id: Filter by specific user
     - event_type: login, logout, exam_start, exam_submit, violation, etc.
     - date_from / date_to: Date range filter
     """
-    await _maybe_auto_prune_activity_logs(db)
+    _ = current_user
 
-    query = select(UserActivityLog).options(selectinload(UserActivityLog.user))
-
-    if user_id:
-        query = query.where(UserActivityLog.user_id == user_id)
+    filters = []
+    if user_id is not None:
+        filters.append(UserActivityLog.user_id == user_id)
     if event_type:
-        query = query.where(UserActivityLog.event_type == event_type)
+        filters.append(UserActivityLog.event_type == event_type)
     if date_from:
-        query = query.where(UserActivityLog.created_at >= date_from)
+        filters.append(UserActivityLog.created_at >= date_from)
     if date_to:
-        query = query.where(UserActivityLog.created_at <= date_to)
+        filters.append(UserActivityLog.created_at <= date_to)
 
-    count_query = select(func.count()).select_from(query.subquery())
+    count_query = select(func.count(UserActivityLog.id))
+    if filters:
+        count_query = count_query.where(*filters)
     total = int((await db.execute(count_query)).scalar() or 0)
 
     offset = (page - 1) * per_page
-    query = query.order_by(UserActivityLog.created_at.desc()).offset(offset).limit(per_page)
+    query = (
+        select(
+            UserActivityLog.id,
+            UserActivityLog.user_id,
+            User.full_name.label("user_name"),
+            User.role.label("user_role"),
+            UserActivityLog.event_type,
+            UserActivityLog.event_data,
+            UserActivityLog.ip_address,
+            UserActivityLog.created_at,
+        )
+        .outerjoin(User, UserActivityLog.user_id == User.id)
+        .order_by(UserActivityLog.created_at.desc(), UserActivityLog.id.desc())
+        .offset(offset)
+        .limit(per_page)
+    )
+    if filters:
+        query = query.where(*filters)
 
     result = await db.execute(query)
-    logs = result.scalars().all()
+    logs = result.mappings().all()
 
     return {
         "logs": [
             {
-                "id": log.id,
-                "user_id": log.user_id,
-                "user_name": log.user.full_name if log.user else "Unknown",
-                "user_role": log.user.role if log.user else None,
-                "event_type": log.event_type,
-                "event_data": log.event_data,
-                "ip_address": log.ip_address,
-                "created_at": format_timestamp_wib(log.created_at),
+                "id": log["id"],
+                "user_id": log["user_id"],
+                "user_name": log["user_name"] or "Unknown",
+                "user_role": log["user_role"],
+                "event_type": log["event_type"],
+                "event_data": log["event_data"] or {},
+                "ip_address": log["ip_address"],
+                "created_at": format_timestamp_wib(log["created_at"]),
             }
             for log in logs
         ],
@@ -285,9 +258,6 @@ async def reset_activity_logs(
         remaining_total = await _count_activity_logs(db)
         deleted_total = max(0, total_before - remaining_total)
 
-        global _last_auto_prune_run_utc
-        _last_auto_prune_run_utc = datetime.now(timezone.utc)
-
         return {
             "mode": "all",
             "deleted_total": deleted_total,
@@ -304,7 +274,6 @@ async def reset_activity_logs(
         max_rounds=40,
     )
 
-    _last_auto_prune_run_utc = datetime.now(timezone.utc)
     report.update(
         {
             "mode": "smart",
@@ -318,12 +287,10 @@ async def reset_activity_logs(
 async def get_activity_stats(
     days: int = Query(7, ge=1, le=90),
     current_user: User = Depends(get_current_active_admin),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_read),
 ):
     """Get activity statistics for dashboard."""
     try:
-        await _maybe_auto_prune_activity_logs(db)
-
         # Calculate date range in WIB
         now_wib = datetime.now(WIB)
         start_date_wib = now_wib - timedelta(days=days)
@@ -416,7 +383,7 @@ async def get_activity_stats(
 @router.get("/event-types")
 async def get_event_types(
     current_user: User = Depends(get_current_active_admin),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_read),
 ):
     """Get list of all event types for filtering."""
     result = await db.execute(
@@ -431,25 +398,31 @@ async def get_event_types(
 async def get_my_activity_logs(
     limit: int = Query(50, ge=1, le=200),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_read),
 ):
     """Get current user's activity logs."""
     result = await db.execute(
-        select(UserActivityLog)
+        select(
+            UserActivityLog.id,
+            UserActivityLog.event_type,
+            UserActivityLog.event_data,
+            UserActivityLog.ip_address,
+            UserActivityLog.created_at,
+        )
         .where(UserActivityLog.user_id == current_user.id)
-        .order_by(UserActivityLog.created_at.desc())
+        .order_by(UserActivityLog.created_at.desc(), UserActivityLog.id.desc())
         .limit(limit)
     )
-    logs = result.scalars().all()
+    logs = result.mappings().all()
 
     return {
         "logs": [
             {
-                "id": log.id,
-                "event_type": log.event_type,
-                "event_data": log.event_data,
-                "ip_address": log.ip_address,
-                "created_at": format_timestamp_wib(log.created_at),
+                "id": log["id"],
+                "event_type": log["event_type"],
+                "event_data": log["event_data"] or {},
+                "ip_address": log["ip_address"],
+                "created_at": format_timestamp_wib(log["created_at"]),
             }
             for log in logs
         ]
