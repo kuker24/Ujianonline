@@ -11,7 +11,7 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from pydantic import BaseModel
 
-from app.database import get_db
+from app.database import get_db, get_db_read
 from app.models.user import User
 from app.models.exam import Exam
 from app.models.question import Question
@@ -226,7 +226,7 @@ async def get_pending_essays(
 @router.get("/stats")
 async def get_grading_stats(
     current_user: User = Depends(get_current_teacher),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db_read)
 ):
     """Get grading statistics for the current user."""
 

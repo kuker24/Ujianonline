@@ -25,6 +25,7 @@ from app.core.security import (
     is_freeze_exempt_identity,
     is_pengawas_identity,
     warm_authenticated_user_cache,
+    USER_RESPONSE_LOAD_OPTIONS,
 )
 from app.config import settings
 from app.core.cache import is_freeze_mode_enabled
@@ -170,7 +171,7 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     - **role**: User role (student, teacher, admin)
     """
     # Check if username already exists
-    existing_user_query = select(User).where(
+    existing_user_query = select(User.id).where(
         func.lower(User.username) == (user_data.username or "").strip().lower()
     )
     existing_user = (await db.execute(existing_user_query)).scalar_one_or_none()
@@ -216,7 +217,11 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
 
 async def _load_user_response(db: AsyncSession, user_id: int) -> UserResponse:
     """Load a full user profile for response contracts that require DB fields."""
-    user_result = await db.execute(select(User).where(User.id == user_id))
+    user_result = await db.execute(
+        select(User)
+        .options(*USER_RESPONSE_LOAD_OPTIONS)
+        .where(User.id == user_id)
+    )
     db_user = user_result.scalar_one_or_none()
     if db_user is None:
         raise HTTPException(

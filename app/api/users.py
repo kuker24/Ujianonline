@@ -27,6 +27,7 @@ from app.core.security import (
     get_current_active_admin,
     get_current_teacher,
     get_password_hash,
+    USER_RESPONSE_LOAD_OPTIONS,
 )
 from app.core.roles import (
     ROLE_ADMIN,
@@ -57,6 +58,23 @@ logger = logging.getLogger(__name__)
 GURUPLUS_ROLE = "guruplus"
 GURUPLUS_CLASS_NAME = "GuruPlus"
 DEVELOPER_ROLE = ROLE_DEVELOPER
+
+USER_RESPONSE_COLUMNS = (
+    User.id,
+    User.username,
+    User.full_name,
+    User.role,
+    User.student_class,
+    User.is_active,
+    User.created_at,
+    User.last_login,
+    User.profile_picture,
+    User.job_title,
+)
+
+
+def _user_response_from_mapping(row) -> UserResponse:
+    return UserResponse.model_validate(dict(row))
 
 
 def _normalize_role(value: Optional[str]) -> str:
@@ -169,8 +187,10 @@ async def advanced_user_search(
     """
     Advanced user search with multiple filters and pagination.
     """
-    # Build dynamic query
-    query = select(User)
+    # Build dynamic projection query. Keep this endpoint from instantiating
+    # User ORM rows because User relationships use selectin loading and can
+    # cascade into large related tables during admin dashboard polling.
+    query = select(*USER_RESPONSE_COLUMNS)
 
     # Apply filters
     if role:
@@ -215,10 +235,10 @@ async def advanced_user_search(
     query = query.offset(offset).limit(per_page)
 
     result = await db.execute(query)
-    users = result.scalars().all()
+    users = [_user_response_from_mapping(row) for row in result.mappings().all()]
 
     return {
-        "users": [UserResponse.model_validate(u) for u in users],
+        "users": users,
         "total": total,
         "page": page,
         "per_page": per_page,
@@ -238,7 +258,7 @@ async def create_user(
     Create a new user (Admin only).
     """
     # Check duplicate username
-    existing = await db.execute(select(User).where(User.username == user_data.username))
+    existing = await db.execute(select(User.id).where(User.username == user_data.username))
     if existing.scalar_one_or_none():
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Username sudah digunakan")
 
@@ -304,18 +324,7 @@ async def list_users(
         _set_cached_users_list(cache_key, redis_cached_users)
         return redis_cached_users
 
-    query = select(
-        User.id,
-        User.username,
-        User.full_name,
-        User.role,
-        User.student_class,
-        User.is_active,
-        User.created_at,
-        User.last_login,
-        User.profile_picture,
-        User.job_title,
-    )
+    query = select(*USER_RESPONSE_COLUMNS)
     if role:
         query = query.where(User.role == role)
     if student_class:
@@ -414,18 +423,7 @@ async def get_students_by_class(
 
     target_role = GURUPLUS_ROLE if normalized_class.lower() == GURUPLUS_CLASS_NAME.lower() else "student"
 
-    query = select(
-        User.id,
-        User.username,
-        User.full_name,
-        User.role,
-        User.student_class,
-        User.is_active,
-        User.created_at,
-        User.last_login,
-        User.profile_picture,
-        User.job_title,
-    ).where(User.role == target_role)
+    query = select(*USER_RESPONSE_COLUMNS).where(User.role == target_role)
     if student_class:
         query = query.where(User.student_class == normalized_class)
     query = query.order_by(User.full_name.asc(), User.username.asc())
@@ -443,11 +441,13 @@ async def get_user(
     db: AsyncSession = Depends(get_db_read)
 ):
     """Get user by ID."""
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
+    result = await db.execute(
+        select(*USER_RESPONSE_COLUMNS).where(User.id == user_id)
+    )
+    user = result.mappings().one_or_none()
     if not user:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "User tidak ditemukan")
-    return user
+    return _user_response_from_mapping(user)
 
 
 @router.put("/{user_id:int}", response_model=UserResponse)
@@ -458,7 +458,11 @@ async def update_user(
     db: AsyncSession = Depends(get_db)
 ):
     """Update user information. Users can update their own profile, admins can update anyone."""
-    result = await db.execute(select(User).where(User.id == user_id))
+    result = await db.execute(
+        select(User)
+        .options(*USER_RESPONSE_LOAD_OPTIONS)
+        .where(User.id == user_id)
+    )
     user = result.scalar_one_or_none()
 
     if not user:
@@ -478,7 +482,7 @@ async def update_user(
 
     # Check duplicates if changing sensitive fields
     if user_data.username and user_data.username != user.username:
-        existing = await db.execute(select(User).where(User.username == user_data.username))
+        existing = await db.execute(select(User.id).where(User.username == user_data.username))
         if existing.scalar_one_or_none():
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Username sudah digunakan")
         user.username = user_data.username
@@ -533,7 +537,11 @@ async def delete_user(
     db: AsyncSession = Depends(get_db)
 ):
     """Delete user."""
-    result = await db.execute(select(User).where(User.id == user_id))
+    result = await db.execute(
+        select(User)
+        .options(*USER_RESPONSE_LOAD_OPTIONS)
+        .where(User.id == user_id)
+    )
     user = result.scalar_one_or_none()
 
     if not user:
@@ -595,7 +603,7 @@ async def batch_create_users(
             # Isolate each row with SAVEPOINT so one bad row does not break the full batch.
             async with db.begin_nested():
                 existing = await db.execute(
-                    select(User).where(User.username == user_data.username)
+                    select(User.id).where(User.username == user_data.username)
                 )
                 if existing.scalar_one_or_none():
                     errors.append(f"Row {idx+1}: Username exists ({user_data.username})")
@@ -756,7 +764,16 @@ async def export_users(
         message="Export pengguna sedang dinonaktifkan selama mode ujian/puncak.",
     )
     # Reuse filter logic but explicitly exclude privileged control-plane accounts.
-    query = select(User).where(User.role.notin_([ROLE_ADMIN, ROLE_DEVELOPER]))
+    # Keep the export projection lightweight to avoid User selectin relationship cascades.
+    query = select(
+        User.id,
+        User.username,
+        User.full_name,
+        User.role,
+        User.student_class,
+        User.is_active,
+        User.created_at,
+    ).where(User.role.notin_([ROLE_ADMIN, ROLE_DEVELOPER]))
 
     if filters:
         if filters.role and _normalize_role(filters.role) not in {ROLE_ADMIN, ROLE_DEVELOPER}:
@@ -779,7 +796,7 @@ async def export_users(
             query = query.where(User.created_at <= filters.created_before)
 
     result = await db.execute(query.order_by(User.created_at.desc(), User.id.desc()))
-    users = result.scalars().all()
+    users = result.mappings().all()
 
     if format == "csv":
         output = io.StringIO()
@@ -788,10 +805,10 @@ async def export_users(
 
         for u in users:
             writer.writerow([
-                u.id, u.username, u.full_name, u.role,
-                u.student_class or "",
-                "Active" if u.is_active else "Inactive",
-                u.created_at.strftime("%Y-%m-%d %H:%M:%S") if u.created_at else ""
+                u["id"], u["username"], u["full_name"], u["role"],
+                u["student_class"] or "",
+                "Active" if u["is_active"] else "Inactive",
+                u["created_at"].strftime("%Y-%m-%d %H:%M:%S") if u["created_at"] else ""
             ])
 
         output.seek(0)
@@ -882,7 +899,7 @@ async def bulk_upload_users(
                 results["failed"] += 1; results["errors"].append(f"Line {row_num}: Incomplete data"); continue
 
             async with db.begin_nested():
-                existing = await db.execute(select(User).where((User.username == username)))
+                existing = await db.execute(select(User.id).where((User.username == username)))
                 if existing.scalar_one_or_none():
                     results["failed"] += 1; results["errors"].append(f"Line {row_num}: Username taken"); continue
 
