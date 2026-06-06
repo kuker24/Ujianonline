@@ -116,3 +116,11 @@ def test_backup_export_avoids_blocking_gpg_and_n_plus_one() -> None:
     assert "_run_gpg_encrypt" in BACKUP_SOURCE
     assert "selectinload(Exam.questions).selectinload(Question.options)" in BACKUP_SOURCE
     assert "selectinload(ExamSession.user)" in BACKUP_SOURCE
+
+
+def test_legacy_answer_queue_worker_has_production_guard_until_semantics_aligned() -> None:
+    assert "Production guard" in ANSWER_PROCESSOR_SOURCE
+    assert "do not enable ANSWER_WRITE_MODE=queue/hybrid" in ANSWER_PROCESSOR_SOURCE
+    assert "no-op update skip" in ANSWER_PROCESSOR_SOURCE
+    assert "metadata/statement merge" in ANSWER_PROCESSOR_SOURCE
+    assert "final-submit forced flush compatibility" in ANSWER_PROCESSOR_SOURCE

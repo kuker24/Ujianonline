@@ -72,3 +72,37 @@ def test_heavy_export_remains_runtime_configurable_for_peak_mode() -> None:
     assert 'os.getenv("HEAVY_EXPORT_ENABLED", "true").lower() == "true"' in CONFIG_SOURCE
     assert "HEAVY_EXPORT_ENABLED=${HEAVY_EXPORT_ENABLED:-true}" in COMPOSE_SOURCE
     assert "HEAVY_EXPORT_ENABLED=false" in SAFE_MODE_DOC
+
+
+def test_runtime_buffer_shadow_defaults_are_disabled_and_non_routing() -> None:
+    assert 'os.getenv("ANSWER_RUNTIME_BUFFER_SHADOW_ENABLED", "false").lower() == "true"' in CONFIG_SOURCE
+    assert 'os.getenv("ANSWER_RUNTIME_BUFFER_SHADOW_PERCENTAGE", "0")' in CONFIG_SOURCE
+    assert 'os.getenv("ANSWER_RUNTIME_BUFFER_SHADOW_TTL_SECONDS", "14400")' in CONFIG_SOURCE
+    assert 'os.getenv("ANSWER_RUNTIME_BUFFER_CONSISTENCY_SAMPLE_LIMIT", "100")' in CONFIG_SOURCE
+
+    assert "ANSWER_RUNTIME_BUFFER_SHADOW_ENABLED=false" in ENV_EXAMPLE_SOURCE
+    assert "ANSWER_RUNTIME_BUFFER_SHADOW_PERCENTAGE=0" in ENV_EXAMPLE_SOURCE
+    assert "ANSWER_RUNTIME_BUFFER_SHADOW_TTL_SECONDS=14400" in ENV_EXAMPLE_SOURCE
+    assert "ANSWER_RUNTIME_BUFFER_CONSISTENCY_SAMPLE_LIMIT=100" in ENV_EXAMPLE_SOURCE
+
+    expected_shadow_compose_flags = [
+        "ANSWER_RUNTIME_BUFFER_SHADOW_ENABLED=${ANSWER_RUNTIME_BUFFER_SHADOW_ENABLED:-false}",
+        "ANSWER_RUNTIME_BUFFER_SHADOW_PERCENTAGE=${ANSWER_RUNTIME_BUFFER_SHADOW_PERCENTAGE:-0}",
+        "ANSWER_RUNTIME_BUFFER_SHADOW_TTL_SECONDS=${ANSWER_RUNTIME_BUFFER_SHADOW_TTL_SECONDS:-14400}",
+        "ANSWER_RUNTIME_BUFFER_CONSISTENCY_SAMPLE_LIMIT="
+        "${ANSWER_RUNTIME_BUFFER_CONSISTENCY_SAMPLE_LIMIT:-100}",
+    ]
+    for flag in expected_shadow_compose_flags:
+        assert flag in COMPOSE_SOURCE
+
+
+def test_runtime_buffer_shadow_defaults_do_not_enable_queue_or_hybrid() -> None:
+    assert "ANSWER_WRITE_MODE=direct" in ENV_EXAMPLE_SOURCE
+    assert "ANSWER_QUEUE_ENABLED=false" in ENV_EXAMPLE_SOURCE
+    assert "ANSWER_QUEUE_PERCENTAGE=0" in ENV_EXAMPLE_SOURCE
+    assert "ANSWER_WRITE_MODE=${ANSWER_WRITE_MODE:-direct}" in COMPOSE_SOURCE
+    assert "ANSWER_QUEUE_ENABLED=${ANSWER_QUEUE_ENABLED:-false}" in COMPOSE_SOURCE
+    assert "ANSWER_QUEUE_PERCENTAGE=${ANSWER_QUEUE_PERCENTAGE:-0}" in COMPOSE_SOURCE
+    assert "ANSWER_WRITE_MODE=queue" not in ENV_EXAMPLE_SOURCE
+    assert "ANSWER_WRITE_MODE=hybrid" not in ENV_EXAMPLE_SOURCE
+    assert "ANSWER_QUEUE_ENABLED=true" not in ENV_EXAMPLE_SOURCE

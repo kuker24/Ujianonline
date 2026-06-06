@@ -330,6 +330,48 @@ async def test_single_answer_direct_write_updates_runtime_count(monkeypatch) -> 
 
 
 @pytest.mark.asyncio
+async def test_single_answer_direct_write_survives_post_commit_redis_marker_failure(monkeypatch) -> None:
+    _patch_single_answer_common(monkeypatch)
+    wrote = {}
+
+    async def fake_write(self, *, session_id, question_id, write_fields):
+        wrote["session_id"] = session_id
+        wrote["question_id"] = question_id
+
+    async def fake_add_answered(_session_id, _question_ids):
+        return 1
+
+    async def fake_update_snapshot(*_args, **_kwargs):
+        return None
+
+    async def failing_update_session_answers(*_args, **_kwargs):
+        raise RuntimeError("redis marker down after db commit")
+
+    monkeypatch.setattr(answer_sync_service.AnswerSyncService, "_write_single_answer_direct", fake_write)
+    monkeypatch.setattr(answer_sync_service, "add_answered_questions_and_count", fake_add_answered)
+    monkeypatch.setattr(answer_sync_service, "update_runtime_snapshot_answered_count", fake_update_snapshot)
+    monkeypatch.setattr(answer_sync_service, "update_session_answers", failing_update_session_answers)
+
+    locked_session = SimpleNamespace(id=123, exam_id=55, status="in_progress")
+    db = _FakeSingleAnswerDb(
+        results=[
+            _FirstResult((123, 55, "in_progress")),
+            _ScalarResult(None),
+            _ScalarResult(locked_session),
+        ]
+    )
+
+    response = await _single_answer_service(db).accept_single_answer(
+        AnswerSubmit(session_id=123, question_id=9, selected_option_id=2),
+        request=None,
+    )
+
+    assert response.status == "saved"
+    assert wrote == {"session_id": 123, "question_id": 9}
+    assert db.commits >= 1
+
+
+@pytest.mark.asyncio
 async def test_single_answer_hot_path_timing_logs_only_when_enabled(monkeypatch, caplog) -> None:
     _patch_single_answer_common(monkeypatch)
     monkeypatch.setattr(answer_sync_service.settings, "answer_hot_path_timing_enabled", True)
@@ -841,3 +883,42 @@ async def test_progress_update_non_peak_publishes_when_runtime_count_exists(monk
     assert published["exam_id"] == 55
     assert published["payload"]["progress"] == 25.0
     assert published["payload"]["answered_count"] == 10
+
+
+@pytest.mark.asyncio
+async def test_post_commit_answer_marker_failure_is_best_effort(monkeypatch) -> None:
+    async def failing_update_session_answers(_session_id, _answers):
+        raise RuntimeError("redis down")
+
+    monkeypatch.setattr(answer_sync_service, "update_session_answers", failing_update_session_answers)
+
+    await answer_sync_service._safe_update_session_answers_marker(
+        session_id=123,
+        answers={"9": True},
+        log_prefix="TEST",
+    )
+
+
+class _FailingJournalRedis:
+    def pipeline(self):
+        return self
+
+    def sismember(self, *_args, **_kwargs):
+        return self
+
+    async def execute(self):
+        raise RuntimeError("redis unavailable")
+
+
+@pytest.mark.asyncio
+async def test_answer_journal_idempotency_read_failure_returns_503() -> None:
+    with pytest.raises(HTTPException) as exc_info:
+        await _single_answer_service(_FakeSingleAnswerDb())._read_existing_journal_event_ids(
+            _FailingJournalRedis(),
+            "exam:answer-journal:v1:session:123:event-ids",
+            ["event000001"],
+            123,
+        )
+
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.headers["Retry-After"] == "1"
