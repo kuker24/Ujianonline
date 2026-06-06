@@ -544,7 +544,8 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
       );
       debugPrint(
         '📋 Runtime policy: answerSync=${_answerJournalSyncSeconds}s '
-        'batch=$_answerJournalBatchSize commandPoll=${_commandPollSeconds}s',
+        'batch=$_answerJournalBatchSize commandPoll=${_commandPollSeconds}s '
+        'cheatingMode=${_apiService.runtimeCheatingReportingMode}',
       );
     } catch (e) {
       debugPrint('Runtime policy refresh skipped: $e');
@@ -697,6 +698,11 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
     }
 
     final state = _getConnectionUiState();
+    final totalQueue = _queuedViolationCount + _queuedAnswerEventCount;
+    if (state == _ConnectionStateUi.online && totalQueue <= 0) {
+      return const SizedBox.shrink();
+    }
+
     final color = _getConnectionUiColor(state);
     final label = _getConnectionUiLabel(state);
     final details = _getConnectionUiDetails(state);
@@ -710,7 +716,7 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
         }
       },
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.9),
           borderRadius: BorderRadius.circular(20),
@@ -737,6 +743,32 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
         ),
       ),
     );
+  }
+
+  String _normalizeViolationTypeForPolicy(String rawType) {
+    final normalized = rawType.trim().toLowerCase().replaceAll(' ', '_');
+    if (normalized.isEmpty) return normalized;
+    return normalized.startsWith('violation_')
+        ? normalized
+        : 'violation_$normalized';
+  }
+
+  bool _isViolationTemporarilyDisabled(String violationType) {
+    final normalized = _normalizeViolationTypeForPolicy(violationType);
+    final disabled = _apiService.runtimeDisabledViolationTypes;
+    final disabledNow = disabled.contains(normalized);
+    if (disabledNow) {
+      debugPrint(
+        '⏸️ Violation temporarily disabled by runtime policy: $normalized '
+        'mode=${_apiService.runtimeCheatingReportingMode}',
+      );
+    }
+    return disabledNow;
+  }
+
+  bool _canForceSubmitForViolation(String violationType) {
+    return _apiService.runtimeForceSubmitOnViolationEnabled &&
+        !_isViolationTemporarilyDisabled(violationType);
   }
 
   void _pruneRiskEvents() {
@@ -1322,12 +1354,14 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
     }
     _lastSecurityViolationAt[violationType] = now;
 
-    if (weight > 0) {
+    final temporarilyDisabled = _isViolationTemporarilyDisabled(violationType);
+
+    if (weight > 0 && !temporarilyDisabled) {
       _registerRiskEvent(type: violationType, weight: weight, details: message);
     }
 
-    // Send to server if we have a session
-    if (_currentSessionId != null) {
+    // Send to server if we have a session and the runtime policy allows it.
+    if (_currentSessionId != null && !temporarilyDisabled) {
       _apiService.logViolation(
         sessionId: _currentSessionId!,
         examId: _currentExamId,
@@ -1345,7 +1379,9 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
       return;
     }
 
-    if (enforceSubmit && _shouldForceSubmitByRisk()) {
+    if (enforceSubmit &&
+        _canForceSubmitForViolation(violationType) &&
+        _shouldForceSubmitByRisk()) {
       _forceSubmitExam(
         reason: 'Pelanggaran keamanan serius berulang terdeteksi.',
       );
@@ -1426,7 +1462,7 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
                 'Pelanggaran ini telah dicatat dan dilaporkan ke pengawas.',
                 style: TextStyle(
                   color: Colors.white.withValues(alpha: 0.6),
-                  fontSize: 11,
+                  fontSize: 10,
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -1624,16 +1660,22 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
             ? 2.0
             : 1.0;
 
+    final tabViolationType = minorSwitch ? 'TAB_SWITCH_MINOR' : 'TAB_SWITCH';
+    final temporarilyDisabled =
+        _isViolationTemporarilyDisabled(tabViolationType);
+
     // Minor switch is logged as low-confidence and doesn't increase hard count.
-    if (!minorSwitch) {
+    if (!minorSwitch && !temporarilyDisabled) {
       _tabSwitchCount++;
     }
 
-    _registerRiskEvent(
-      type: minorSwitch ? 'TAB_SWITCH_MINOR' : 'TAB_SWITCH',
-      weight: weight,
-      details: 'Background for ${durationSec}s',
-    );
+    if (!temporarilyDisabled) {
+      _registerRiskEvent(
+        type: tabViolationType,
+        weight: weight,
+        details: 'Background for ${durationSec}s',
+      );
+    }
 
     // Log tab switch violation
     debugPrint(
@@ -1642,24 +1684,27 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
     );
 
     // Send violation to server (await for diagnostics)
-    _apiService
-        .logViolation(
-      sessionId: _currentSessionId!,
-      examId: _currentExamId,
-      type: minorSwitch ? 'TAB_SWITCH_MINOR' : 'TAB_SWITCH',
-      count: _tabSwitchCount,
-      details:
-          'User left app for ${durationSec}s | risk=${_violationRiskScore.toStringAsFixed(2)}',
-    )
-        .then((success) {
-      if (!success) {
-        debugPrint('🔴 TAB_SWITCH violation failed to send to server!');
-      }
-      unawaited(_refreshQueueIndicators());
-    });
+    if (!temporarilyDisabled) {
+      _apiService
+          .logViolation(
+        sessionId: _currentSessionId!,
+        examId: _currentExamId,
+        type: tabViolationType,
+        count: _tabSwitchCount,
+        details:
+            'User left app for ${durationSec}s | risk=${_violationRiskScore.toStringAsFixed(2)}',
+      )
+          .then((success) {
+        if (!success) {
+          debugPrint('🔴 TAB_SWITCH violation failed to send to server!');
+        }
+        unawaited(_refreshQueueIndicators());
+      });
+    }
 
     // Check risk-based auto-submit for repeated/high-confidence signals
-    if (_shouldForceSubmitByRisk()) {
+    if (_canForceSubmitForViolation(tabViolationType) &&
+        _shouldForceSubmitByRisk()) {
       _forceSubmitExam(
         reason: 'Aktivitas keluar aplikasi berulang terdeteksi.',
       );
@@ -1733,7 +1778,8 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
     final totalViolations = _tabSwitchCount + _screenshotCount;
 
     // Check for auto-submit (risk-aware + hard limit fallback)
-    if (_shouldForceSubmitByRisk()) {
+    if (_canForceSubmitForViolation('SCREENSHOT_ATTEMPT') &&
+        _shouldForceSubmitByRisk()) {
       debugPrint(
         '🚨 AUTO-SUBMIT: Total violations = $totalViolations, risk=${_violationRiskScore.toStringAsFixed(2)}',
       );
@@ -2644,12 +2690,14 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
                           final details =
                               args.length > 2 ? args[2].toString() : null;
 
-                          _apiService.logViolation(
-                            sessionId: _currentSessionId!,
-                            type: type,
-                            count: count,
-                            details: details,
-                          );
+                          if (!_isViolationTemporarilyDisabled(type)) {
+                            _apiService.logViolation(
+                              sessionId: _currentSessionId!,
+                              type: type,
+                              count: count,
+                              details: details,
+                            );
+                          }
                         }
                         return true;
                       },
@@ -2778,7 +2826,8 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
                                       Navigator.of(this.context)
                                           .pushAndRemoveUntil(
                                         MaterialPageRoute(
-                                          builder: (_) => const SessionEndedPage(),
+                                          builder: (_) =>
+                                              const SessionEndedPage(),
                                         ),
                                         (route) => false, // Remove all routes
                                       );
@@ -2948,7 +2997,8 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
                                       Navigator.of(this.context)
                                           .pushAndRemoveUntil(
                                         MaterialPageRoute(
-                                          builder: (_) => const SessionEndedPage(),
+                                          builder: (_) =>
+                                              const SessionEndedPage(),
                                         ),
                                         (route) => false,
                                       );
@@ -3178,8 +3228,8 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
 
               if (AppConfig.showConnectionBadge)
                 Positioned(
-                  top: 12,
-                  right: 12,
+                  right: 10,
+                  bottom: 10,
                   child: _buildConnectionBadge(),
                 ),
             ],

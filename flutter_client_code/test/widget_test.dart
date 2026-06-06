@@ -14,5 +14,7 @@ void main() {
     expect(find.text('Ujian Online'), findsOneWidget);
     expect(find.text('Silakan login untuk memulai ujian'), findsOneWidget);
     expect(find.text('MASUK'), findsOneWidget);
+    expect(find.textContaining('man1rokanhulu.cloud'), findsNothing);
+    expect(find.text('Server ujian belum siap'), findsNothing);
   });
 }

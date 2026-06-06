@@ -220,6 +220,19 @@ class ApiService {
         'retry_after_seconds': 8,
         'cheating_detection_enabled': true,
         'cheating_detail_level': 'aggregate',
+        'cheating_reporting_mode': 'normal',
+        'disabled_violation_types': <String>[],
+        'critical_violation_types': <String>[
+          'violation_apk_tampering',
+          'violation_screenshot_attempt',
+          'violation_screen_recording',
+          'violation_external_display',
+          'violation_devtools_open',
+          'violation_copy',
+          'violation_paste',
+          'violation_clipboard_violation',
+        ],
+        'force_submit_on_violation_enabled': true,
         'final_submit_priority': true,
       };
 
@@ -275,18 +288,49 @@ class ApiService {
   int get runtimeAnswerSyncIntervalSeconds =>
       _policyInt('answer_sync_interval_seconds', 15);
 
-  int get runtimeAnswerSyncBatchSize => _policyInt('answer_sync_batch_size', 30);
+  int get runtimeAnswerSyncBatchSize =>
+      _policyInt('answer_sync_batch_size', 30);
 
   int get runtimeCommandPollSeconds => _policyInt('command_poll_seconds', 25);
 
   int get runtimeViolationFlushSeconds =>
       _policyInt('violation_flush_seconds', 30);
 
+  String get runtimeCheatingReportingMode {
+    final raw = (_cachedRuntimePolicy ??
+        fallbackRuntimePolicy)['cheating_reporting_mode'];
+    final mode = '$raw'.trim().toLowerCase();
+    return mode.isEmpty ? 'normal' : mode;
+  }
+
+  bool get runtimeForceSubmitOnViolationEnabled {
+    final raw = (_cachedRuntimePolicy ??
+        fallbackRuntimePolicy)['force_submit_on_violation_enabled'];
+    if (raw is bool) return raw;
+    return '$raw'.trim().toLowerCase() != 'false';
+  }
+
+  Set<String> get runtimeDisabledViolationTypes {
+    final raw = (_cachedRuntimePolicy ??
+        fallbackRuntimePolicy)['disabled_violation_types'];
+    if (raw is! List) return <String>{};
+    return raw
+        .map((item) => _normalizeViolationEventType('$item'))
+        .where((item) => item.trim().isNotEmpty)
+        .toSet();
+  }
+
+  bool isViolationReportingTemporarilyDisabled(String rawType) {
+    final normalized = _normalizeViolationEventType(rawType);
+    return runtimeDisabledViolationTypes.contains(normalized);
+  }
+
   int get runtimeRetryAfterSeconds => _policyInt('retry_after_seconds', 8);
 
   int get lastRetryAfterSeconds => _lastRetryAfterSeconds;
 
-  Future<Map<String, dynamic>> getRuntimePolicy({bool forceRefresh = false}) async {
+  Future<Map<String, dynamic>> getRuntimePolicy(
+      {bool forceRefresh = false}) async {
     final now = DateTime.now();
     if (!forceRefresh &&
         _cachedRuntimePolicy != null &&
@@ -440,7 +484,9 @@ class ApiService {
           ),
           data: payload,
         );
-        if (response.statusCode == 200 || response.statusCode == 202 || response.statusCode == 204) {
+        if (response.statusCode == 200 ||
+            response.statusCode == 202 ||
+            response.statusCode == 204) {
           return true;
         }
         if (!_isRetryableStatus(response.statusCode)) {
@@ -487,6 +533,11 @@ class ApiService {
 
       for (int i = 0; i < queue.length; i++) {
         final payload = queue[i];
+        final eventType = '${payload['event_type'] ?? ''}';
+        if (isViolationReportingTemporarilyDisabled(eventType)) {
+          remaining.add(payload);
+          continue;
+        }
         final ok = await _sendViolationPayload(
           payload: payload,
           token: authToken,
@@ -602,11 +653,18 @@ class ApiService {
           '⚠️ logViolation: exam_id is null/0, broadcast may not reach admin monitor',
         );
       }
+      final normalizedEventType = _normalizeViolationEventType(type);
+      if (runtimeDisabledViolationTypes.contains(normalizedEventType)) {
+        debugPrint(
+          '⏸️ Violation reporting temporarily disabled: $normalizedEventType '
+          'mode=$runtimeCheatingReportingMode',
+        );
+        return true;
+      }
+
       debugPrint(
         '📤 Logging violation: type=$type, session=$sessionIdInt, exam=$effectiveExamId, count=$count',
       );
-
-      final normalizedEventType = _normalizeViolationEventType(type);
 
       final payload = <String, dynamic>{
         'session_id': sessionIdInt,
@@ -877,7 +935,8 @@ class ApiService {
       if (e.response != null) {
         final statusCode = e.response?.statusCode;
         final responseData = e.response?.data;
-        final detail = responseData is Map ? responseData['detail'] : responseData;
+        final detail =
+            responseData is Map ? responseData['detail'] : responseData;
 
         // Handle 428 - CAPTCHA Required
         if (statusCode == 428) {
@@ -910,7 +969,8 @@ class ApiService {
                     detail['message'] ?? 'Jawaban CAPTCHA salah, coba lagi',
               };
             }
-            message = detail['message']?.toString() ?? 'Username atau password salah';
+            message =
+                detail['message']?.toString() ?? 'Username atau password salah';
           } else {
             message = detail?.toString() ?? 'Username atau password salah';
           }

@@ -181,7 +181,7 @@ class _NativeLoginPageState extends State<NativeLoginPage> {
     }
     return const _StatusBanner(
       icon: Icons.verified_user_rounded,
-      message: 'Keamanan APK siap',
+      message: 'Ujian siap dimulai.',
       color: Color(0xFF16a34a),
     );
   }
@@ -390,17 +390,6 @@ class _NativeLoginPageState extends State<NativeLoginPage> {
                                     letterSpacing: 1.2,
                                   ),
                                 ),
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      Text(
-                        _apiService.serverUrl.isEmpty
-                            ? 'Server ujian belum siap'
-                            : _apiService.serverUrl,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.54),
-                          fontSize: 12,
                         ),
                       ),
                     ],

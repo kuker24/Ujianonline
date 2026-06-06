@@ -17,6 +17,10 @@ from app.config import settings
 from app.core.exam_monitor_events import publish_exam_monitor_event
 from app.core.exam_session_helpers import safe_int
 from app.core.redis_pubsub import get_session_data, store_session_data
+from app.core.runtime_policy import (
+    get_mobile_runtime_policy,
+    is_violation_disabled_by_mobile_policy,
+)
 from app.core.security import AuthenticatedUser, get_current_user_hot_path
 from app.core.violation_metadata import (
     canonical_violation_event_type,
@@ -56,13 +60,6 @@ async def log_violation(
     db: AsyncSession = Depends(get_db),
 ):
     """Log a cheating violation without blocking answer hot paths."""
-    if settings.violation_async_enabled:
-        enqueue_result = await enqueue_violation_event(db, violation_data, current_user)
-        return enqueue_result.to_response()
-
-    active_session_statuses = ("in_progress", "active", "paused")
-    terminal_session_statuses = {"submitted", "completed", "abandoned", "terminated", "kicked"}
-
     violation_payload = dict(violation_data.event_data or {})
     reported_at = _ensure_aware_utc(violation_data.timestamp or datetime.now(timezone.utc))
     normalized_event_type = canonical_violation_event_type(
@@ -72,6 +69,23 @@ async def log_violation(
     )
     if not normalized_event_type:
         raise HTTPException(status_code=400, detail="Jenis pelanggaran tidak valid")
+
+    runtime_policy = await get_mobile_runtime_policy(force_refresh=False)
+    if is_violation_disabled_by_mobile_policy(normalized_event_type, runtime_policy):
+        logger.info(
+            "Ignored non-critical violation by runtime policy session_id=%s event_type=%s mode=%s",
+            violation_data.session_id,
+            normalized_event_type,
+            runtime_policy.get("mode"),
+        )
+        return _ignored_violation_response(0)
+
+    if settings.violation_async_enabled:
+        enqueue_result = await enqueue_violation_event(db, violation_data, current_user)
+        return enqueue_result.to_response()
+
+    active_session_statuses = ("in_progress", "active", "paused")
+    terminal_session_statuses = {"submitted", "completed", "abandoned", "terminated", "kicked"}
 
     session_state_result = await db.execute(
         select(
