@@ -132,3 +132,17 @@ Required next smoke checks once device is connected:
 - Source/backend adaptive policy: ready and live.
 - APK `1.0.7`: built and registered as New Update.
 - Broad rollout remains HOLD until one physical APK `1.0.7` smoke completes on device.
+
+## Follow-up APK Build from Main Worktree - 2026-06-06
+After syncing the main local worktree with the GitHub review branch, a fresh APK was built so `tools/apk_builder_gui.py` / local builds use the updated native-login and adaptive anti-cheat source.
+
+- APK: `/home/fahmi/Downloads/ujian-online-apk/ujian-online-1.0.8-main-updated-20260606-151432.apk`
+- SHA256: `08bb73c2836df001736d6d587e3044b28f110399b440514e2811a6dce1f959d9`
+- Package: `com.school.examapp`
+- Version: `1.0.8`
+- Signing: V2 verified
+- Signer cert SHA-256: `297ad1bfc6ed358684ad699569daf4a6565847790211ce726bf53da580ef3187`
+- New Update token registered on VPS with masked token `BUILD-2026...T5G6MW`.
+- Stable profile remains enabled and `token_validation_bypass=false`.
+
+Physical device smoke remains pending until ADB detects the phone again.
