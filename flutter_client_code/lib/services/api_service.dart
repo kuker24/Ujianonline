@@ -180,6 +180,37 @@ class ApiService {
   String get serverUrl => _serverUrl ?? '';
   bool get isConfigured => _serverUrl != null && _serverUrl!.isNotEmpty;
 
+  /// Prepare APK trust context before native login/WebView boot.
+  ///
+  /// Native login is strict on production for student/guruplus accounts, so the
+  /// app should have build token, app signature, timestamp, and package info
+  /// ready before the user submits credentials. Android signature reads can be
+  /// transiently slow on some devices, so retry briefly without weakening server
+  /// validation.
+  Future<bool> prepareSecurityContext({int attempts = 3}) async {
+    if (!Platform.isAndroid) {
+      return true;
+    }
+
+    for (var attempt = 0; attempt < attempts; attempt++) {
+      try {
+        final signature = await _getCachedSignature();
+        await _getCachedPackageInfo();
+        if (signature != null && signature.isNotEmpty) {
+          return true;
+        }
+      } catch (e) {
+        debugPrint('prepareSecurityContext attempt ${attempt + 1} failed: $e');
+      }
+
+      if (attempt < attempts - 1) {
+        await Future.delayed(Duration(milliseconds: 180 * (attempt + 1)));
+      }
+    }
+
+    return false;
+  }
+
   Map<String, dynamic> get fallbackRuntimePolicy => const {
         'mode': 'normal',
         'answer_sync_interval_seconds': 15,
@@ -486,9 +517,14 @@ class ApiService {
     }
   }
 
-  /// Get student exam URL
+  /// Get student exam URL. This path is the public student portal entry point.
   String getExamUrl() {
     return '$_serverUrl/student/';
+  }
+
+  /// Get authenticated student dashboard URL for the APK WebView after native login.
+  String getStudentDashboardUrl() {
+    return '$_serverUrl/student/dashboard.html';
   }
 
   /// Get exam URL with auto-login parameters
@@ -820,6 +856,14 @@ class ApiService {
         final user = data['user'];
 
         if (token != null) {
+          final role = user is Map ? user['role']?.toString() : null;
+          if (role != 'student' && role != 'guruplus') {
+            return {
+              'success': false,
+              'message': 'Portal APK ini khusus untuk peserta ujian',
+            };
+          }
+
           // Save token and user data
           await setToken(token);
           await _storage.write(key: 'user_data', value: jsonEncode(user));
@@ -832,7 +876,8 @@ class ApiService {
 
       if (e.response != null) {
         final statusCode = e.response?.statusCode;
-        final detail = e.response?.data['detail'];
+        final responseData = e.response?.data;
+        final detail = responseData is Map ? responseData['detail'] : responseData;
 
         // Handle 428 - CAPTCHA Required
         if (statusCode == 428) {
@@ -865,13 +910,14 @@ class ApiService {
                     detail['message'] ?? 'Jawaban CAPTCHA salah, coba lagi',
               };
             }
-            message = detail['message'] ?? 'Username atau password salah';
+            message = detail['message']?.toString() ?? 'Username atau password salah';
           } else {
-            message = detail ?? 'Username atau password salah';
+            message = detail?.toString() ?? 'Username atau password salah';
           }
         } else {
-          message = e.response?.data['detail']?.toString() ??
-              'Terjadi kesalahan server';
+          message = detail is Map
+              ? detail['message']?.toString() ?? 'Terjadi kesalahan server'
+              : detail?.toString() ?? 'Terjadi kesalahan server';
         }
       }
       return {'success': false, 'message': message};

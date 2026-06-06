@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'pages/splash_page.dart';
-import 'pages/exam_page.dart';
+import 'pages/native_login_page.dart';
 import 'services/api_service.dart';
 import 'widgets/common_widgets.dart';
 
@@ -49,7 +49,7 @@ class SXBClientApp extends StatelessWidget {
   }
 }
 
-/// Main app router - goes DIRECTLY to exam, no config page
+/// Main app router - native splash, native login, then authenticated WebView.
 class AppRouter extends StatefulWidget {
   const AppRouter({super.key});
 
@@ -102,7 +102,7 @@ class _AppRouterState extends State<AppRouter> {
       if (isConnected && mounted) {
         Navigator.of(context).pushReplacement(
           PageRouteBuilder(
-            pageBuilder: (_, __, ___) => ExamPage(examUrl: _apiService.getExamUrl()),
+            pageBuilder: (_, __, ___) => const NativeLoginPage(),
             transitionsBuilder: (_, animation, __, child) {
               return FadeTransition(opacity: animation, child: child);
             },

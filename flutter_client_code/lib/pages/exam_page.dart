@@ -10,7 +10,7 @@ import '../services/exam_resilience_service.dart';
 import '../services/signature_verifier.dart';
 import '../config.dart';
 import '../widgets/common_widgets.dart';
-import 'login_page.dart';
+import 'session_ended_page.dart';
 import 'package:screenshot_callback/screenshot_callback.dart';
 
 enum _ConnectionStateUi { online, degraded, offline }
@@ -1137,10 +1137,10 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
                   // Close dialog first
                   Navigator.of(ctx).pop();
 
-                  // Navigate to login page and clear entire navigation stack
+                  // Navigate to session-ended page and clear entire navigation stack
                   // This prevents black screen by ensuring proper destination
                   Navigator.of(context).pushAndRemoveUntil(
-                    MaterialPageRoute(builder: (_) => const LoginPage()),
+                    MaterialPageRoute(builder: (_) => const SessionEndedPage()),
                     (route) => false, // Remove all routes
                   );
                 },
@@ -2773,12 +2773,12 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
                                       // Close dialog first
                                       Navigator.of(ctx).pop();
 
-                                      // Navigate to login page and clear entire navigation stack
+                                      // Navigate to session-ended page and clear entire navigation stack
                                       // This prevents black screen by ensuring proper destination
                                       Navigator.of(this.context)
                                           .pushAndRemoveUntil(
                                         MaterialPageRoute(
-                                          builder: (_) => const LoginPage(),
+                                          builder: (_) => const SessionEndedPage(),
                                         ),
                                         (route) => false, // Remove all routes
                                       );
@@ -2944,11 +2944,11 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
                                       // Close dialog first
                                       Navigator.of(ctx).pop();
 
-                                      // Navigate to login page and clear entire navigation stack
+                                      // Navigate to session-ended page and clear entire navigation stack
                                       Navigator.of(this.context)
                                           .pushAndRemoveUntil(
                                         MaterialPageRoute(
-                                          builder: (_) => const LoginPage(),
+                                          builder: (_) => const SessionEndedPage(),
                                         ),
                                         (route) => false,
                                       );
@@ -3154,7 +3154,7 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
                   },
                 ),
               if (!_authPrepared)
-                const LoadingOverlay(message: 'Menyiapkan sesi login...'),
+                const LoadingOverlay(message: 'Menyiapkan keamanan APK...'),
 
               // Loading indicator
               if (_isLoading)
