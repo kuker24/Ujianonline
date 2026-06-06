@@ -40,6 +40,11 @@ PROCESS_LOCK_KEY = "runtime:answer_queue:flush:lock"
 PROCESS_LOCK_TTL_SECONDS = 60
 DEFAULT_FLUSH_BATCH_SIZE = 50
 DEFAULT_DRAIN_INTERVAL_SECONDS = 2.0
+SHADOW_SESSION_INDEX_KEY = "runtime:answer_shadow:sessions"
+SHADOW_LAST_CHECK_KEY = "runtime:answer_shadow:consistency:last_run"
+
+# Phase 6 shadow mode is intentionally separate from queue/hybrid routing. It is
+# default-off and stores only deterministic payload hashes, never raw answer text.
 
 
 def session_answers_key(session_id: int) -> str:
@@ -52,6 +57,14 @@ def session_dirty_questions_key(session_id: int) -> str:
 
 def session_answered_count_key(session_id: int) -> str:
     return f"runtime:session:{session_id}:answered_count"
+
+
+def shadow_session_answers_key(session_id: int) -> str:
+    return f"runtime:answer_shadow:session:{int(session_id)}:answers"
+
+
+def shadow_session_meta_key(session_id: int) -> str:
+    return f"runtime:answer_shadow:session:{int(session_id)}:meta"
 
 
 def _json_dumps(value: Any) -> str:
@@ -83,6 +96,48 @@ def _answer_queue_percentage() -> int:
     return max(0, min(100, percentage))
 
 
+def _answer_shadow_percentage() -> int:
+    try:
+        percentage = int(
+            getattr(settings, "answer_runtime_buffer_shadow_percentage", 0) or 0
+        )
+    except (TypeError, ValueError):
+        return 0
+    return max(0, min(100, percentage))
+
+
+def runtime_answer_shadow_ttl_seconds() -> int:
+    try:
+        ttl = int(getattr(settings, "answer_runtime_buffer_shadow_ttl_seconds", 14400) or 14400)
+    except (TypeError, ValueError):
+        return 14400
+    return max(60, ttl)
+
+
+def is_runtime_answer_buffer_shadow_enabled() -> bool:
+    return bool(getattr(settings, "answer_runtime_buffer_shadow_enabled", False))
+
+
+def is_runtime_answer_buffer_shadow_enabled_for_session(
+    session_id: int,
+    user_id: int | None = None,
+    exam_id: int | None = None,
+) -> bool:
+    """Return whether a direct-mode write should also mirror a hash to Redis.
+
+    Shadow mode never changes routing and never makes Redis source-of-truth.
+    """
+    if not is_runtime_answer_buffer_shadow_enabled():
+        return False
+    percentage = _answer_shadow_percentage()
+    if percentage <= 0:
+        return False
+    if percentage >= 100:
+        return True
+    seed = _answer_buffer_seed(session_id=session_id, user_id=user_id, exam_id=exam_id)
+    return _stable_answer_buffer_bucket(seed) < percentage
+
+
 def is_runtime_answer_buffer_enabled() -> bool:
     """Return whether runtime answer buffering infrastructure is globally enabled.
 
@@ -110,6 +165,31 @@ def _answer_buffer_seed(
 def _stable_answer_buffer_bucket(seed: str) -> int:
     digest = hashlib.sha256(seed.encode("utf-8")).hexdigest()
     return int(digest[:8], 16) % 100
+
+
+def answer_payload_hash(payload: Dict[str, Any]) -> str:
+    """Hash an answer payload without exposing raw answer content in Redis/logs."""
+    normalized = {
+        "selected_option_id": payload.get("selected_option_id"),
+        "selected_option_ids": payload.get("selected_option_ids"),
+        "answer_text": payload.get("answer_text"),
+        "statement_answers": payload.get("statement_answers"),
+        "answer_metadata": payload.get("answer_metadata") or {},
+        "is_correct": payload.get("is_correct"),
+        "points_earned": (
+            str(payload.get("points_earned"))
+            if payload.get("points_earned") is not None
+            else None
+        ),
+    }
+    serialized = json.dumps(
+        normalized,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    )
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
 def is_runtime_answer_buffer_enabled_for_session(
@@ -178,6 +258,73 @@ async def _enqueue_session_for_flush(redis: Any, session_id: int) -> None:
     if first_enqueue:
         await redis.rpush(PENDING_QUEUE_KEY, str(session_id))
         await redis.expire(PENDING_QUEUE_KEY, RUNTIME_ANSWER_TTL_SECONDS)
+
+
+async def record_runtime_answer_shadow(
+    *,
+    session_id: int,
+    user_id: int,
+    exam_id: int,
+    answers: Sequence[Dict[str, Any]],
+    log_prefix: str = "ANSWER-SHADOW",
+) -> int:
+    """Best-effort Phase 6 shadow mirror for direct-mode writes.
+
+    Stores only payload hashes and counters in Redis. Failure must never affect
+    student-facing answer responses because PostgreSQL remains source of truth.
+    """
+    if not answers or not is_runtime_answer_buffer_shadow_enabled_for_session(
+        session_id=session_id,
+        user_id=user_id,
+        exam_id=exam_id,
+    ):
+        return 0
+
+    try:
+        redis = await get_redis()
+        answers_key = shadow_session_answers_key(session_id)
+        meta_key = shadow_session_meta_key(session_id)
+        ttl_seconds = runtime_answer_shadow_ttl_seconds()
+        now_iso = datetime.now(timezone.utc).isoformat()
+        mapping: Dict[str, str] = {}
+        for item in answers:
+            question_id = int(item.get("question_id") or 0)
+            if question_id <= 0:
+                continue
+            mapping[str(question_id)] = _json_dumps(
+                {
+                    "question_id": question_id,
+                    "payload_hash": answer_payload_hash(item),
+                    "updated_at": now_iso,
+                }
+            )
+        if not mapping:
+            return 0
+        pipe = redis.pipeline()
+        pipe.hset(answers_key, mapping=mapping)
+        pipe.hset(
+            meta_key,
+            mapping={
+                "session_id": str(int(session_id)),
+                "exam_id": str(int(exam_id)),
+                "answer_count": str(len(mapping)),
+                "updated_at": now_iso,
+            },
+        )
+        pipe.sadd(SHADOW_SESSION_INDEX_KEY, str(int(session_id)))
+        pipe.expire(answers_key, ttl_seconds)
+        pipe.expire(meta_key, ttl_seconds)
+        pipe.expire(SHADOW_SESSION_INDEX_KEY, ttl_seconds)
+        await pipe.execute()
+        return len(mapping)
+    except Exception as exc:
+        logger.debug(
+            "%s | session=%s | runtime shadow mirror skipped: %s",
+            log_prefix,
+            session_id,
+            str(exc),
+        )
+        return 0
 
 
 async def _write_answer_buffer(

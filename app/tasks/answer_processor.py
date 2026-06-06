@@ -2,6 +2,11 @@
 Answer queue processor for high-concurrency submit flow.
 
 This worker consumes Redis queue items and upserts answers in PostgreSQL.
+
+Production guard: do not enable ANSWER_WRITE_MODE=queue/hybrid for student
+traffic until this legacy worker is proven to match AnswerSyncService semantics:
+no-op update skip, metadata/statement merge, active-session status rules,
+final-submit forced flush compatibility, deadletter/age metrics, and rollback.
 """
 from __future__ import annotations
 

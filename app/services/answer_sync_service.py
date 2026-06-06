@@ -49,6 +49,7 @@ from app.middleware.seb_validation import validate_seb_headers
 from app.services.answer_runtime_buffer import (
     AnswerRuntimeBufferService,
     is_runtime_answer_buffer_enabled_for_session,
+    record_runtime_answer_shadow,
 )
 from app.models.question import Question
 from app.models.session import Answer, ExamSession
@@ -181,6 +182,24 @@ async def _publish_exam_monitor_event(exam_id: int, payload: Dict[str, Any]) -> 
         )
     except Exception as delta_exc:
         logger.debug("Failed to mirror monitor event to delta stream: %s", str(delta_exc))
+
+
+async def _safe_update_session_answers_marker(
+    *,
+    session_id: int,
+    answers: Dict[str, Any],
+    log_prefix: str,
+) -> None:
+    """Best-effort Redis answer marker update after durable DB work."""
+    try:
+        await update_session_answers(session_id, answers)
+    except Exception as cache_exc:
+        logger.debug(
+            "%s | session=%s | cached answer marker skipped: %s",
+            log_prefix,
+            session_id,
+            str(cache_exc),
+        )
 
 
 async def _acquire_session_write_lock(db: AsyncSession, session_id: int) -> None:
@@ -366,6 +385,24 @@ class AnswerSyncService:
                 [question_id],
                 log_prefix="SUBMIT-ANSWER",
             )
+            await record_runtime_answer_shadow(
+                session_id=session_id,
+                user_id=int(self.current_user.id),
+                exam_id=exam_id,
+                answers=[
+                    {
+                        "question_id": question_id,
+                        "selected_option_id": write_fields["selected_option_id"],
+                        "selected_option_ids": write_fields["selected_option_ids"],
+                        "answer_text": write_fields["answer_text"],
+                        "statement_answers": statement_answers,
+                        "answer_metadata": write_fields["answer_metadata"],
+                        "is_correct": write_fields["is_correct"],
+                        "points_earned": write_fields["points_earned"],
+                    }
+                ],
+                log_prefix="SUBMIT-ANSWER",
+            )
             _record_timing_ms(timings, "runtime_marker_ms", timing_started_at)
         except HTTPException:
             await self.db.rollback()
@@ -387,16 +424,13 @@ class AnswerSyncService:
             )
             raise HTTPException(status_code=409, detail="Konflik penyimpanan jawaban, silakan coba lagi")
 
-        try:
-            timing_started_at = time.perf_counter()
-            await update_session_answers(session_id, {str(question_id): True})
-            _record_timing_ms(timings, "legacy_cache_marker_ms", timing_started_at)
-        except Exception as cache_exc:
-            logger.debug(
-                "SUBMIT-ANSWER | session=%s | cached answer marker skipped: %s",
-                session_id,
-                str(cache_exc),
-            )
+        timing_started_at = time.perf_counter()
+        await _safe_update_session_answers_marker(
+            session_id=session_id,
+            answers={str(question_id): True},
+            log_prefix="SUBMIT-ANSWER",
+        )
+        _record_timing_ms(timings, "legacy_cache_marker_ms", timing_started_at)
         timing_started_at = time.perf_counter()
         await self._publish_progress_if_needed(
             session_id=session_id,
@@ -807,6 +841,7 @@ class AnswerSyncService:
 
         now_utc = datetime.now(timezone.utc)
         changed_rows = 0
+        shadow_answers: List[Dict[str, Any]] = []
         for answer_data in valid_answers:
             question_id = int(answer_data.question_id)
             existing_answer = existing_answer_map.get(question_id)
@@ -816,6 +851,19 @@ class AnswerSyncService:
                 existing_metadata=existing_metadata,
                 incoming_metadata=incoming_metadata,
                 incoming_statement_answers=answer_data.statement_answers,
+            )
+
+            shadow_answers.append(
+                {
+                    "question_id": question_id,
+                    "selected_option_id": answer_data.selected_option_id,
+                    "selected_option_ids": answer_data.selected_option_ids,
+                    "answer_text": answer_data.answer_text,
+                    "statement_answers": answer_data.statement_answers,
+                    "answer_metadata": final_metadata,
+                    "is_correct": None,
+                    "points_earned": None,
+                }
             )
 
             if existing_answer:
@@ -864,7 +912,18 @@ class AnswerSyncService:
                 await self._retry_batch_serialized(session_id_value, valid_answers)
                 changed_rows = max(changed_rows, len(valid_answers))
 
-        await update_session_answers(session_id_value, {str(a.question_id): True for a in valid_answers})
+        await record_runtime_answer_shadow(
+            session_id=session_id_value,
+            user_id=int(self.current_user.id),
+            exam_id=int(session.exam_id),
+            answers=shadow_answers,
+            log_prefix="AUTO-SAVE-BATCH",
+        )
+        await _safe_update_session_answers_marker(
+            session_id=session_id_value,
+            answers={str(a.question_id): True for a in valid_answers},
+            log_prefix="AUTO-SAVE-BATCH",
+        )
         await self._update_runtime_answered_count(
             session_id_value,
             [int(a.question_id) for a in valid_answers],
@@ -975,8 +1034,20 @@ class AnswerSyncService:
         )
         valid_question_ids = {int(row[0]) for row in valid_question_result.all()}
 
-        redis = await get_redis()
         session_id_value = int(session.id)
+        try:
+            redis = await get_redis()
+        except Exception as exc:
+            logger.warning(
+                "ANSWER-JOURNAL | Session %s | failed opening Redis idempotency connection: %s",
+                session_id_value,
+                str(exc),
+            )
+            raise HTTPException(
+                status_code=503,
+                detail="Server sedang memverifikasi sinkronisasi jawaban, silakan coba lagi.",
+                headers={"Retry-After": "1"},
+            )
         event_set_key = _answer_journal_event_set_key(session_id_value)
         normalized_event_ids = [
             _normalize_answer_journal_event_id(event.event_id) for event in sync_data.events
@@ -1047,6 +1118,10 @@ class AnswerSyncService:
 
         question_ids_to_apply = list(latest_by_question.keys())
         existing_answer_map = await self._load_existing_answers(session_id_value, question_ids_to_apply)
+        shadow_answers = self._build_journal_shadow_answers(
+            latest_by_question,
+            existing_answer_map,
+        )
         changed_rows = self._apply_journal_answers(
             session_id_value,
             latest_by_question,
@@ -1071,9 +1146,17 @@ class AnswerSyncService:
                 str(exc),
             )
 
-        await update_session_answers(
-            session_id_value,
-            {str(question_id): True for question_id in question_ids_to_apply},
+        await record_runtime_answer_shadow(
+            session_id=session_id_value,
+            user_id=int(self.current_user.id),
+            exam_id=int(session.exam_id),
+            answers=shadow_answers,
+            log_prefix="ANSWER-JOURNAL",
+        )
+        await _safe_update_session_answers_marker(
+            session_id=session_id_value,
+            answers={str(question_id): True for question_id in question_ids_to_apply},
+            log_prefix="ANSWER-JOURNAL",
         )
         await self._update_runtime_answered_count(
             session_id_value,
@@ -1124,6 +1207,11 @@ class AnswerSyncService:
                 "ANSWER-JOURNAL | Session %s | failed checking Redis idempotency set: %s",
                 session_id_value,
                 str(exc),
+            )
+            raise HTTPException(
+                status_code=503,
+                detail="Server sedang memverifikasi sinkronisasi jawaban, silakan coba lagi.",
+                headers={"Retry-After": "1"},
             )
         return existing_event_ids
 
@@ -1192,6 +1280,39 @@ class AnswerSyncService:
             )
         )
         return {int(answer.question_id): answer for answer in existing_result.scalars().all()}
+
+    def _build_journal_shadow_answers(
+        self,
+        latest_by_question: Dict[int, Tuple[str, Any]],
+        existing_answer_map: Dict[int, Answer],
+    ) -> List[Dict[str, Any]]:
+        shadow_answers: List[Dict[str, Any]] = []
+        for question_id, (event_id, event) in latest_by_question.items():
+            existing_answer = existing_answer_map.get(question_id)
+            incoming_metadata = dict(event.answer_metadata or {})
+            incoming_metadata["client_event_id"] = event_id
+            incoming_metadata["client_sequence"] = int(event.sequence)
+            incoming_metadata["client_local_timestamp_ms"] = int(event.local_timestamp_ms)
+            incoming_metadata["sync_source"] = "answer_journal_v1"
+            existing_metadata = dict(existing_answer.answer_metadata or {}) if existing_answer else {}
+            final_metadata, _ = merge_statement_answer_metadata(
+                existing_metadata=existing_metadata,
+                incoming_metadata=incoming_metadata,
+                incoming_statement_answers=event.statement_answers,
+            )
+            shadow_answers.append(
+                {
+                    "question_id": question_id,
+                    "selected_option_id": event.selected_option_id,
+                    "selected_option_ids": event.selected_option_ids,
+                    "answer_text": event.answer_text,
+                    "statement_answers": event.statement_answers,
+                    "answer_metadata": final_metadata,
+                    "is_correct": None,
+                    "points_earned": None,
+                }
+            )
+        return shadow_answers
 
     def _apply_journal_answers(
         self,

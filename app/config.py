@@ -59,6 +59,18 @@ class Settings(BaseSettings):
     answer_hot_path_timing_threshold_ms: int = int(
         os.getenv("ANSWER_HOT_PATH_TIMING_THRESHOLD_MS", "1000")
     )
+    answer_runtime_buffer_shadow_enabled: bool = (
+        os.getenv("ANSWER_RUNTIME_BUFFER_SHADOW_ENABLED", "false").lower() == "true"
+    )
+    answer_runtime_buffer_shadow_percentage: int = int(
+        os.getenv("ANSWER_RUNTIME_BUFFER_SHADOW_PERCENTAGE", "0")
+    )
+    answer_runtime_buffer_shadow_ttl_seconds: int = int(
+        os.getenv("ANSWER_RUNTIME_BUFFER_SHADOW_TTL_SECONDS", "14400")
+    )
+    answer_runtime_buffer_consistency_sample_limit: int = int(
+        os.getenv("ANSWER_RUNTIME_BUFFER_CONSISTENCY_SAMPLE_LIMIT", "100")
+    )
     monitoring_delta_stream_enabled: bool = (
         os.getenv("MONITORING_DELTA_STREAM_ENABLED", "true").lower() == "true"
     )
@@ -240,6 +252,13 @@ class Settings(BaseSettings):
             raise ValueError("ANSWER_WRITE_MODE harus direct, queue, atau hybrid.")
         if self.answer_queue_percentage < 0 or self.answer_queue_percentage > 100:
             raise ValueError("ANSWER_QUEUE_PERCENTAGE harus antara 0 dan 100.")
+        shadow_percentage = self.answer_runtime_buffer_shadow_percentage
+        if shadow_percentage < 0 or shadow_percentage > 100:
+            raise ValueError("ANSWER_RUNTIME_BUFFER_SHADOW_PERCENTAGE harus antara 0 dan 100.")
+        if self.answer_runtime_buffer_shadow_ttl_seconds < 60:
+            raise ValueError("ANSWER_RUNTIME_BUFFER_SHADOW_TTL_SECONDS minimal 60 detik.")
+        if self.answer_runtime_buffer_consistency_sample_limit < 1:
+            raise ValueError("ANSWER_RUNTIME_BUFFER_CONSISTENCY_SAMPLE_LIMIT minimal 1.")
 
         # Enforce secure keys in production - prevent deployment with defaults.
         if self.app_env == "production":
