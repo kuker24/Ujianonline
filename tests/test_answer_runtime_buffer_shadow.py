@@ -1,4 +1,5 @@
 import json
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -68,6 +69,27 @@ def test_runtime_answer_buffer_shadow_percentage_is_deterministic(monkeypatch) -
 
     assert len(set(decisions)) == 1
     assert 50 <= len(eligible) <= 150
+
+
+def test_answer_payload_hash_normalizes_decimal_and_float_points() -> None:
+    base_payload = {
+        "selected_option_id": 1,
+        "selected_option_ids": None,
+        "answer_text": None,
+        "statement_answers": None,
+        "answer_metadata": {"phase": "6.2"},
+        "is_correct": False,
+    }
+
+    assert buffer.answer_payload_hash({**base_payload, "points_earned": Decimal("0.00")}) == (
+        buffer.answer_payload_hash({**base_payload, "points_earned": 0.0})
+    )
+    assert buffer.answer_payload_hash({**base_payload, "points_earned": Decimal("1.00")}) == (
+        buffer.answer_payload_hash({**base_payload, "points_earned": 1.0})
+    )
+    assert buffer.answer_payload_hash({**base_payload, "points_earned": Decimal("0.50")}) == (
+        buffer.answer_payload_hash({**base_payload, "points_earned": 0.5})
+    )
 
 
 def test_final_submit_service_does_not_read_runtime_shadow_keys() -> None:

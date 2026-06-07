@@ -12,6 +12,7 @@ import hashlib
 import json
 import logging
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set
 
 from sqlalchemy import select, text
@@ -209,6 +210,18 @@ def _stable_answer_buffer_bucket(seed: str) -> int:
     return int(digest[:8], 16) % 100
 
 
+def _canonical_numeric_string(value: Any) -> str | None:
+    if value is None:
+        return None
+    try:
+        decimal_value = Decimal(str(value))
+    except (InvalidOperation, ValueError):
+        return str(value)
+    if decimal_value.is_zero():
+        return "0"
+    return format(decimal_value.normalize(), "f")
+
+
 def answer_payload_hash(payload: Dict[str, Any]) -> str:
     """Hash an answer payload without exposing raw answer content in Redis/logs."""
     normalized = {
@@ -218,11 +231,7 @@ def answer_payload_hash(payload: Dict[str, Any]) -> str:
         "statement_answers": payload.get("statement_answers"),
         "answer_metadata": payload.get("answer_metadata") or {},
         "is_correct": payload.get("is_correct"),
-        "points_earned": (
-            str(payload.get("points_earned"))
-            if payload.get("points_earned") is not None
-            else None
-        ),
+        "points_earned": _canonical_numeric_string(payload.get("points_earned")),
     }
     serialized = json.dumps(
         normalized,
