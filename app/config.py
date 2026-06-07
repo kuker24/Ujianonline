@@ -65,6 +65,12 @@ class Settings(BaseSettings):
     answer_runtime_buffer_shadow_percentage: int = int(
         os.getenv("ANSWER_RUNTIME_BUFFER_SHADOW_PERCENTAGE", "0")
     )
+    answer_runtime_buffer_shadow_session_ids: str = os.getenv(
+        "ANSWER_RUNTIME_BUFFER_SHADOW_SESSION_IDS", ""
+    )
+    answer_runtime_buffer_shadow_exam_ids: str = os.getenv(
+        "ANSWER_RUNTIME_BUFFER_SHADOW_EXAM_IDS", ""
+    )
     answer_runtime_buffer_shadow_ttl_seconds: int = int(
         os.getenv("ANSWER_RUNTIME_BUFFER_SHADOW_TTL_SECONDS", "14400")
     )

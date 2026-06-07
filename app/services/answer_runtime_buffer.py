@@ -106,6 +106,46 @@ def _answer_shadow_percentage() -> int:
     return max(0, min(100, percentage))
 
 
+def _parse_positive_int_allowlist(raw_value: Any) -> Set[int]:
+    values: Set[int] = set()
+    for item in str(raw_value or "").split(","):
+        item = item.strip()
+        if not item:
+            continue
+        try:
+            parsed = int(item)
+        except (TypeError, ValueError):
+            continue
+        if parsed > 0:
+            values.add(parsed)
+    return values
+
+
+def runtime_answer_shadow_session_allowlist() -> Set[int]:
+    return _parse_positive_int_allowlist(
+        getattr(settings, "answer_runtime_buffer_shadow_session_ids", "")
+    )
+
+
+def runtime_answer_shadow_exam_allowlist() -> Set[int]:
+    return _parse_positive_int_allowlist(
+        getattr(settings, "answer_runtime_buffer_shadow_exam_ids", "")
+    )
+
+
+def _is_runtime_answer_shadow_allowlisted(
+    *,
+    session_id: int,
+    exam_id: int | None = None,
+) -> bool:
+    session_ids = runtime_answer_shadow_session_allowlist()
+    if int(session_id) in session_ids:
+        return True
+    if exam_id is None:
+        return False
+    return int(exam_id) in runtime_answer_shadow_exam_allowlist()
+
+
 def runtime_answer_shadow_ttl_seconds() -> int:
     try:
         ttl = int(getattr(settings, "answer_runtime_buffer_shadow_ttl_seconds", 14400) or 14400)
@@ -129,6 +169,8 @@ def is_runtime_answer_buffer_shadow_enabled_for_session(
     """
     if not is_runtime_answer_buffer_shadow_enabled():
         return False
+    if _is_runtime_answer_shadow_allowlisted(session_id=session_id, exam_id=exam_id):
+        return True
     percentage = _answer_shadow_percentage()
     if percentage <= 0:
         return False
