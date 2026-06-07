@@ -151,7 +151,11 @@ async def test_post_final_shadow_refresh_allowlisted_session_writes_hash_only(mo
         exam_id=55,
     )
 
-    assert result == {"status": "ok", "answer_count": 1}
+    assert result == {
+        "status": "ok",
+        "answer_count": 1,
+        "refreshed_after_final_submit": True,
+    }
     stored = fake_redis.hashes[buffer.shadow_session_answers_key(123)]["9"]
     decoded = json.loads(stored)
     assert set(decoded) == {"question_id", "payload_hash", "updated_at"}

@@ -382,16 +382,28 @@ class FinalSubmitService:
                 int(session.id),
                 exam_id=int(session.exam_id),
             )
-            if refresh_result.get("status") == "failed":
+            refresh_status = str(refresh_result.get("status") or "unknown")
+            if refresh_status in {"ok", "refreshed"}:
                 logger.warning(
-                    "SUBMIT-EXAM | session=%s | SHADOW_POST_FINAL_REFRESH_FAILED | reason=%s",
-                    session.id,
+                    "SUBMIT-EXAM | SHADOW_POST_FINAL_REFRESH_OK | status=%s | "
+                    "answer_count=%s | refreshed_after_final_submit=%s",
+                    refresh_status,
+                    int(refresh_result.get("answer_count") or 0),
+                    bool(refresh_result.get("refreshed_after_final_submit", True)),
+                )
+            elif refresh_status == "failed":
+                logger.warning(
+                    "SUBMIT-EXAM | SHADOW_POST_FINAL_REFRESH_FAILED | reason=%s",
+                    refresh_result.get("reason") or "unknown",
+                )
+            elif refresh_status == "skipped":
+                logger.debug(
+                    "SUBMIT-EXAM | SHADOW_POST_FINAL_REFRESH_SKIPPED | reason=%s",
                     refresh_result.get("reason") or "unknown",
                 )
         except Exception as shadow_refresh_exc:
             logger.warning(
-                "SUBMIT-EXAM | session=%s | SHADOW_POST_FINAL_REFRESH_FAILED | error=%s",
-                session.id,
+                "SUBMIT-EXAM | SHADOW_POST_FINAL_REFRESH_FAILED | error=%s",
                 shadow_refresh_exc.__class__.__name__,
             )
 

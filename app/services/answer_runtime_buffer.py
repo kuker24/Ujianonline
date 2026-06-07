@@ -316,10 +316,7 @@ async def refresh_runtime_answer_shadow_from_db(
     """
     safe_session_id = int(session_id)
     if not is_runtime_answer_buffer_shadow_enabled():
-        logger.debug(
-            "SHADOW_POST_FINAL_REFRESH_SKIPPED | session=%s | reason=disabled",
-            safe_session_id,
-        )
+        logger.debug("SHADOW_POST_FINAL_REFRESH_SKIPPED | reason=disabled")
         return {"status": "skipped", "reason": "disabled", "answer_count": 0}
 
     try:
@@ -331,10 +328,7 @@ async def refresh_runtime_answer_shadow_from_db(
             session_id=safe_session_id,
             exam_id=resolved_exam_id,
         ):
-            logger.debug(
-                "SHADOW_POST_FINAL_REFRESH_SKIPPED | session=%s | reason=not_selected",
-                safe_session_id,
-            )
+            logger.debug("SHADOW_POST_FINAL_REFRESH_SKIPPED | reason=not_selected")
             return {"status": "skipped", "reason": "not_selected", "answer_count": 0}
 
         latest_answers = await _load_committed_session_answers(db, safe_session_id)
@@ -375,15 +369,18 @@ async def refresh_runtime_answer_shadow_from_db(
         pipe.expire(SHADOW_SESSION_INDEX_KEY, ttl)
         await pipe.execute()
         logger.info(
-            "SHADOW_POST_FINAL_REFRESH_OK | session=%s | answers=%s",
-            safe_session_id,
+            "SHADOW_POST_FINAL_REFRESH_OK | answer_count=%s | refreshed_after_final_submit=%s",
             len(mapping),
+            bool(refreshed_after_final_submit),
         )
-        return {"status": "ok", "answer_count": len(mapping)}
+        return {
+            "status": "ok",
+            "answer_count": len(mapping),
+            "refreshed_after_final_submit": bool(refreshed_after_final_submit),
+        }
     except Exception as exc:
         logger.warning(
-            "SHADOW_POST_FINAL_REFRESH_FAILED | session=%s | error=%s",
-            safe_session_id,
+            "SHADOW_POST_FINAL_REFRESH_FAILED | error=%s",
             exc.__class__.__name__,
         )
         return {
