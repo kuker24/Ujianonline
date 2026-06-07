@@ -389,7 +389,120 @@ summary JSON artifacts
 raw token/session/student PII/answer content
 ```
 
-## 15. Remaining blockers
+## 15. Repeat readiness check after renewed trial request
+
+A later request again asked to proceed toward Phase 6.2, but still did not provide the required standalone operator approval text:
+
+```text
+approve Phase 6.0 shadow trial for test exam only
+```
+
+Decision:
+
+```text
+Shadow trial remained NOT RUN.
+No env was changed.
+No app-plane restart was performed.
+No test session was created.
+No answer save/final submit test was executed.
+No shadow keys were created.
+```
+
+GitHub check:
+
+```text
+base reviewed: 2fa9e093db03ee45045ccc016c1b6b0a7f1d7c99
+remote head:   2fa9e093db03ee45045ccc016c1b6b0a7f1d7c99
+new commits:   none
+```
+
+Source verification repeat:
+
+```text
+python -m compileall app: PASS
+tests/test_answer_runtime_buffer_shadow.py: 9 passed
+tests/test_answer_runtime_buffer_consistency.py: 3 passed
+tests/test_production_readiness_defaults.py: 7 passed
+tests/test_answer_sync_service_routing.py: 25 passed
+runtime_buffer_consistency_check.py py_compile: PASS
+runtime_buffer_consistency_check.py --help: PASS
+git diff --check: PASS
+forbidden artifact check: PASS
+```
+
+Repeat VPS readiness timestamp:
+
+```text
+20260607T045215Z
+```
+
+Repeat VPS readiness result:
+
+```text
+local /health=200
+public /health=200
+all containers=healthy
+DB=accepting connections
+PgBouncer=accepting connections
+Redis=PONG
+```
+
+Effective settings remained:
+
+```text
+ANSWER_WRITE_MODE=direct | settings.answer_write_mode=direct
+ANSWER_QUEUE_ENABLED=false | settings.answer_queue_enabled=False
+ANSWER_QUEUE_PERCENTAGE=0 | settings.answer_queue_percentage=0
+ANSWER_RUNTIME_BUFFER_SHADOW_ENABLED=UNSET | settings.answer_runtime_buffer_shadow_enabled=False
+ANSWER_RUNTIME_BUFFER_SHADOW_PERCENTAGE=UNSET | settings.answer_runtime_buffer_shadow_percentage=0
+ANSWER_RUNTIME_BUFFER_SHADOW_SESSION_IDS=UNSET | settings.answer_runtime_buffer_shadow_session_ids=
+ANSWER_RUNTIME_BUFFER_SHADOW_EXAM_IDS=UNSET | settings.answer_runtime_buffer_shadow_exam_ids=
+session_allowlist=set()
+exam_allowlist=set()
+shadow_probe=False
+```
+
+Repeat DB gates:
+
+```text
+active_sessions=0
+running_exam_windows=0
+final_submit_drain=0
+long_active_queries_gt60s=0
+idle_in_transaction=0
+```
+
+Repeat Redis gates:
+
+```text
+used_memory_human=9.97M
+used_memory_peak_human=14.00M
+maxmemory_human=1.37G
+maxmemory=1468006400
+maxmemory-policy=allkeys-lru
+rejected_connections=0
+evicted_keys=0
+runtime_shadow_keys=0
+runtime_answer_buffer_keys=0
+answer_queue_keys=0
+legacy_answer_queue_keys=0
+```
+
+Repeat log aggregate since 15 minutes:
+
+```text
+traceback=0
+connection_does_not_exist=0
+broken_pipe=0
+http_500=0
+http_503_409=0
+queue_hybrid_evidence=0
+runtime_shadow_evidence=0
+answer_save_errors=0
+final_submit_errors=0
+```
+
+## 16. Remaining blockers
 
 Redis remains unsafe as answer source-of-truth:
 
@@ -412,7 +525,7 @@ No 0-mismatch evidence from real allowlisted shadow trial.
 No operator approval for queue/hybrid/runtime buffer production.
 ```
 
-## 16. Final decision
+## 17. Final decision
 
 ```text
 Phase 6.0/6.2 shadow trial: NOT RUN
