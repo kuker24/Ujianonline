@@ -29,6 +29,7 @@ def test_parser_exposes_required_subcommands():
 
     required = {
         "preflight",
+        "inspect-readiness",
         "run-direct-baseline",
         "run-shadow-baseline",
         "run-buffer-drain",
@@ -80,6 +81,45 @@ def test_preflight_returns_required_json_shape(capsys):
     assert payload["scenario"] == "preflight"
     assert payload["staging_guard_passed"] is True
     assert payload["read_only"] is True
+
+
+def test_inspect_readiness_reports_blocked_without_declared_topology(capsys):
+    code, payload = _json_run(
+        ["inspect-readiness", "--i-understand-this-is-staging-only"],
+        _safe_env(),
+        capsys,
+    )
+
+    assert code == 0
+    assert payload["scenario"] == "inspect-readiness"
+    assert payload["readiness_check_only"] is True
+    assert payload["safe_to_execute_harness_now"] is False
+    assert payload["staging_readiness_result"] == "blocked"
+    assert "redis_policy_noeviction_declared" in payload["blocking_checks"]
+    assert payload["no_db_writes"] is True
+    assert payload["no_redis_writes"] is True
+
+
+def test_inspect_readiness_reports_declared_requirements_but_keeps_execution_blocked(capsys):
+    code, payload = _json_run(
+        ["inspect-readiness", "--i-understand-this-is-staging-only"],
+        _safe_env(
+            STAGING_PROOF_REDIS_MAXMEMORY_POLICY="noeviction",
+            STAGING_PROOF_REDIS_AOF_ENABLED="true",
+            STAGING_PROOF_CELERY_ANSWER_FLUSH_WORKER="true",
+            STAGING_PROOF_CELERY_ANSWER_FLUSH_QUEUE_BOUND="true",
+            STAGING_PROOF_SYNTHETIC_DATA_READY="true",
+            STAGING_PROOF_CLEANUP_PLAN_READY="true",
+        ),
+        capsys,
+    )
+
+    assert code == 0
+    assert payload["staging_readiness_result"] == "blocked"
+    assert payload["readiness_checks"]["redis_policy_noeviction_declared"] is True
+    assert payload["readiness_checks"]["celery_answer_flush_worker_declared"] is True
+    assert payload["readiness_checks"]["real_execution_paths_present"] is False
+    assert payload["safe_to_execute_harness_now"] is False
 
 
 def test_summarize_fail_on_mismatch_exits_nonzero(capsys):
