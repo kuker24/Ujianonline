@@ -15,7 +15,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, Mapping, MutableMapping, Sequence
+from typing import Any, Dict, Mapping, Sequence
 from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -53,7 +53,7 @@ SENSITIVE_OUTPUT_KEYS = {
     "answer_metadata",
 }
 
-READ_ONLY_COMMANDS = {"preflight", "summarize", "cleanup-plan"}
+READ_ONLY_COMMANDS = {"preflight", "inspect-readiness", "summarize", "cleanup-plan"}
 SCENARIO_COMMANDS = {
     "run-direct-baseline",
     "run-shadow-baseline",
@@ -136,6 +136,56 @@ def _redact_id(value: int | str | None) -> str | None:
         return None
     text = str(value)
     return "***" + text[-2:]
+
+
+def _env_is_true(env: Mapping[str, str], key: str) -> bool:
+    return str(env.get(key, "")).strip().lower() == "true"
+
+
+def _readiness_report(env: Mapping[str, str], target: TargetInfo) -> Dict[str, Any]:
+    allowed_db_hosts = _split_csv(env.get("STAGING_PROOF_ALLOWED_DB_HOSTS"))
+    allowed_redis_hosts = _split_csv(env.get("STAGING_PROOF_ALLOWED_REDIS_HOSTS"))
+    redis_policy = str(env.get("STAGING_PROOF_REDIS_MAXMEMORY_POLICY", "")).strip().lower()
+    redis_aof_enabled = _env_is_true(env, "STAGING_PROOF_REDIS_AOF_ENABLED")
+    celery_answer_flush = _env_is_true(env, "STAGING_PROOF_CELERY_ANSWER_FLUSH_WORKER")
+    celery_queue_bound = _env_is_true(env, "STAGING_PROOF_CELERY_ANSWER_FLUSH_QUEUE_BOUND")
+    synthetic_data_ready = _env_is_true(env, "STAGING_PROOF_SYNTHETIC_DATA_READY")
+    cleanup_ready = _env_is_true(env, "STAGING_PROOF_CLEANUP_PLAN_READY")
+
+    checks = {
+        "staging_flag_enabled": _env_is_true(env, REQUIRED_STAGING_FLAG),
+        "db_host_allowlisted": bool(target.database_host and target.database_host in allowed_db_hosts),
+        "redis_host_allowlisted": bool(target.redis_host and target.redis_host in allowed_redis_hosts),
+        "target_not_known_production": not any(
+            _contains_production_pattern(item)
+            for item in (target.database_host, target.redis_host, target.target_base_host)
+        ),
+        "database_name_not_production_like": target.database_name not in PRODUCTION_DB_NAMES,
+        "redis_policy_noeviction_declared": redis_policy == "noeviction",
+        "redis_aof_enabled_declared": redis_aof_enabled,
+        "celery_answer_flush_worker_declared": celery_answer_flush,
+        "celery_answer_flush_queue_bound_declared": celery_queue_bound,
+        "synthetic_data_ready_declared": synthetic_data_ready,
+        "cleanup_plan_ready_declared": cleanup_ready,
+        "real_execution_paths_present": False,
+    }
+    blocking = [name for name, passed in checks.items() if not passed]
+    return {
+        "readiness_check_only": True,
+        "staging_environment_verified": False,
+        "staging_readiness_result": "blocked" if blocking else "ready_for_review",
+        "safe_to_execute_harness_now": False,
+        "blocking_checks": blocking,
+        "readiness_checks": checks,
+        "database_host": _redact_id(target.database_host),
+        "database_name": "[redacted]" if target.database_name else None,
+        "redis_host": _redact_id(target.redis_host),
+        "target_base_host": _redact_id(target.target_base_host),
+        "real_execution_note": "scenario commands are still dry_run_stub; real staging DB/Redis execution is not implemented",
+        "no_db_writes": True,
+        "no_redis_writes": True,
+        "cleanup_deletion_executed": False,
+    }
 
 
 def _base_result(
@@ -295,6 +345,12 @@ def build_parser() -> argparse.ArgumentParser:
     preflight = subparsers.add_parser("preflight", help="Run guard-only preflight; no DB/Redis writes.")
     _add_common_flags(preflight)
 
+    readiness = subparsers.add_parser(
+        "inspect-readiness",
+        help="Inspect declared staging readiness from environment; no DB/Redis writes.",
+    )
+    _add_common_flags(readiness)
+
     for command in sorted(SCENARIO_COMMANDS):
         scenario = subparsers.add_parser(command, help=f"Dry-run/stub structure for {command}.")
         _add_common_flags(scenario, synthetic_prefix=True)
@@ -310,7 +366,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def run_command(args: argparse.Namespace, env: Mapping[str, str]) -> Dict[str, Any]:
-    validate_staging_guards(args, env)
+    target = validate_staging_guards(args, env)
     command = str(args.command)
 
     if command == "preflight":
@@ -323,6 +379,12 @@ def run_command(args: argparse.Namespace, env: Mapping[str, str]) -> Dict[str, A
                 "cleanup_deletion_executed": False,
             }
         )
+        return _sanitize_output(result)
+
+    if command == "inspect-readiness":
+        result = _base_result(scenario=command, env=env, read_only=True, writes_synthetic_only=False)
+        result.update(_readiness_report(env, target))
+        result["safe_to_continue"] = False
         return _sanitize_output(result)
 
     if command == "summarize":
