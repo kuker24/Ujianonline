@@ -31,6 +31,7 @@ from app.schemas.answer import ExamSubmitRequest, ExamSubmitResponse
 from app.services.answer_runtime_buffer import (
     flush_runtime_answer_buffer_for_session,
     is_runtime_answer_buffer_enabled,
+    refresh_runtime_answer_shadow_from_db,
 )
 from app.services.exam_submission_service import finalize_exam_session_submission
 from app.tasks.answer_processor import drain_answer_queue
@@ -375,6 +376,25 @@ class FinalSubmitService:
             raise HTTPException(status_code=500, detail="Gagal mengumpulkan ujian")
 
     async def _after_submit_best_effort(self, session: ExamSession, percentage: float) -> None:
+        try:
+            refresh_result = await refresh_runtime_answer_shadow_from_db(
+                self.db,
+                int(session.id),
+                exam_id=int(session.exam_id),
+            )
+            if refresh_result.get("status") == "failed":
+                logger.warning(
+                    "SUBMIT-EXAM | session=%s | SHADOW_POST_FINAL_REFRESH_FAILED | reason=%s",
+                    session.id,
+                    refresh_result.get("reason") or "unknown",
+                )
+        except Exception as shadow_refresh_exc:
+            logger.warning(
+                "SUBMIT-EXAM | session=%s | SHADOW_POST_FINAL_REFRESH_FAILED | error=%s",
+                session.id,
+                shadow_refresh_exc.__class__.__name__,
+            )
+
         try:
             await invalidate_exam_results_cache(session.exam_id)
         except Exception as cache_invalidate_exc:

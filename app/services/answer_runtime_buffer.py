@@ -17,6 +17,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Set
 
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import noload
 
 from app.config import settings
 from app.core.exam_runtime_cache import invalidate_session_answer_count_cache
@@ -241,6 +242,155 @@ def answer_payload_hash(payload: Dict[str, Any]) -> str:
         default=str,
     )
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _statement_answers_from_metadata(answer_metadata: Any) -> Any:
+    if isinstance(answer_metadata, dict):
+        return answer_metadata.get("statement_answers")
+    return None
+
+
+def _answer_payload_from_model(answer: Answer) -> Dict[str, Any]:
+    metadata = dict(answer.answer_metadata or {})
+    return {
+        "selected_option_id": answer.selected_option_id,
+        "selected_option_ids": list(answer.selected_option_ids or []) or None,
+        "answer_text": answer.answer_text,
+        "statement_answers": _statement_answers_from_metadata(metadata),
+        "answer_metadata": metadata,
+        "is_correct": answer.is_correct,
+        "points_earned": answer.points_earned,
+    }
+
+
+def _latest_answers_by_question(answers: Iterable[Answer]) -> Dict[int, Answer]:
+    latest: Dict[int, Answer] = {}
+    for answer in answers:
+        question_id = int(answer.question_id)
+        current = latest.get(question_id)
+        if current is None:
+            latest[question_id] = answer
+            continue
+        answer_ts = answer.answered_at or answer.id or 0
+        current_ts = current.answered_at or current.id or 0
+        if (answer_ts, answer.id or 0) >= (current_ts, current.id or 0):
+            latest[question_id] = answer
+    return latest
+
+
+async def _resolve_session_exam_id(db: AsyncSession, session_id: int) -> int | None:
+    result = await db.execute(
+        select(ExamSession.exam_id)
+        .where(ExamSession.id == int(session_id))
+        .limit(1)
+    )
+    value = result.scalar_one_or_none()
+    return int(value) if value is not None else None
+
+
+async def _load_committed_session_answers(
+    db: AsyncSession,
+    session_id: int,
+) -> Dict[int, Answer]:
+    result = await db.execute(
+        select(Answer)
+        .options(noload("*"))
+        .where(Answer.session_id == int(session_id))
+    )
+    return _latest_answers_by_question(result.scalars().all())
+
+
+async def refresh_runtime_answer_shadow_from_db(
+    db: AsyncSession,
+    session_id: int,
+    exam_id: int | None = None,
+    ttl_seconds: int | None = None,
+    *,
+    refreshed_after_final_submit: bool = True,
+) -> Dict[str, Any]:
+    """Refresh hash-only runtime shadow mirrors from committed PostgreSQL answers.
+
+    This is a best-effort Phase 6 shadow helper. PostgreSQL remains the source
+    of truth, Redis is never read for grading/final submit, and failures are
+    converted to sanitized status dictionaries instead of being raised.
+    """
+    safe_session_id = int(session_id)
+    if not is_runtime_answer_buffer_shadow_enabled():
+        logger.debug(
+            "SHADOW_POST_FINAL_REFRESH_SKIPPED | session=%s | reason=disabled",
+            safe_session_id,
+        )
+        return {"status": "skipped", "reason": "disabled", "answer_count": 0}
+
+    try:
+        resolved_exam_id = int(exam_id) if exam_id is not None else None
+        if resolved_exam_id is None:
+            resolved_exam_id = await _resolve_session_exam_id(db, safe_session_id)
+
+        if not is_runtime_answer_buffer_shadow_enabled_for_session(
+            session_id=safe_session_id,
+            exam_id=resolved_exam_id,
+        ):
+            logger.debug(
+                "SHADOW_POST_FINAL_REFRESH_SKIPPED | session=%s | reason=not_selected",
+                safe_session_id,
+            )
+            return {"status": "skipped", "reason": "not_selected", "answer_count": 0}
+
+        latest_answers = await _load_committed_session_answers(db, safe_session_id)
+        redis = await get_redis()
+        answers_key = shadow_session_answers_key(safe_session_id)
+        meta_key = shadow_session_meta_key(safe_session_id)
+        ttl = max(60, int(ttl_seconds or runtime_answer_shadow_ttl_seconds()))
+        now_iso = datetime.now(timezone.utc).isoformat()
+        mapping: Dict[str, str] = {}
+        for question_id, answer in latest_answers.items():
+            mapping[str(int(question_id))] = _json_dumps(
+                {
+                    "question_id": int(question_id),
+                    "payload_hash": answer_payload_hash(_answer_payload_from_model(answer)),
+                    "updated_at": now_iso,
+                }
+            )
+
+        pipe = redis.pipeline()
+        pipe.delete(answers_key)
+        if mapping:
+            pipe.hset(answers_key, mapping=mapping)
+        pipe.hset(
+            meta_key,
+            mapping={
+                "session_id": str(safe_session_id),
+                "exam_id": str(int(resolved_exam_id or 0)),
+                "answer_count": str(len(mapping)),
+                "updated_at": now_iso,
+                "refreshed_at": now_iso,
+                "refreshed_from_db": "true",
+                "refreshed_after_final_submit": "true" if refreshed_after_final_submit else "false",
+            },
+        )
+        pipe.sadd(SHADOW_SESSION_INDEX_KEY, str(safe_session_id))
+        pipe.expire(answers_key, ttl)
+        pipe.expire(meta_key, ttl)
+        pipe.expire(SHADOW_SESSION_INDEX_KEY, ttl)
+        await pipe.execute()
+        logger.info(
+            "SHADOW_POST_FINAL_REFRESH_OK | session=%s | answers=%s",
+            safe_session_id,
+            len(mapping),
+        )
+        return {"status": "ok", "answer_count": len(mapping)}
+    except Exception as exc:
+        logger.warning(
+            "SHADOW_POST_FINAL_REFRESH_FAILED | session=%s | error=%s",
+            safe_session_id,
+            exc.__class__.__name__,
+        )
+        return {
+            "status": "failed",
+            "reason": exc.__class__.__name__,
+            "answer_count": 0,
+        }
 
 
 def is_runtime_answer_buffer_enabled_for_session(
