@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 
@@ -12,9 +13,44 @@ def test_runtime_answer_buffer_shadow_disabled_by_default() -> None:
     assert buffer.runtime_answer_shadow_ttl_seconds() == 14400
 
 
+def test_runtime_answer_buffer_shadow_enabled_with_zero_percent_and_empty_allowlist_does_not_shadow(monkeypatch) -> None:
+    monkeypatch.setattr(buffer.settings, "answer_runtime_buffer_shadow_enabled", True)
+    monkeypatch.setattr(buffer.settings, "answer_runtime_buffer_shadow_percentage", 0)
+    monkeypatch.setattr(buffer.settings, "answer_runtime_buffer_shadow_session_ids", "")
+    monkeypatch.setattr(buffer.settings, "answer_runtime_buffer_shadow_exam_ids", "")
+
+    assert buffer.runtime_answer_shadow_session_allowlist() == set()
+    assert buffer.runtime_answer_shadow_exam_allowlist() == set()
+    assert buffer.is_runtime_answer_buffer_shadow_enabled_for_session(123, user_id=7, exam_id=55) is False
+
+
+def test_runtime_answer_buffer_shadow_session_allowlist_overrides_zero_percentage(monkeypatch) -> None:
+    monkeypatch.setattr(buffer.settings, "answer_runtime_buffer_shadow_enabled", True)
+    monkeypatch.setattr(buffer.settings, "answer_runtime_buffer_shadow_percentage", 0)
+    monkeypatch.setattr(buffer.settings, "answer_runtime_buffer_shadow_session_ids", "123, 456, bad, -1")
+    monkeypatch.setattr(buffer.settings, "answer_runtime_buffer_shadow_exam_ids", "")
+
+    assert buffer.runtime_answer_shadow_session_allowlist() == {123, 456}
+    assert buffer.is_runtime_answer_buffer_shadow_enabled_for_session(123, user_id=7, exam_id=55) is True
+    assert buffer.is_runtime_answer_buffer_shadow_enabled_for_session(999, user_id=7, exam_id=55) is False
+
+
+def test_runtime_answer_buffer_shadow_exam_allowlist_overrides_zero_percentage(monkeypatch) -> None:
+    monkeypatch.setattr(buffer.settings, "answer_runtime_buffer_shadow_enabled", True)
+    monkeypatch.setattr(buffer.settings, "answer_runtime_buffer_shadow_percentage", 0)
+    monkeypatch.setattr(buffer.settings, "answer_runtime_buffer_shadow_session_ids", "")
+    monkeypatch.setattr(buffer.settings, "answer_runtime_buffer_shadow_exam_ids", "55, 77")
+
+    assert buffer.runtime_answer_shadow_exam_allowlist() == {55, 77}
+    assert buffer.is_runtime_answer_buffer_shadow_enabled_for_session(123, user_id=7, exam_id=55) is True
+    assert buffer.is_runtime_answer_buffer_shadow_enabled_for_session(123, user_id=7, exam_id=88) is False
+
+
 def test_runtime_answer_buffer_shadow_percentage_is_deterministic(monkeypatch) -> None:
     monkeypatch.setattr(buffer.settings, "answer_runtime_buffer_shadow_enabled", True)
     monkeypatch.setattr(buffer.settings, "answer_runtime_buffer_shadow_percentage", 10)
+    monkeypatch.setattr(buffer.settings, "answer_runtime_buffer_shadow_session_ids", "")
+    monkeypatch.setattr(buffer.settings, "answer_runtime_buffer_shadow_exam_ids", "")
 
     decisions = [
         buffer.is_runtime_answer_buffer_shadow_enabled_for_session(123, user_id=7, exam_id=55)
@@ -32,6 +68,14 @@ def test_runtime_answer_buffer_shadow_percentage_is_deterministic(monkeypatch) -
 
     assert len(set(decisions)) == 1
     assert 50 <= len(eligible) <= 150
+
+
+def test_final_submit_service_does_not_read_runtime_shadow_keys() -> None:
+    final_submit_source = Path("app/services/final_submit_service.py").read_text(encoding="utf-8")
+
+    assert "shadow_session_answers_key" not in final_submit_source
+    assert "runtime:answer_shadow" not in final_submit_source
+    assert "record_runtime_answer_shadow" not in final_submit_source
 
 
 def test_answer_payload_hash_is_stable_and_hides_raw_text() -> None:
@@ -103,6 +147,8 @@ async def test_record_runtime_answer_shadow_is_hash_only_and_best_effort(monkeyp
 
     monkeypatch.setattr(buffer.settings, "answer_runtime_buffer_shadow_enabled", True)
     monkeypatch.setattr(buffer.settings, "answer_runtime_buffer_shadow_percentage", 100)
+    monkeypatch.setattr(buffer.settings, "answer_runtime_buffer_shadow_session_ids", "")
+    monkeypatch.setattr(buffer.settings, "answer_runtime_buffer_shadow_exam_ids", "")
     monkeypatch.setattr(buffer.settings, "answer_runtime_buffer_shadow_ttl_seconds", 3600)
     monkeypatch.setattr(buffer, "get_redis", fake_get_redis)
 
@@ -138,6 +184,8 @@ async def test_record_runtime_answer_shadow_failure_does_not_raise(monkeypatch) 
 
     monkeypatch.setattr(buffer.settings, "answer_runtime_buffer_shadow_enabled", True)
     monkeypatch.setattr(buffer.settings, "answer_runtime_buffer_shadow_percentage", 100)
+    monkeypatch.setattr(buffer.settings, "answer_runtime_buffer_shadow_session_ids", "")
+    monkeypatch.setattr(buffer.settings, "answer_runtime_buffer_shadow_exam_ids", "")
     monkeypatch.setattr(buffer, "get_redis", failing_get_redis)
 
     count = await buffer.record_runtime_answer_shadow(
