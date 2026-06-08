@@ -95,10 +95,10 @@ function bindPgkTypeToggleEvents() {
         const index = Number(button.dataset.questionIndex);
         const typeKey = button.dataset.pgkTypeToggle;
         const question = examData.questions?.[index];
-        if (!question) return;
+        if (!question || question.type !== 'multiple_choice_complex') return;
         const current = typeKey === 'A' ? getPgkTypeAEnabled(question) : getPgkTypeBEnabled(question);
         setPgkTypeEnabled(index, typeKey, !current);
-    });
+    }, true);
 }
 
 // Show alert notification

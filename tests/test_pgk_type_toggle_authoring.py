@@ -31,12 +31,21 @@ def test_pgk_toggle_ui_persists_to_question_settings_without_clearing_data() -> 
 
     assert 'data-pgk-type-toggle="A"' in rendering
     assert 'data-pgk-type-toggle="B"' in rendering
+    assert 'onclick="event.stopPropagation()"' in rendering
     assert 'pgk_type_a_enabled: true' in rendering
     assert 'pgk_type_b_enabled: true' in rendering
     assert 'pgk_type_a_options' in save_preview
     assert 'pgk_type_a_correct_answers' in save_preview
     assert 'pgk_type_b_statements' in save_preview
     assert 'pgk_type_b_statement_answers' in save_preview
+
+
+def test_pgk_toggle_click_listener_uses_capture_to_bypass_parent_stop_propagation() -> None:
+    source = _read(BOOTSTRAP)
+
+    assert "document.addEventListener('click', function (event)" in source
+    assert "if (!question || question.type !== 'multiple_choice_complex') return;" in source
+    assert 'setPgkTypeEnabled(index, typeKey, !current);\n    }, true);' in source
 
 
 def test_pgk_publish_validation_respects_enabled_type_and_blocks_both_off() -> None:
