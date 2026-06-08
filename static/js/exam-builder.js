@@ -20,25 +20,35 @@ function getPgkQuestionSettings(question) {
     return settings && typeof settings === 'object' && !Array.isArray(settings) ? settings : {};
 }
 
-function getPgkTypeAEnabled(question) {
-    const settings = getPgkQuestionSettings(question);
-    return settings.pgk_type_a_enabled !== false && question?.pgk_type_a_enabled !== false;
-}
-
-function getPgkTypeBEnabled(question) {
-    const settings = getPgkQuestionSettings(question);
-    return settings.pgk_type_b_enabled !== false && question?.pgk_type_b_enabled !== false;
-}
-
 function getEffectivePgkType(question) {
     const settings = getPgkQuestionSettings(question);
-    const currentType = question?.pgk_type || settings.pgk_type || 'checkbox';
-    const typeAEnabled = getPgkTypeAEnabled(question);
-    const typeBEnabled = getPgkTypeBEnabled(question);
+    return question?.pgk_type || settings.pgk_type || 'checkbox';
+}
 
-    if (currentType === 'checkbox' && !typeAEnabled && typeBEnabled) return 'table_validation';
-    if (currentType === 'table_validation' && !typeBEnabled && typeAEnabled) return 'checkbox';
-    return currentType;
+function resolvePgkStimulusEnabled(question, typeKey) {
+    const settings = getPgkQuestionSettings(question);
+    const normalizedType = typeKey === 'B' ? 'B' : 'A';
+    const newKey = normalizedType === 'B'
+        ? 'pgk_type_b_stimulus_enabled'
+        : 'pgk_type_a_stimulus_enabled';
+    const legacyKey = normalizedType === 'B'
+        ? 'pgk_type_b_enabled'
+        : 'pgk_type_a_enabled';
+    const rootKey = normalizedType === 'B'
+        ? 'pgk_type_b_stimulus_enabled'
+        : 'pgk_type_a_stimulus_enabled';
+
+    if (settings[newKey] !== undefined) return settings[newKey] !== false;
+    if (question?.[rootKey] !== undefined) return question[rootKey] !== false;
+    // Legacy compatibility: previous patch stored type-enabled flags. Interpret them
+    // only as stimulus flags when the new stimulus-specific flags are missing.
+    if (settings[legacyKey] !== undefined) return settings[legacyKey] !== false;
+    return true;
+}
+
+function getPgkStimulusEnabled(question) {
+    const pgkType = getEffectivePgkType(question);
+    return resolvePgkStimulusEnabled(question, pgkType === 'table_validation' ? 'B' : 'A');
 }
 
 function ensurePgkQuestionSettings(question) {
@@ -46,66 +56,74 @@ function ensurePgkQuestionSettings(question) {
     if (!question.question_settings || typeof question.question_settings !== 'object' || Array.isArray(question.question_settings)) {
         question.question_settings = {};
     }
-    if (question.question_settings.pgk_type_a_enabled === undefined) {
-        question.question_settings.pgk_type_a_enabled = question.pgk_type_a_enabled !== false;
+    const settings = question.question_settings;
+    if (settings.pgk_type_a_stimulus_enabled === undefined) {
+        settings.pgk_type_a_stimulus_enabled = resolvePgkStimulusEnabled(question, 'A');
     }
-    if (question.question_settings.pgk_type_b_enabled === undefined) {
-        question.question_settings.pgk_type_b_enabled = question.pgk_type_b_enabled !== false;
+    if (settings.pgk_type_b_stimulus_enabled === undefined) {
+        settings.pgk_type_b_stimulus_enabled = resolvePgkStimulusEnabled(question, 'B');
     }
-    question.pgk_type_a_enabled = question.question_settings.pgk_type_a_enabled !== false;
-    question.pgk_type_b_enabled = question.question_settings.pgk_type_b_enabled !== false;
-    return question.question_settings;
+    settings.pgk_type = getEffectivePgkType(question);
+    question.pgk_type = settings.pgk_type;
+    question.pgk_type_a_stimulus_enabled = settings.pgk_type_a_stimulus_enabled !== false;
+    question.pgk_type_b_stimulus_enabled = settings.pgk_type_b_stimulus_enabled !== false;
+    return settings;
 }
 
-function setPgkTypeEnabled(questionIndex, typeKey, enabled) {
+function setPgkStimulusEnabled(questionIndex, enabled) {
     const question = examData.questions?.[questionIndex];
     if (!question || question.type !== 'multiple_choice_complex') return;
 
     const settings = ensurePgkQuestionSettings(question);
+    const pgkType = getEffectivePgkType(question);
     const normalizedEnabled = Boolean(enabled);
-    if (typeKey === 'A') {
-        settings.pgk_type_a_enabled = normalizedEnabled;
-        question.pgk_type_a_enabled = normalizedEnabled;
-        if (!normalizedEnabled && (question.pgk_type || 'checkbox') === 'checkbox' && getPgkTypeBEnabled(question)) {
-            question.pgk_type = 'table_validation';
-        }
-        if (normalizedEnabled && !getPgkTypeBEnabled(question)) {
-            question.pgk_type = 'checkbox';
-        }
-    } else if (typeKey === 'B') {
-        settings.pgk_type_b_enabled = normalizedEnabled;
-        question.pgk_type_b_enabled = normalizedEnabled;
-        if (!normalizedEnabled && (question.pgk_type || 'checkbox') === 'table_validation' && getPgkTypeAEnabled(question)) {
-            question.pgk_type = 'checkbox';
-        }
-        if (normalizedEnabled && !getPgkTypeAEnabled(question)) {
-            question.pgk_type = 'table_validation';
-        }
-    }
-    settings.pgk_type = question.pgk_type || getEffectivePgkType(question);
 
-    if (!getPgkTypeAEnabled(question) && !getPgkTypeBEnabled(question)) {
-        showAlert('Soal PGK harus memiliki minimal satu tipe aktif: Tipe A atau Tipe B.', 'warning');
+    if (pgkType === 'table_validation') {
+        settings.pgk_type_b_stimulus_enabled = normalizedEnabled;
+        question.pgk_type_b_stimulus_enabled = normalizedEnabled;
+    } else {
+        settings.pgk_type_a_stimulus_enabled = normalizedEnabled;
+        question.pgk_type_a_stimulus_enabled = normalizedEnabled;
     }
+    settings.pgk_type = pgkType;
+    question.pgk_type = pgkType;
 
     renderQuestions();
     triggerAutoSave();
 }
 
-function bindPgkTypeToggleEvents() {
-    if (window.__pgkTypeToggleEventsBound === true) return;
-    window.__pgkTypeToggleEventsBound = true;
+// Compatibility shim for older loaded bundles/extensions. It now controls only
+// stimulus flags and never switches PGK type.
+function setPgkTypeEnabled(questionIndex, typeKey, enabled) {
+    const question = examData.questions?.[questionIndex];
+    if (!question || question.type !== 'multiple_choice_complex') return;
+    const settings = ensurePgkQuestionSettings(question);
+    const normalizedEnabled = Boolean(enabled);
+    if (typeKey === 'B') {
+        settings.pgk_type_b_stimulus_enabled = normalizedEnabled;
+        question.pgk_type_b_stimulus_enabled = normalizedEnabled;
+    } else {
+        settings.pgk_type_a_stimulus_enabled = normalizedEnabled;
+        question.pgk_type_a_stimulus_enabled = normalizedEnabled;
+    }
+    settings.pgk_type = getEffectivePgkType(question);
+    question.pgk_type = settings.pgk_type;
+    renderQuestions();
+    triggerAutoSave();
+}
+
+function bindPgkStimulusToggleEvents() {
+    if (window.__pgkStimulusToggleEventsBound === true) return;
+    window.__pgkStimulusToggleEventsBound = true;
     document.addEventListener('click', function (event) {
-        const button = event.target.closest('[data-pgk-type-toggle]');
+        const button = event.target.closest('[data-pgk-stimulus-toggle]');
         if (!button) return;
         event.preventDefault();
         event.stopPropagation();
         const index = Number(button.dataset.questionIndex);
-        const typeKey = button.dataset.pgkTypeToggle;
         const question = examData.questions?.[index];
         if (!question || question.type !== 'multiple_choice_complex') return;
-        const current = typeKey === 'A' ? getPgkTypeAEnabled(question) : getPgkTypeBEnabled(question);
-        setPgkTypeEnabled(index, typeKey, !current);
+        setPgkStimulusEnabled(index, !getPgkStimulusEnabled(question));
     }, true);
 }
 
@@ -590,7 +608,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 function bindEvents() {
-    bindPgkTypeToggleEvents();
+    bindPgkStimulusToggleEvents();
 
     // Title input
     document.getElementById('exam-title').addEventListener('input', (e) => {
@@ -895,16 +913,14 @@ async function loadExam(id) {
             // Extract settings safely
             const settings = q.question_settings || {};
             const globalDefaults = getBuilderSettings();
-            // Resolve PGK Type immediately with fallback and per-question enabled flags.
-            const pgkTypeAEnabled = settings.pgk_type_a_enabled !== false;
-            const pgkTypeBEnabled = settings.pgk_type_b_enabled !== false;
-            let resolvedPgkType = q.pgk_type || (settings && settings.pgk_type) || 'checkbox';
-            if (q.question_type === 'multiple_choice_complex' && resolvedPgkType === 'checkbox' && !pgkTypeAEnabled && pgkTypeBEnabled) {
-                resolvedPgkType = 'table_validation';
-            }
-            if (q.question_type === 'multiple_choice_complex' && resolvedPgkType === 'table_validation' && !pgkTypeBEnabled && pgkTypeAEnabled) {
-                resolvedPgkType = 'checkbox';
-            }
+            // Resolve PGK Type with fallback only. Stimulus flags must never switch type.
+            const resolvedPgkType = q.pgk_type || (settings && settings.pgk_type) || 'checkbox';
+            const pgkTypeAStimulusEnabled = settings.pgk_type_a_stimulus_enabled !== undefined
+                ? settings.pgk_type_a_stimulus_enabled !== false
+                : settings.pgk_type_a_enabled !== false;
+            const pgkTypeBStimulusEnabled = settings.pgk_type_b_stimulus_enabled !== undefined
+                ? settings.pgk_type_b_stimulus_enabled !== false
+                : settings.pgk_type_b_enabled !== false;
             const isPlaceholder = settings.is_placeholder === true;
             const placeholderSource = settings.placeholder_source || null;
             const isImagePlaceholder = isPlaceholder && (placeholderSource === 'image' || !!q.image_url);
@@ -1038,15 +1054,15 @@ async function loadExam(id) {
                 question_settings: {
                     ...settings,
                     pgk_type: resolvedPgkType,
-                    pgk_type_a_enabled: pgkTypeAEnabled,
-                    pgk_type_b_enabled: pgkTypeBEnabled,
+                    pgk_type_a_stimulus_enabled: pgkTypeAStimulusEnabled,
+                    pgk_type_b_stimulus_enabled: pgkTypeBStimulusEnabled,
                     pgk_type_a_options: settings.pgk_type_a_options || processedOptions,
                     pgk_type_a_correct_answers: settings.pgk_type_a_correct_answers || correctAnswersIndices,
                     pgk_type_b_statements: settings.pgk_type_b_statements || pgkStatements,
                     pgk_type_b_statement_answers: settings.pgk_type_b_statement_answers || pgkAnswers
                 },
-                pgk_type_a_enabled: pgkTypeAEnabled,
-                pgk_type_b_enabled: pgkTypeBEnabled
+                pgk_type_a_stimulus_enabled: pgkTypeAStimulusEnabled,
+                pgk_type_b_stimulus_enabled: pgkTypeBStimulusEnabled
             };
         });
 
@@ -1472,8 +1488,8 @@ function addQuestion(type = 'multiple_choice') {
         preferred_image_layout_mode: builderDefaults.default_image_layout_mode,
         question_settings: type === 'multiple_choice_complex' ? {
             pgk_type: pgk_type || 'checkbox',
-            pgk_type_a_enabled: true,
-            pgk_type_b_enabled: true
+            pgk_type_a_stimulus_enabled: true,
+            pgk_type_b_stimulus_enabled: true
         } : {}
     };
 
@@ -2062,20 +2078,17 @@ function generateQuestionCard(question, index) {
     } else if (question.type === 'multiple_choice_complex') {
         // Multiple Choice Complex - Professional AKM Style
         ensurePgkQuestionSettings(question);
-        const typeAEnabled = getPgkTypeAEnabled(question);
-        const typeBEnabled = getPgkTypeBEnabled(question);
-        const bothPgkTypesDisabled = !typeAEnabled && !typeBEnabled;
-        let currentPgkType = getEffectivePgkType(question);
-        if (!bothPgkTypesDisabled && question.pgk_type !== currentPgkType) {
-            question.pgk_type = currentPgkType;
-            question.question_settings.pgk_type = currentPgkType;
-        }
+        const currentPgkType = getEffectivePgkType(question);
+        question.pgk_type = currentPgkType;
+        question.question_settings.pgk_type = currentPgkType;
+        const stimulusEnabled = getPgkStimulusEnabled(question);
+        const stimulusTypeLabel = currentPgkType === 'table_validation' ? 'Tipe B' : 'Tipe A';
         const pgkKeyOnlyMode = question.use_key_only_mode === true;
-        if (currentPgkType === 'checkbox' && typeAEnabled) {
+        if (currentPgkType === 'checkbox') {
             ensureOptionSlots(question, getMinimumOptionCount(question));
         }
-        // Stimulus dianggap sudah terisi ("aman") jika teks stimulus ada ATAU jika sudah upload foto soal
-        const needsStimulus = (!question.stimulus || question.stimulus.trim() === '') && !question.image_url;
+        // Stimulus dianggap wajib hanya jika toggle stimulus aktif dan belum ada foto soal.
+        const needsStimulus = stimulusEnabled && (!question.stimulus || question.stimulus.trim() === '') && !question.image_url;
 
         optionsHtml = `
             <div class="complex-choice-builder">
@@ -2090,33 +2103,24 @@ function generateQuestionCard(question, index) {
                         <select onchange="changePGKType(${index}, this.value)"
                                 onclick="event.stopPropagation()"
                                 style="padding: 0.35rem 0.75rem; background: var(--dark-lighter); border: 1px solid var(--border-color); border-radius: 0.375rem; color: var(--text-primary); font-size: 0.85rem; cursor: pointer;">
-                            <option value="checkbox" ${currentPgkType === 'checkbox' ? 'selected' : ''} ${!typeAEnabled ? 'disabled' : ''}>📋 Tipe A: Multiple Response</option>
-                            <option value="table_validation" ${currentPgkType === 'table_validation' ? 'selected' : ''} ${!typeBEnabled ? 'disabled' : ''}>✅ Tipe B: Tabel Validasi</option>
+                            <option value="checkbox" ${currentPgkType === 'checkbox' ? 'selected' : ''}>📋 Tipe A: Multiple Response</option>
+                            <option value="table_validation" ${currentPgkType === 'table_validation' ? 'selected' : ''}>✅ Tipe B: Tabel Validasi</option>
                         </select>
                     </div>
                     <div style="display:flex; flex-wrap:wrap; align-items:center; gap:0.4rem; margin:0.35rem 0 0.45rem;" onclick="event.stopPropagation()">
-                        <span style="font-size:0.76rem; color:var(--text-secondary); margin-right:0.1rem;">Tipe aktif:</span>
                         <button type="button"
-                                class="pgk-type-toggle ${typeAEnabled ? 'active' : ''}"
+                                class="pgk-stimulus-toggle ${stimulusEnabled ? 'active' : ''}"
                                 data-question-index="${index}"
-                                data-pgk-type-toggle="A"
-                                aria-pressed="${typeAEnabled ? 'true' : 'false'}"
-                                style="border:1px solid ${typeAEnabled ? 'rgba(34,197,94,0.75)' : 'var(--border-color)'}; background:${typeAEnabled ? 'rgba(34,197,94,0.14)' : 'rgba(148,163,184,0.08)'}; color:${typeAEnabled ? 'var(--success)' : 'var(--text-secondary)'}; border-radius:999px; padding:0.22rem 0.58rem; font-size:0.76rem; font-weight:700; cursor:pointer;">
-                            ${typeAEnabled ? 'ON' : 'OFF'} · Tipe A
-                        </button>
-                        <button type="button"
-                                class="pgk-type-toggle ${typeBEnabled ? 'active' : ''}"
-                                data-question-index="${index}"
-                                data-pgk-type-toggle="B"
-                                aria-pressed="${typeBEnabled ? 'true' : 'false'}"
-                                style="border:1px solid ${typeBEnabled ? 'rgba(34,197,94,0.75)' : 'var(--border-color)'}; background:${typeBEnabled ? 'rgba(34,197,94,0.14)' : 'rgba(148,163,184,0.08)'}; color:${typeBEnabled ? 'var(--success)' : 'var(--text-secondary)'}; border-radius:999px; padding:0.22rem 0.58rem; font-size:0.76rem; font-weight:700; cursor:pointer;">
-                            ${typeBEnabled ? 'ON' : 'OFF'} · Tipe B
+                                data-pgk-stimulus-toggle="1"
+                                aria-pressed="${stimulusEnabled ? 'true' : 'false'}"
+                                style="border:1px solid ${stimulusEnabled ? 'rgba(34,197,94,0.75)' : 'var(--border-color)'}; background:${stimulusEnabled ? 'rgba(34,197,94,0.14)' : 'rgba(148,163,184,0.08)'}; color:${stimulusEnabled ? 'var(--success)' : 'var(--text-secondary)'}; border-radius:999px; padding:0.22rem 0.58rem; font-size:0.76rem; font-weight:700; cursor:pointer;">
+                            Stimulus ${stimulusTypeLabel}: ${stimulusEnabled ? 'ON' : 'OFF'}
                         </button>
                     </div>
                     <small style="color: var(--text-secondary); display: block;">
-                        ${bothPgkTypesDisabled ? 'Aktifkan minimal satu tipe PGK.' : (currentPgkType === 'checkbox' ? 'Siswa memilih semua jawaban yang benar (min. 2 jawaban benar)' : 'Siswa menilai setiap pernyataan Benar/Salah')}
+                        ${currentPgkType === 'checkbox' ? 'Siswa memilih semua jawaban yang benar (min. 2 jawaban benar)' : 'Siswa menilai setiap pernyataan Benar/Salah'}
                     </small>
-                    ${!bothPgkTypesDisabled && currentPgkType === 'checkbox' && typeAEnabled
+                    ${currentPgkType === 'checkbox'
                 ? `<small style="display:block; margin-top:0.35rem; color:${pgkKeyOnlyMode ? 'var(--success)' : 'var(--warning)'};">
                             <i class="fas ${pgkKeyOnlyMode ? 'fa-check-circle' : 'fa-exclamation-circle'}"></i>
                             Mode cepat PGK: ${pgkKeyOnlyMode ? 'AKTIF' : 'NONAKTIF'}
@@ -2124,13 +2128,14 @@ function generateQuestionCard(question, index) {
                 : ''}
                 </div>
 
-                <!-- Stimulus (WAJIB untuk PGK) -->
+                <!-- Stimulus (opsional per tipe PGK) -->
                 <div style="margin-bottom: 1rem;">
                     <label style="display: flex; align-items: center; gap: 0.5rem; font-weight: 600; margin-bottom: 0.5rem; font-size: 0.9rem;">
                         <i class="fas fa-book-open" style="color: var(--warning);"></i>
-                        <span>Stimulus / Konteks (Wajib)</span>
-                        ${needsStimulus ? '<span style="color: var(--danger); font-size: 0.75rem; font-weight: 500;">⚠ Belum diisi</span>' : '<span style="color: var(--success); font-size: 0.75rem;"><i class="fas fa-check-circle"></i></span>'}
+                        <span>Stimulus / Konteks ${stimulusTypeLabel}</span>
+                        ${stimulusEnabled ? (needsStimulus ? '<span style="color: var(--danger); font-size: 0.75rem; font-weight: 500;">⚠ Belum diisi</span>' : '<span style="color: var(--success); font-size: 0.75rem;"><i class="fas fa-check-circle"></i></span>') : '<span style="color: var(--text-secondary); font-size: 0.75rem;">OFF</span>'}
                     </label>
+                    ${stimulusEnabled ? `
                     <textarea
                         class="form-control"
                         placeholder="Berikan konteks/bacaan/data untuk soal HOTS. Contoh: grafik, tabel, kasus, atau bacaan singkat..."
@@ -2139,15 +2144,16 @@ function generateQuestionCard(question, index) {
                         rows="3"
                         style="background: var(--dark-lighter); border: ${needsStimulus ? '2px solid var(--danger)' : '1px solid var(--border-color)'}; font-size: 0.9rem; min-height: 80px; max-height: 200px; overflow-y: auto;"
                     >${escapeHtml(question.stimulus || '')}</textarea>
-                    ${needsStimulus ? '<small style="color: var(--danger); margin-top: 0.25rem; display: block;"><i class="fas fa-exclamation-triangle"></i> PGK memerlukan stimulus untuk mengukur HOTS</small>' : ''}
+                    ${needsStimulus ? '<small style="color: var(--danger); margin-top: 0.25rem; display: block;"><i class="fas fa-exclamation-triangle"></i> Stimulus wajib diisi atau matikan toggle Stimulus.</small>' : ''}
+                    ` : `
+                    <div style="padding:0.65rem 0.75rem; border:1px dashed rgba(148,163,184,0.35); border-radius:0.5rem; background:rgba(148,163,184,0.08); color:var(--text-secondary); font-size:0.85rem;">
+                        <i class="fas fa-toggle-off"></i> Stimulus OFF untuk soal ini. Soal tetap ${stimulusTypeLabel} dan kunci/data jawaban tetap dipakai.
+                    </div>
+                    `}
                 </div>
 
                 <!-- Content based on PGK Type -->
-                ${bothPgkTypesDisabled ? `
-                <div style="padding:0.9rem; border:1px solid rgba(239,68,68,0.35); background:rgba(239,68,68,0.08); border-radius:0.5rem; color:var(--danger); font-size:0.9rem;">
-                    <i class="fas fa-exclamation-triangle"></i> Soal PGK harus memiliki minimal satu tipe aktif: Tipe A atau Tipe B.
-                </div>
-                ` : currentPgkType === 'checkbox' && typeAEnabled ? `
+                ${currentPgkType === 'checkbox' ? `
                 <!-- TIPE A: Multiple Response (Checkbox) -->
                     <!-- Options List -->
                     <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; font-size: 0.9rem; margin-top: 1rem;">
@@ -2197,7 +2203,7 @@ function generateQuestionCard(question, index) {
                     ${(question.correct_answers || []).length < 2 ? '<small style="color: var(--danger); margin-top: 0.5rem; display: block;"><i class="fas fa-exclamation-triangle"></i> Minimal 2 jawaban harus benar untuk PGK</small>' : ''}
                     ${(question.correct_answers || []).length === (question.options || []).length && (question.options || []).length > 0 ? '<small style="color: var(--warning); margin-top: 0.5rem; display: block;"><i class="fas fa-exclamation-triangle"></i> Semua opsi benar - bukan PGK yang baik</small>' : ''}
                 </div>
-                ` : currentPgkType === 'table_validation' && typeBEnabled ? `
+                ` : currentPgkType === 'table_validation' ? `
                 <!-- TIPE B: Tabel Validasi (Benar/Salah) -->
                 <div class="table-validation-container">
                     <div style="font-size: 0.85rem; font-weight: 600; margin-bottom: 0.75rem; color: var(--text-secondary); display: flex; align-items: center; justify-content: space-between;">
@@ -2259,7 +2265,7 @@ function generateQuestionCard(question, index) {
                 </div>
                 ` : `
                 <div style="padding:0.9rem; border:1px solid rgba(245,158,11,0.35); background:rgba(245,158,11,0.08); border-radius:0.5rem; color:var(--warning); font-size:0.9rem;">
-                    <i class="fas fa-info-circle"></i> Tipe yang dipilih sedang OFF. Aktifkan Tipe A atau Tipe B untuk menampilkan panel authoring.
+                    <i class="fas fa-info-circle"></i> Tipe PGK belum dikenali. Pilih Tipe A atau Tipe B dari dropdown.
                 </div>
                 `}
             </div>
@@ -2471,11 +2477,11 @@ function changeQuestionType(index, type) {
         question.question_settings = {
             ...(question.question_settings || {}),
             pgk_type: 'checkbox',
-            pgk_type_a_enabled: true,
-            pgk_type_b_enabled: true
+            pgk_type_a_stimulus_enabled: true,
+            pgk_type_b_stimulus_enabled: true
         };
-        question.pgk_type_a_enabled = true;
-        question.pgk_type_b_enabled = true;
+        question.pgk_type_a_stimulus_enabled = true;
+        question.pgk_type_b_stimulus_enabled = true;
         question.use_key_only_mode = builderDefaults.default_pgk_key_only;
     } else if (type === 'multiple_choice_complex') {
         ensurePgkQuestionSettings(question);
@@ -2935,16 +2941,6 @@ function changePGKType(questionIndex, newType) {
     const builderDefaults = getBuilderSettings();
     if (!question) return;
     ensurePgkQuestionSettings(question);
-    if (newType === 'checkbox' && !getPgkTypeAEnabled(question)) {
-        showAlert('Tipe A sedang OFF untuk soal ini. Aktifkan toggle Tipe A terlebih dahulu.', 'warning');
-        renderQuestions();
-        return;
-    }
-    if (newType === 'table_validation' && !getPgkTypeBEnabled(question)) {
-        showAlert('Tipe B sedang OFF untuk soal ini. Aktifkan toggle Tipe B terlebih dahulu.', 'warning');
-        renderQuestions();
-        return;
-    }
     question.pgk_type = newType;
     question.question_settings.pgk_type = newType;
     question.use_key_only_mode = newType === 'checkbox'
@@ -3206,8 +3202,12 @@ function buildQuestionPayloadFromState(q, orderIndex, currentExamId) {
         ensurePgkQuestionSettings(q);
     }
     const currentPgkType = q.type === 'multiple_choice_complex' ? getEffectivePgkType(q) : null;
-    const pgkTypeAEnabled = q.type === 'multiple_choice_complex' ? getPgkTypeAEnabled(q) : undefined;
-    const pgkTypeBEnabled = q.type === 'multiple_choice_complex' ? getPgkTypeBEnabled(q) : undefined;
+    const pgkTypeAStimulusEnabled = q.type === 'multiple_choice_complex'
+        ? resolvePgkStimulusEnabled(q, 'A')
+        : undefined;
+    const pgkTypeBStimulusEnabled = q.type === 'multiple_choice_complex'
+        ? resolvePgkStimulusEnabled(q, 'B')
+        : undefined;
 
     if (q.type === 'multiple_choice') {
         const minOptionCount = getMinimumOptionCountByType('multiple_choice');
@@ -3347,8 +3347,8 @@ function buildQuestionPayloadFromState(q, orderIndex, currentExamId) {
             case_sensitive: false,
             statements: currentPgkType === 'table_validation' ? (q.statements || []) : undefined,
             statement_answers: currentPgkType === 'table_validation' ? (q.statement_answers || []) : undefined,
-            pgk_type_a_enabled: q.type === 'multiple_choice_complex' ? pgkTypeAEnabled : undefined,
-            pgk_type_b_enabled: q.type === 'multiple_choice_complex' ? pgkTypeBEnabled : undefined,
+            pgk_type_a_stimulus_enabled: q.type === 'multiple_choice_complex' ? pgkTypeAStimulusEnabled : undefined,
+            pgk_type_b_stimulus_enabled: q.type === 'multiple_choice_complex' ? pgkTypeBStimulusEnabled : undefined,
             pgk_type_a_options: q.type === 'multiple_choice_complex' ? (q.options || []) : undefined,
             pgk_type_a_correct_answers: q.type === 'multiple_choice_complex' ? (q.correct_answers || []) : undefined,
             pgk_type_b_statements: q.type === 'multiple_choice_complex' ? (q.statements || []) : undefined,
@@ -3712,22 +3712,22 @@ async function togglePreview(mode = 'builder') {
         // Preview PGK (Pilihan Ganda Kompleks)
         if (q.type === 'multiple_choice_complex') {
             const previewPgkType = getEffectivePgkType(q);
-            const previewTypeAEnabled = getPgkTypeAEnabled(q);
-            const previewTypeBEnabled = getPgkTypeBEnabled(q);
-            const previewBothDisabled = !previewTypeAEnabled && !previewTypeBEnabled;
+            const previewStimulusEnabled = getPgkStimulusEnabled(q);
             html += '<div style="padding: 1rem; background: var(--dark); border-radius: 0.5rem; border: 1px solid var(--border-color);">';
             html += '<div style="margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem;">';
             html += '<span style="background: linear-gradient(135deg, #f093fb, #f5576c); padding: 0.15rem 0.5rem; border-radius: 0.25rem; font-size: 0.7rem; color: white; font-weight: bold;">HOTS</span>';
-            html += '<span style="color: #a78bfa; font-size: 0.85rem; font-weight: 600;">' + (previewBothDisabled ? 'Tidak ada tipe aktif' : (previewPgkType === 'table_validation' ? 'Tabel Validasi (Benar/Salah)' : 'Multiple Response (Pilihan Jamak)')) + '</span>';
+            html += '<span style="color: #a78bfa; font-size: 0.85rem; font-weight: 600;">' + (previewPgkType === 'table_validation' ? 'Tabel Validasi (Benar/Salah)' : 'Multiple Response (Pilihan Jamak)') + '</span>';
             html += '</div>';
 
-            if (q.stimulus) {
+            if (previewStimulusEnabled && q.stimulus) {
                 html += '<div style="margin-bottom: 1rem; padding: 0.75rem; background: var(--dark-lighter); border-left: 3px solid #f59e0b; font-style: italic; color: var(--text-primary);">';
                 html += renderBuilderRichText(q.stimulus);
                 html += '</div>';
+            } else if (!previewStimulusEnabled) {
+                html += '<div style="margin-bottom: 1rem; padding: 0.55rem 0.7rem; background: rgba(148,163,184,0.08); border: 1px dashed rgba(148,163,184,0.35); border-radius: 0.4rem; color: var(--text-secondary); font-size: 0.85rem;">Stimulus OFF untuk soal ini.</div>';
             }
 
-            if (!previewBothDisabled && previewPgkType === 'checkbox' && previewTypeAEnabled) {
+            if (previewPgkType === 'checkbox') {
                 html += '<div style="margin-bottom: 0.5rem; font-size: 0.9rem; color: var(--text-secondary);"><i class="fas fa-check-square"></i> Pilihlah jawaban-jawaban yang benar:</div>';
                 if (q.options) {
                     q.options.forEach((opt, j) => {
@@ -3741,7 +3741,7 @@ async function togglePreview(mode = 'builder') {
                         html += '</div>';
                     });
                 }
-            } else if (!previewBothDisabled && previewPgkType === 'table_validation' && previewTypeBEnabled) {
+            } else if (previewPgkType === 'table_validation') {
                 html += '<div style="margin-bottom: 0.5rem; font-size: 0.9rem; color: var(--text-secondary);"><i class="fas fa-table"></i> Tentukan Benar/Salah untuk setiap pernyataan:</div>';
                 html += '<table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">';
                 html += '<tr style="background: rgba(99, 102, 241, 0.15); color: var(--text-primary);">';
@@ -4137,7 +4137,7 @@ function renderSimulatedPreview(normalData, simulatedData, focusQuestionId = nul
         if (q.video_url) {
             html += '<div style="color: var(--text-secondary); margin-bottom: 0.5rem;"><i class="fab fa-youtube" style="color: #ff0000;"></i> Video YouTube terlampir</div>';
         }
-        if (q.stimulus) {
+        if (getPgkStimulusEnabled(q) && q.stimulus) {
             html += '<div style="margin-bottom: 1rem; padding: 0.75rem; background: var(--dark); border-left: 3px solid #f59e0b; font-style: italic;">' + renderBuilderRichText(q.stimulus) + '</div>';
         }
 
@@ -4341,24 +4341,19 @@ function validateForPublish() {
             }
         }
         else if (q.type === 'multiple_choice_complex') {
-            if (!q.image_url) {
+            const settings = q.question_settings || {};
+            const resolvedPgkType = getEffectivePgkType(q);
+            const stimulusEnabled = getPgkStimulusEnabled(q);
+            const pgkTypeLabel = resolvedPgkType === 'table_validation' ? 'Tipe B' : 'Tipe A';
+
+            if (stimulusEnabled && !q.image_url) {
                 if (!q.stimulus || !q.stimulus.trim()) {
-                    errors.push(`Soal No. ${num} (PGK): Stimulus/bacaan wajib diisi untuk soal HOTS`);
+                    errors.push(`Soal No. ${num} (PGK ${pgkTypeLabel}): Stimulus wajib diisi atau matikan toggle Stimulus.`);
                     if (firstErrorIndex === -1) firstErrorIndex = index;
                 }
             }
 
-            const settings = q.question_settings || {};
-            const typeAEnabled = settings.pgk_type_a_enabled !== false && q.pgk_type_a_enabled !== false;
-            const typeBEnabled = settings.pgk_type_b_enabled !== false && q.pgk_type_b_enabled !== false;
-            const resolvedPgkType = getEffectivePgkType(q);
-
-            if (!typeAEnabled && !typeBEnabled) {
-                errors.push(`Soal No. ${num} (PGK): Soal PGK harus memiliki minimal satu tipe aktif: Tipe A atau Tipe B.`);
-                if (firstErrorIndex === -1) firstErrorIndex = index;
-            }
-
-            if (resolvedPgkType === 'checkbox' && typeAEnabled) {
+            if (resolvedPgkType === 'checkbox') {
                 const minimumOptions = getMinimumOptionCountByType('multiple_choice_complex', 'checkbox');
                 const realOptions = countRealOptions(q.options || []);
                 const isImageMode = !!q.image_url;
@@ -4374,7 +4369,7 @@ function validateForPublish() {
                     errors.push(`Soal No. ${num} (PGK Tipe A): Minimal 2 kunci jawaban harus dicentang`);
                     if (firstErrorIndex === -1) firstErrorIndex = index;
                 }
-            } else if (resolvedPgkType === 'table_validation' && typeBEnabled) {
+            } else if (resolvedPgkType === 'table_validation') {
                 const statements = q.statements || settings.statements || settings.pgk_type_b_statements || [];
                 const statementAnswers = q.statement_answers || settings.statement_answers || settings.pgk_type_b_statement_answers || [];
                 const validStatements = statements.filter((s) => (s || '').trim().length > 0);

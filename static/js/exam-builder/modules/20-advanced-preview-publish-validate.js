@@ -240,16 +240,6 @@ function changePGKType(questionIndex, newType) {
     const builderDefaults = getBuilderSettings();
     if (!question) return;
     ensurePgkQuestionSettings(question);
-    if (newType === 'checkbox' && !getPgkTypeAEnabled(question)) {
-        showAlert('Tipe A sedang OFF untuk soal ini. Aktifkan toggle Tipe A terlebih dahulu.', 'warning');
-        renderQuestions();
-        return;
-    }
-    if (newType === 'table_validation' && !getPgkTypeBEnabled(question)) {
-        showAlert('Tipe B sedang OFF untuk soal ini. Aktifkan toggle Tipe B terlebih dahulu.', 'warning');
-        renderQuestions();
-        return;
-    }
     question.pgk_type = newType;
     question.question_settings.pgk_type = newType;
     question.use_key_only_mode = newType === 'checkbox'
@@ -511,8 +501,12 @@ function buildQuestionPayloadFromState(q, orderIndex, currentExamId) {
         ensurePgkQuestionSettings(q);
     }
     const currentPgkType = q.type === 'multiple_choice_complex' ? getEffectivePgkType(q) : null;
-    const pgkTypeAEnabled = q.type === 'multiple_choice_complex' ? getPgkTypeAEnabled(q) : undefined;
-    const pgkTypeBEnabled = q.type === 'multiple_choice_complex' ? getPgkTypeBEnabled(q) : undefined;
+    const pgkTypeAStimulusEnabled = q.type === 'multiple_choice_complex'
+        ? resolvePgkStimulusEnabled(q, 'A')
+        : undefined;
+    const pgkTypeBStimulusEnabled = q.type === 'multiple_choice_complex'
+        ? resolvePgkStimulusEnabled(q, 'B')
+        : undefined;
 
     if (q.type === 'multiple_choice') {
         const minOptionCount = getMinimumOptionCountByType('multiple_choice');
@@ -652,8 +646,8 @@ function buildQuestionPayloadFromState(q, orderIndex, currentExamId) {
             case_sensitive: false,
             statements: currentPgkType === 'table_validation' ? (q.statements || []) : undefined,
             statement_answers: currentPgkType === 'table_validation' ? (q.statement_answers || []) : undefined,
-            pgk_type_a_enabled: q.type === 'multiple_choice_complex' ? pgkTypeAEnabled : undefined,
-            pgk_type_b_enabled: q.type === 'multiple_choice_complex' ? pgkTypeBEnabled : undefined,
+            pgk_type_a_stimulus_enabled: q.type === 'multiple_choice_complex' ? pgkTypeAStimulusEnabled : undefined,
+            pgk_type_b_stimulus_enabled: q.type === 'multiple_choice_complex' ? pgkTypeBStimulusEnabled : undefined,
             pgk_type_a_options: q.type === 'multiple_choice_complex' ? (q.options || []) : undefined,
             pgk_type_a_correct_answers: q.type === 'multiple_choice_complex' ? (q.correct_answers || []) : undefined,
             pgk_type_b_statements: q.type === 'multiple_choice_complex' ? (q.statements || []) : undefined,
@@ -1017,22 +1011,22 @@ async function togglePreview(mode = 'builder') {
         // Preview PGK (Pilihan Ganda Kompleks)
         if (q.type === 'multiple_choice_complex') {
             const previewPgkType = getEffectivePgkType(q);
-            const previewTypeAEnabled = getPgkTypeAEnabled(q);
-            const previewTypeBEnabled = getPgkTypeBEnabled(q);
-            const previewBothDisabled = !previewTypeAEnabled && !previewTypeBEnabled;
+            const previewStimulusEnabled = getPgkStimulusEnabled(q);
             html += '<div style="padding: 1rem; background: var(--dark); border-radius: 0.5rem; border: 1px solid var(--border-color);">';
             html += '<div style="margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem;">';
             html += '<span style="background: linear-gradient(135deg, #f093fb, #f5576c); padding: 0.15rem 0.5rem; border-radius: 0.25rem; font-size: 0.7rem; color: white; font-weight: bold;">HOTS</span>';
-            html += '<span style="color: #a78bfa; font-size: 0.85rem; font-weight: 600;">' + (previewBothDisabled ? 'Tidak ada tipe aktif' : (previewPgkType === 'table_validation' ? 'Tabel Validasi (Benar/Salah)' : 'Multiple Response (Pilihan Jamak)')) + '</span>';
+            html += '<span style="color: #a78bfa; font-size: 0.85rem; font-weight: 600;">' + (previewPgkType === 'table_validation' ? 'Tabel Validasi (Benar/Salah)' : 'Multiple Response (Pilihan Jamak)') + '</span>';
             html += '</div>';
 
-            if (q.stimulus) {
+            if (previewStimulusEnabled && q.stimulus) {
                 html += '<div style="margin-bottom: 1rem; padding: 0.75rem; background: var(--dark-lighter); border-left: 3px solid #f59e0b; font-style: italic; color: var(--text-primary);">';
                 html += renderBuilderRichText(q.stimulus);
                 html += '</div>';
+            } else if (!previewStimulusEnabled) {
+                html += '<div style="margin-bottom: 1rem; padding: 0.55rem 0.7rem; background: rgba(148,163,184,0.08); border: 1px dashed rgba(148,163,184,0.35); border-radius: 0.4rem; color: var(--text-secondary); font-size: 0.85rem;">Stimulus OFF untuk soal ini.</div>';
             }
 
-            if (!previewBothDisabled && previewPgkType === 'checkbox' && previewTypeAEnabled) {
+            if (previewPgkType === 'checkbox') {
                 html += '<div style="margin-bottom: 0.5rem; font-size: 0.9rem; color: var(--text-secondary);"><i class="fas fa-check-square"></i> Pilihlah jawaban-jawaban yang benar:</div>';
                 if (q.options) {
                     q.options.forEach((opt, j) => {
@@ -1046,7 +1040,7 @@ async function togglePreview(mode = 'builder') {
                         html += '</div>';
                     });
                 }
-            } else if (!previewBothDisabled && previewPgkType === 'table_validation' && previewTypeBEnabled) {
+            } else if (previewPgkType === 'table_validation') {
                 html += '<div style="margin-bottom: 0.5rem; font-size: 0.9rem; color: var(--text-secondary);"><i class="fas fa-table"></i> Tentukan Benar/Salah untuk setiap pernyataan:</div>';
                 html += '<table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">';
                 html += '<tr style="background: rgba(99, 102, 241, 0.15); color: var(--text-primary);">';
@@ -1442,7 +1436,7 @@ function renderSimulatedPreview(normalData, simulatedData, focusQuestionId = nul
         if (q.video_url) {
             html += '<div style="color: var(--text-secondary); margin-bottom: 0.5rem;"><i class="fab fa-youtube" style="color: #ff0000;"></i> Video YouTube terlampir</div>';
         }
-        if (q.stimulus) {
+        if (getPgkStimulusEnabled(q) && q.stimulus) {
             html += '<div style="margin-bottom: 1rem; padding: 0.75rem; background: var(--dark); border-left: 3px solid #f59e0b; font-style: italic;">' + renderBuilderRichText(q.stimulus) + '</div>';
         }
 

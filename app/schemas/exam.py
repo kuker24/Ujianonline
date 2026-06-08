@@ -32,7 +32,13 @@ class QuestionSettings(BaseModel):
     # True/False Table settings (for multiple_choice_complex subtype)
     correct_statements: Dict[str, bool] = {}  # {statement_id: true/false}
 
-    # Per-question PGK authoring toggles (default true for backward compatibility)
+    # Per-question PGK stimulus toggles (default true for backward compatibility)
+    pgk_type_a_stimulus_enabled: Optional[bool] = None
+    pgk_type_b_stimulus_enabled: Optional[bool] = None
+
+    # Legacy fields from the previous authoring toggle patch. They are preserved
+    # by the schema, but current code treats them only as stimulus fallbacks when
+    # the stimulus-specific flags above are missing.
     pgk_type_a_enabled: Optional[bool] = None
     pgk_type_b_enabled: Optional[bool] = None
 

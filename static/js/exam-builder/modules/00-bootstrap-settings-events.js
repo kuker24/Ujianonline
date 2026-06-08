@@ -12,25 +12,35 @@ function getPgkQuestionSettings(question) {
     return settings && typeof settings === 'object' && !Array.isArray(settings) ? settings : {};
 }
 
-function getPgkTypeAEnabled(question) {
-    const settings = getPgkQuestionSettings(question);
-    return settings.pgk_type_a_enabled !== false && question?.pgk_type_a_enabled !== false;
-}
-
-function getPgkTypeBEnabled(question) {
-    const settings = getPgkQuestionSettings(question);
-    return settings.pgk_type_b_enabled !== false && question?.pgk_type_b_enabled !== false;
-}
-
 function getEffectivePgkType(question) {
     const settings = getPgkQuestionSettings(question);
-    const currentType = question?.pgk_type || settings.pgk_type || 'checkbox';
-    const typeAEnabled = getPgkTypeAEnabled(question);
-    const typeBEnabled = getPgkTypeBEnabled(question);
+    return question?.pgk_type || settings.pgk_type || 'checkbox';
+}
 
-    if (currentType === 'checkbox' && !typeAEnabled && typeBEnabled) return 'table_validation';
-    if (currentType === 'table_validation' && !typeBEnabled && typeAEnabled) return 'checkbox';
-    return currentType;
+function resolvePgkStimulusEnabled(question, typeKey) {
+    const settings = getPgkQuestionSettings(question);
+    const normalizedType = typeKey === 'B' ? 'B' : 'A';
+    const newKey = normalizedType === 'B'
+        ? 'pgk_type_b_stimulus_enabled'
+        : 'pgk_type_a_stimulus_enabled';
+    const legacyKey = normalizedType === 'B'
+        ? 'pgk_type_b_enabled'
+        : 'pgk_type_a_enabled';
+    const rootKey = normalizedType === 'B'
+        ? 'pgk_type_b_stimulus_enabled'
+        : 'pgk_type_a_stimulus_enabled';
+
+    if (settings[newKey] !== undefined) return settings[newKey] !== false;
+    if (question?.[rootKey] !== undefined) return question[rootKey] !== false;
+    // Legacy compatibility: previous patch stored type-enabled flags. Interpret them
+    // only as stimulus flags when the new stimulus-specific flags are missing.
+    if (settings[legacyKey] !== undefined) return settings[legacyKey] !== false;
+    return true;
+}
+
+function getPgkStimulusEnabled(question) {
+    const pgkType = getEffectivePgkType(question);
+    return resolvePgkStimulusEnabled(question, pgkType === 'table_validation' ? 'B' : 'A');
 }
 
 function ensurePgkQuestionSettings(question) {
@@ -38,66 +48,74 @@ function ensurePgkQuestionSettings(question) {
     if (!question.question_settings || typeof question.question_settings !== 'object' || Array.isArray(question.question_settings)) {
         question.question_settings = {};
     }
-    if (question.question_settings.pgk_type_a_enabled === undefined) {
-        question.question_settings.pgk_type_a_enabled = question.pgk_type_a_enabled !== false;
+    const settings = question.question_settings;
+    if (settings.pgk_type_a_stimulus_enabled === undefined) {
+        settings.pgk_type_a_stimulus_enabled = resolvePgkStimulusEnabled(question, 'A');
     }
-    if (question.question_settings.pgk_type_b_enabled === undefined) {
-        question.question_settings.pgk_type_b_enabled = question.pgk_type_b_enabled !== false;
+    if (settings.pgk_type_b_stimulus_enabled === undefined) {
+        settings.pgk_type_b_stimulus_enabled = resolvePgkStimulusEnabled(question, 'B');
     }
-    question.pgk_type_a_enabled = question.question_settings.pgk_type_a_enabled !== false;
-    question.pgk_type_b_enabled = question.question_settings.pgk_type_b_enabled !== false;
-    return question.question_settings;
+    settings.pgk_type = getEffectivePgkType(question);
+    question.pgk_type = settings.pgk_type;
+    question.pgk_type_a_stimulus_enabled = settings.pgk_type_a_stimulus_enabled !== false;
+    question.pgk_type_b_stimulus_enabled = settings.pgk_type_b_stimulus_enabled !== false;
+    return settings;
 }
 
-function setPgkTypeEnabled(questionIndex, typeKey, enabled) {
+function setPgkStimulusEnabled(questionIndex, enabled) {
     const question = examData.questions?.[questionIndex];
     if (!question || question.type !== 'multiple_choice_complex') return;
 
     const settings = ensurePgkQuestionSettings(question);
+    const pgkType = getEffectivePgkType(question);
     const normalizedEnabled = Boolean(enabled);
-    if (typeKey === 'A') {
-        settings.pgk_type_a_enabled = normalizedEnabled;
-        question.pgk_type_a_enabled = normalizedEnabled;
-        if (!normalizedEnabled && (question.pgk_type || 'checkbox') === 'checkbox' && getPgkTypeBEnabled(question)) {
-            question.pgk_type = 'table_validation';
-        }
-        if (normalizedEnabled && !getPgkTypeBEnabled(question)) {
-            question.pgk_type = 'checkbox';
-        }
-    } else if (typeKey === 'B') {
-        settings.pgk_type_b_enabled = normalizedEnabled;
-        question.pgk_type_b_enabled = normalizedEnabled;
-        if (!normalizedEnabled && (question.pgk_type || 'checkbox') === 'table_validation' && getPgkTypeAEnabled(question)) {
-            question.pgk_type = 'checkbox';
-        }
-        if (normalizedEnabled && !getPgkTypeAEnabled(question)) {
-            question.pgk_type = 'table_validation';
-        }
-    }
-    settings.pgk_type = question.pgk_type || getEffectivePgkType(question);
 
-    if (!getPgkTypeAEnabled(question) && !getPgkTypeBEnabled(question)) {
-        showAlert('Soal PGK harus memiliki minimal satu tipe aktif: Tipe A atau Tipe B.', 'warning');
+    if (pgkType === 'table_validation') {
+        settings.pgk_type_b_stimulus_enabled = normalizedEnabled;
+        question.pgk_type_b_stimulus_enabled = normalizedEnabled;
+    } else {
+        settings.pgk_type_a_stimulus_enabled = normalizedEnabled;
+        question.pgk_type_a_stimulus_enabled = normalizedEnabled;
     }
+    settings.pgk_type = pgkType;
+    question.pgk_type = pgkType;
 
     renderQuestions();
     triggerAutoSave();
 }
 
-function bindPgkTypeToggleEvents() {
-    if (window.__pgkTypeToggleEventsBound === true) return;
-    window.__pgkTypeToggleEventsBound = true;
+// Compatibility shim for older loaded bundles/extensions. It now controls only
+// stimulus flags and never switches PGK type.
+function setPgkTypeEnabled(questionIndex, typeKey, enabled) {
+    const question = examData.questions?.[questionIndex];
+    if (!question || question.type !== 'multiple_choice_complex') return;
+    const settings = ensurePgkQuestionSettings(question);
+    const normalizedEnabled = Boolean(enabled);
+    if (typeKey === 'B') {
+        settings.pgk_type_b_stimulus_enabled = normalizedEnabled;
+        question.pgk_type_b_stimulus_enabled = normalizedEnabled;
+    } else {
+        settings.pgk_type_a_stimulus_enabled = normalizedEnabled;
+        question.pgk_type_a_stimulus_enabled = normalizedEnabled;
+    }
+    settings.pgk_type = getEffectivePgkType(question);
+    question.pgk_type = settings.pgk_type;
+    renderQuestions();
+    triggerAutoSave();
+}
+
+function bindPgkStimulusToggleEvents() {
+    if (window.__pgkStimulusToggleEventsBound === true) return;
+    window.__pgkStimulusToggleEventsBound = true;
     document.addEventListener('click', function (event) {
-        const button = event.target.closest('[data-pgk-type-toggle]');
+        const button = event.target.closest('[data-pgk-stimulus-toggle]');
         if (!button) return;
         event.preventDefault();
         event.stopPropagation();
         const index = Number(button.dataset.questionIndex);
-        const typeKey = button.dataset.pgkTypeToggle;
         const question = examData.questions?.[index];
         if (!question || question.type !== 'multiple_choice_complex') return;
-        const current = typeKey === 'A' ? getPgkTypeAEnabled(question) : getPgkTypeBEnabled(question);
-        setPgkTypeEnabled(index, typeKey, !current);
+        setPgkStimulusEnabled(index, !getPgkStimulusEnabled(question));
     }, true);
 }
 
@@ -582,7 +600,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 function bindEvents() {
-    bindPgkTypeToggleEvents();
+    bindPgkStimulusToggleEvents();
 
     // Title input
     document.getElementById('exam-title').addEventListener('input', (e) => {
@@ -887,16 +905,14 @@ async function loadExam(id) {
             // Extract settings safely
             const settings = q.question_settings || {};
             const globalDefaults = getBuilderSettings();
-            // Resolve PGK Type immediately with fallback and per-question enabled flags.
-            const pgkTypeAEnabled = settings.pgk_type_a_enabled !== false;
-            const pgkTypeBEnabled = settings.pgk_type_b_enabled !== false;
-            let resolvedPgkType = q.pgk_type || (settings && settings.pgk_type) || 'checkbox';
-            if (q.question_type === 'multiple_choice_complex' && resolvedPgkType === 'checkbox' && !pgkTypeAEnabled && pgkTypeBEnabled) {
-                resolvedPgkType = 'table_validation';
-            }
-            if (q.question_type === 'multiple_choice_complex' && resolvedPgkType === 'table_validation' && !pgkTypeBEnabled && pgkTypeAEnabled) {
-                resolvedPgkType = 'checkbox';
-            }
+            // Resolve PGK Type with fallback only. Stimulus flags must never switch type.
+            const resolvedPgkType = q.pgk_type || (settings && settings.pgk_type) || 'checkbox';
+            const pgkTypeAStimulusEnabled = settings.pgk_type_a_stimulus_enabled !== undefined
+                ? settings.pgk_type_a_stimulus_enabled !== false
+                : settings.pgk_type_a_enabled !== false;
+            const pgkTypeBStimulusEnabled = settings.pgk_type_b_stimulus_enabled !== undefined
+                ? settings.pgk_type_b_stimulus_enabled !== false
+                : settings.pgk_type_b_enabled !== false;
             const isPlaceholder = settings.is_placeholder === true;
             const placeholderSource = settings.placeholder_source || null;
             const isImagePlaceholder = isPlaceholder && (placeholderSource === 'image' || !!q.image_url);
@@ -1030,15 +1046,15 @@ async function loadExam(id) {
                 question_settings: {
                     ...settings,
                     pgk_type: resolvedPgkType,
-                    pgk_type_a_enabled: pgkTypeAEnabled,
-                    pgk_type_b_enabled: pgkTypeBEnabled,
+                    pgk_type_a_stimulus_enabled: pgkTypeAStimulusEnabled,
+                    pgk_type_b_stimulus_enabled: pgkTypeBStimulusEnabled,
                     pgk_type_a_options: settings.pgk_type_a_options || processedOptions,
                     pgk_type_a_correct_answers: settings.pgk_type_a_correct_answers || correctAnswersIndices,
                     pgk_type_b_statements: settings.pgk_type_b_statements || pgkStatements,
                     pgk_type_b_statement_answers: settings.pgk_type_b_statement_answers || pgkAnswers
                 },
-                pgk_type_a_enabled: pgkTypeAEnabled,
-                pgk_type_b_enabled: pgkTypeBEnabled
+                pgk_type_a_stimulus_enabled: pgkTypeAStimulusEnabled,
+                pgk_type_b_stimulus_enabled: pgkTypeBStimulusEnabled
             };
         });
 

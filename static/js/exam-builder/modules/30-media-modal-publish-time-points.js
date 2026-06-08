@@ -82,24 +82,19 @@ function validateForPublish() {
             }
         }
         else if (q.type === 'multiple_choice_complex') {
-            if (!q.image_url) {
+            const settings = q.question_settings || {};
+            const resolvedPgkType = getEffectivePgkType(q);
+            const stimulusEnabled = getPgkStimulusEnabled(q);
+            const pgkTypeLabel = resolvedPgkType === 'table_validation' ? 'Tipe B' : 'Tipe A';
+
+            if (stimulusEnabled && !q.image_url) {
                 if (!q.stimulus || !q.stimulus.trim()) {
-                    errors.push(`Soal No. ${num} (PGK): Stimulus/bacaan wajib diisi untuk soal HOTS`);
+                    errors.push(`Soal No. ${num} (PGK ${pgkTypeLabel}): Stimulus wajib diisi atau matikan toggle Stimulus.`);
                     if (firstErrorIndex === -1) firstErrorIndex = index;
                 }
             }
 
-            const settings = q.question_settings || {};
-            const typeAEnabled = settings.pgk_type_a_enabled !== false && q.pgk_type_a_enabled !== false;
-            const typeBEnabled = settings.pgk_type_b_enabled !== false && q.pgk_type_b_enabled !== false;
-            const resolvedPgkType = getEffectivePgkType(q);
-
-            if (!typeAEnabled && !typeBEnabled) {
-                errors.push(`Soal No. ${num} (PGK): Soal PGK harus memiliki minimal satu tipe aktif: Tipe A atau Tipe B.`);
-                if (firstErrorIndex === -1) firstErrorIndex = index;
-            }
-
-            if (resolvedPgkType === 'checkbox' && typeAEnabled) {
+            if (resolvedPgkType === 'checkbox') {
                 const minimumOptions = getMinimumOptionCountByType('multiple_choice_complex', 'checkbox');
                 const realOptions = countRealOptions(q.options || []);
                 const isImageMode = !!q.image_url;
@@ -115,7 +110,7 @@ function validateForPublish() {
                     errors.push(`Soal No. ${num} (PGK Tipe A): Minimal 2 kunci jawaban harus dicentang`);
                     if (firstErrorIndex === -1) firstErrorIndex = index;
                 }
-            } else if (resolvedPgkType === 'table_validation' && typeBEnabled) {
+            } else if (resolvedPgkType === 'table_validation') {
                 const statements = q.statements || settings.statements || settings.pgk_type_b_statements || [];
                 const statementAnswers = q.statement_answers || settings.statement_answers || settings.pgk_type_b_statement_answers || [];
                 const validStatements = statements.filter((s) => (s || '').trim().length > 0);
