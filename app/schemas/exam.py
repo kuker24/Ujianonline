@@ -32,9 +32,19 @@ class QuestionSettings(BaseModel):
     # True/False Table settings (for multiple_choice_complex subtype)
     correct_statements: Dict[str, bool] = {}  # {statement_id: true/false}
 
+    # Per-question PGK authoring toggles (default true for backward compatibility)
+    pgk_type_a_enabled: Optional[bool] = None
+    pgk_type_b_enabled: Optional[bool] = None
+
     # Table Validation (PGK Type B) settings
     statements: List[str] = []  # List of statement texts for table validation
     statement_answers: List[bool] = []  # List of correct answers (true/false) for each statement
+
+    # Hidden authoring-state mirrors used to preserve disabled PGK type data.
+    pgk_type_a_options: Optional[List[Any]] = None
+    pgk_type_a_correct_answers: Optional[List[int]] = None
+    pgk_type_b_statements: Optional[List[Any]] = None
+    pgk_type_b_statement_answers: Optional[List[bool]] = None
 
     # Combination format settings (for multiple_choice_complex subtype)
     # Uses regular options with is_correct flag

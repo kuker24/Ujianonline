@@ -238,7 +238,20 @@ function updateStimulus(questionIndex, value) {
 function changePGKType(questionIndex, newType) {
     const question = examData.questions[questionIndex];
     const builderDefaults = getBuilderSettings();
+    if (!question) return;
+    ensurePgkQuestionSettings(question);
+    if (newType === 'checkbox' && !getPgkTypeAEnabled(question)) {
+        showAlert('Tipe A sedang OFF untuk soal ini. Aktifkan toggle Tipe A terlebih dahulu.', 'warning');
+        renderQuestions();
+        return;
+    }
+    if (newType === 'table_validation' && !getPgkTypeBEnabled(question)) {
+        showAlert('Tipe B sedang OFF untuk soal ini. Aktifkan toggle Tipe B terlebih dahulu.', 'warning');
+        renderQuestions();
+        return;
+    }
     question.pgk_type = newType;
+    question.question_settings.pgk_type = newType;
     question.use_key_only_mode = newType === 'checkbox'
         ? builderDefaults.default_pgk_key_only
         : false;
@@ -494,7 +507,12 @@ function buildQuestionPayloadFromState(q, orderIndex, currentExamId) {
     let placeholderSource = null;
     let allowPlaceholderShuffle = false;
     const useKeyOnlyMode = q.use_key_only_mode === true;
-    const currentPgkType = q.type === 'multiple_choice_complex' ? (q.pgk_type || 'checkbox') : null;
+    if (q.type === 'multiple_choice_complex') {
+        ensurePgkQuestionSettings(q);
+    }
+    const currentPgkType = q.type === 'multiple_choice_complex' ? getEffectivePgkType(q) : null;
+    const pgkTypeAEnabled = q.type === 'multiple_choice_complex' ? getPgkTypeAEnabled(q) : undefined;
+    const pgkTypeBEnabled = q.type === 'multiple_choice_complex' ? getPgkTypeBEnabled(q) : undefined;
 
     if (q.type === 'multiple_choice') {
         const minOptionCount = getMinimumOptionCountByType('multiple_choice');
@@ -634,6 +652,12 @@ function buildQuestionPayloadFromState(q, orderIndex, currentExamId) {
             case_sensitive: false,
             statements: currentPgkType === 'table_validation' ? (q.statements || []) : undefined,
             statement_answers: currentPgkType === 'table_validation' ? (q.statement_answers || []) : undefined,
+            pgk_type_a_enabled: q.type === 'multiple_choice_complex' ? pgkTypeAEnabled : undefined,
+            pgk_type_b_enabled: q.type === 'multiple_choice_complex' ? pgkTypeBEnabled : undefined,
+            pgk_type_a_options: q.type === 'multiple_choice_complex' ? (q.options || []) : undefined,
+            pgk_type_a_correct_answers: q.type === 'multiple_choice_complex' ? (q.correct_answers || []) : undefined,
+            pgk_type_b_statements: q.type === 'multiple_choice_complex' ? (q.statements || []) : undefined,
+            pgk_type_b_statement_answers: q.type === 'multiple_choice_complex' ? (q.statement_answers || []) : undefined,
             allow_table_statement_shuffle: currentPgkType === 'table_validation'
                 ? (q.allow_table_statement_shuffle !== false)
                 : undefined,
@@ -992,10 +1016,14 @@ async function togglePreview(mode = 'builder') {
 
         // Preview PGK (Pilihan Ganda Kompleks)
         if (q.type === 'multiple_choice_complex') {
+            const previewPgkType = getEffectivePgkType(q);
+            const previewTypeAEnabled = getPgkTypeAEnabled(q);
+            const previewTypeBEnabled = getPgkTypeBEnabled(q);
+            const previewBothDisabled = !previewTypeAEnabled && !previewTypeBEnabled;
             html += '<div style="padding: 1rem; background: var(--dark); border-radius: 0.5rem; border: 1px solid var(--border-color);">';
             html += '<div style="margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem;">';
             html += '<span style="background: linear-gradient(135deg, #f093fb, #f5576c); padding: 0.15rem 0.5rem; border-radius: 0.25rem; font-size: 0.7rem; color: white; font-weight: bold;">HOTS</span>';
-            html += '<span style="color: #a78bfa; font-size: 0.85rem; font-weight: 600;">' + (q.pgk_type === 'table_validation' ? 'Tabel Validasi (Benar/Salah)' : 'Multiple Response (Pilihan Jamak)') + '</span>';
+            html += '<span style="color: #a78bfa; font-size: 0.85rem; font-weight: 600;">' + (previewBothDisabled ? 'Tidak ada tipe aktif' : (previewPgkType === 'table_validation' ? 'Tabel Validasi (Benar/Salah)' : 'Multiple Response (Pilihan Jamak)')) + '</span>';
             html += '</div>';
 
             if (q.stimulus) {
@@ -1004,7 +1032,7 @@ async function togglePreview(mode = 'builder') {
                 html += '</div>';
             }
 
-            if (q.pgk_type === 'checkbox') {
+            if (!previewBothDisabled && previewPgkType === 'checkbox' && previewTypeAEnabled) {
                 html += '<div style="margin-bottom: 0.5rem; font-size: 0.9rem; color: var(--text-secondary);"><i class="fas fa-check-square"></i> Pilihlah jawaban-jawaban yang benar:</div>';
                 if (q.options) {
                     q.options.forEach((opt, j) => {
@@ -1018,7 +1046,7 @@ async function togglePreview(mode = 'builder') {
                         html += '</div>';
                     });
                 }
-            } else if (q.pgk_type === 'table_validation') {
+            } else if (!previewBothDisabled && previewPgkType === 'table_validation' && previewTypeBEnabled) {
                 html += '<div style="margin-bottom: 0.5rem; font-size: 0.9rem; color: var(--text-secondary);"><i class="fas fa-table"></i> Tentukan Benar/Salah untuk setiap pernyataan:</div>';
                 html += '<table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">';
                 html += '<tr style="background: rgba(99, 102, 241, 0.15); color: var(--text-primary);">';
@@ -1371,7 +1399,7 @@ function renderSimulatedPreview(normalData, simulatedData, focusQuestionId = nul
     previewImpacts.forEach((impact, i) => {
         const q = impact.question;
         const type = q.question_type;
-        const pgkType = q.pgk_type || (q.question_settings && q.question_settings.pgk_type) || 'checkbox';
+        const pgkType = getEffectivePgkType(q);
         const orderBadgeColor = impact.orderChanged ? '#f59e0b' : '#22c55e';
         const optionsChangedFlag = impact.isTableValidation ? impact.statementsChanged : impact.optionsChanged;
         const optionsChangedLabel = (

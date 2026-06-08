@@ -89,9 +89,17 @@ function validateForPublish() {
                 }
             }
 
-            const resolvedPgkType = q.pgk_type || (q.question_settings && q.question_settings.pgk_type) || 'checkbox';
+            const settings = q.question_settings || {};
+            const typeAEnabled = settings.pgk_type_a_enabled !== false && q.pgk_type_a_enabled !== false;
+            const typeBEnabled = settings.pgk_type_b_enabled !== false && q.pgk_type_b_enabled !== false;
+            const resolvedPgkType = getEffectivePgkType(q);
 
-            if (resolvedPgkType === 'checkbox') {
+            if (!typeAEnabled && !typeBEnabled) {
+                errors.push(`Soal No. ${num} (PGK): Soal PGK harus memiliki minimal satu tipe aktif: Tipe A atau Tipe B.`);
+                if (firstErrorIndex === -1) firstErrorIndex = index;
+            }
+
+            if (resolvedPgkType === 'checkbox' && typeAEnabled) {
                 const minimumOptions = getMinimumOptionCountByType('multiple_choice_complex', 'checkbox');
                 const realOptions = countRealOptions(q.options || []);
                 const isImageMode = !!q.image_url;
@@ -99,26 +107,26 @@ function validateForPublish() {
                 const permissiveKeyOnlyMode = !!(q.correct_answers && q.correct_answers.length >= 2 && !isImageMode && !hasEmbeddedOptions);
 
                 if (realOptions < minimumOptions && !isImageMode && !hasEmbeddedOptions && !permissiveKeyOnlyMode) {
-                    errors.push(`Soal No. ${num} (PGK): Minimal harus ada ${minimumOptions} opsi jawaban`);
+                    errors.push(`Soal No. ${num} (PGK Tipe A): Minimal harus ada ${minimumOptions} opsi jawaban`);
                     if (firstErrorIndex === -1) firstErrorIndex = index;
                 }
 
                 if (!q.correct_answers || q.correct_answers.length < 2) {
-                    errors.push(`Soal No. ${num}: Minimal 2 kunci jawaban harus dicentang`);
+                    errors.push(`Soal No. ${num} (PGK Tipe A): Minimal 2 kunci jawaban harus dicentang`);
                     if (firstErrorIndex === -1) firstErrorIndex = index;
                 }
-            } else if (resolvedPgkType === 'table_validation') {
-                const statements = q.statements || (q.question_settings && q.question_settings.statements) || [];
-                const statementAnswers = q.statement_answers || (q.question_settings && q.question_settings.statement_answers) || [];
+            } else if (resolvedPgkType === 'table_validation' && typeBEnabled) {
+                const statements = q.statements || settings.statements || settings.pgk_type_b_statements || [];
+                const statementAnswers = q.statement_answers || settings.statement_answers || settings.pgk_type_b_statement_answers || [];
                 const validStatements = statements.filter((s) => (s || '').trim().length > 0);
                 const hasImageMode = !!q.image_url;
 
                 if (!hasImageMode && validStatements.length < 2) {
-                    errors.push(`Soal No. ${num} (PGK Tabel): Minimal harus ada 2 pernyataan`);
+                    errors.push(`Soal No. ${num} (PGK Tipe B): Minimal harus ada 2 pernyataan`);
                     if (firstErrorIndex === -1) firstErrorIndex = index;
                 }
                 if (hasImageMode && validStatements.length < 2 && (statementAnswers || []).length < 2) {
-                    errors.push(`Soal No. ${num} (PGK Tabel): Minimal harus ada 2 pernyataan`);
+                    errors.push(`Soal No. ${num} (PGK Tipe B): Minimal harus ada 2 pernyataan`);
                     if (firstErrorIndex === -1) firstErrorIndex = index;
                 }
 
@@ -126,7 +134,7 @@ function validateForPublish() {
                     ? Math.max(validStatements.length, 2)
                     : validStatements.length;
                 if ((statementAnswers || []).length < requiredAnswersCount) {
-                    errors.push(`Soal No. ${num} (PGK Tabel): Jawaban Benar/Salah belum lengkap`);
+                    errors.push(`Soal No. ${num} (PGK Tipe B): Jawaban Benar/Salah belum lengkap`);
                     if (firstErrorIndex === -1) firstErrorIndex = index;
                 }
             }

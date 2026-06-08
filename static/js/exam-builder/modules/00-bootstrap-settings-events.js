@@ -5,6 +5,102 @@
 
 // ============== HELPER FUNCTIONS ==============
 
+
+function getPgkQuestionSettings(question) {
+    if (!question || typeof question !== 'object') return {};
+    const settings = question.question_settings;
+    return settings && typeof settings === 'object' && !Array.isArray(settings) ? settings : {};
+}
+
+function getPgkTypeAEnabled(question) {
+    const settings = getPgkQuestionSettings(question);
+    return settings.pgk_type_a_enabled !== false && question?.pgk_type_a_enabled !== false;
+}
+
+function getPgkTypeBEnabled(question) {
+    const settings = getPgkQuestionSettings(question);
+    return settings.pgk_type_b_enabled !== false && question?.pgk_type_b_enabled !== false;
+}
+
+function getEffectivePgkType(question) {
+    const settings = getPgkQuestionSettings(question);
+    const currentType = question?.pgk_type || settings.pgk_type || 'checkbox';
+    const typeAEnabled = getPgkTypeAEnabled(question);
+    const typeBEnabled = getPgkTypeBEnabled(question);
+
+    if (currentType === 'checkbox' && !typeAEnabled && typeBEnabled) return 'table_validation';
+    if (currentType === 'table_validation' && !typeBEnabled && typeAEnabled) return 'checkbox';
+    return currentType;
+}
+
+function ensurePgkQuestionSettings(question) {
+    if (!question || typeof question !== 'object') return {};
+    if (!question.question_settings || typeof question.question_settings !== 'object' || Array.isArray(question.question_settings)) {
+        question.question_settings = {};
+    }
+    if (question.question_settings.pgk_type_a_enabled === undefined) {
+        question.question_settings.pgk_type_a_enabled = question.pgk_type_a_enabled !== false;
+    }
+    if (question.question_settings.pgk_type_b_enabled === undefined) {
+        question.question_settings.pgk_type_b_enabled = question.pgk_type_b_enabled !== false;
+    }
+    question.pgk_type_a_enabled = question.question_settings.pgk_type_a_enabled !== false;
+    question.pgk_type_b_enabled = question.question_settings.pgk_type_b_enabled !== false;
+    return question.question_settings;
+}
+
+function setPgkTypeEnabled(questionIndex, typeKey, enabled) {
+    const question = examData.questions?.[questionIndex];
+    if (!question || question.type !== 'multiple_choice_complex') return;
+
+    const settings = ensurePgkQuestionSettings(question);
+    const normalizedEnabled = Boolean(enabled);
+    if (typeKey === 'A') {
+        settings.pgk_type_a_enabled = normalizedEnabled;
+        question.pgk_type_a_enabled = normalizedEnabled;
+        if (!normalizedEnabled && (question.pgk_type || 'checkbox') === 'checkbox' && getPgkTypeBEnabled(question)) {
+            question.pgk_type = 'table_validation';
+        }
+        if (normalizedEnabled && !getPgkTypeBEnabled(question)) {
+            question.pgk_type = 'checkbox';
+        }
+    } else if (typeKey === 'B') {
+        settings.pgk_type_b_enabled = normalizedEnabled;
+        question.pgk_type_b_enabled = normalizedEnabled;
+        if (!normalizedEnabled && (question.pgk_type || 'checkbox') === 'table_validation' && getPgkTypeAEnabled(question)) {
+            question.pgk_type = 'checkbox';
+        }
+        if (normalizedEnabled && !getPgkTypeAEnabled(question)) {
+            question.pgk_type = 'table_validation';
+        }
+    }
+    settings.pgk_type = question.pgk_type || getEffectivePgkType(question);
+
+    if (!getPgkTypeAEnabled(question) && !getPgkTypeBEnabled(question)) {
+        showAlert('Soal PGK harus memiliki minimal satu tipe aktif: Tipe A atau Tipe B.', 'warning');
+    }
+
+    renderQuestions();
+    triggerAutoSave();
+}
+
+function bindPgkTypeToggleEvents() {
+    if (window.__pgkTypeToggleEventsBound === true) return;
+    window.__pgkTypeToggleEventsBound = true;
+    document.addEventListener('click', function (event) {
+        const button = event.target.closest('[data-pgk-type-toggle]');
+        if (!button) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const index = Number(button.dataset.questionIndex);
+        const typeKey = button.dataset.pgkTypeToggle;
+        const question = examData.questions?.[index];
+        if (!question) return;
+        const current = typeKey === 'A' ? getPgkTypeAEnabled(question) : getPgkTypeBEnabled(question);
+        setPgkTypeEnabled(index, typeKey, !current);
+    });
+}
+
 // Show alert notification
 function showAlert(message, type = 'info') {
     // FIX: Prioritize 'toast-container' which exists in HTML, fallback to 'alert-container'
@@ -486,6 +582,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 function bindEvents() {
+    bindPgkTypeToggleEvents();
+
     // Title input
     document.getElementById('exam-title').addEventListener('input', (e) => {
         examData.title = e.target.value;
@@ -789,8 +887,16 @@ async function loadExam(id) {
             // Extract settings safely
             const settings = q.question_settings || {};
             const globalDefaults = getBuilderSettings();
-            // Resolve PGK Type immediately with fallback
-            const resolvedPgkType = q.pgk_type || (settings && settings.pgk_type) || 'checkbox';
+            // Resolve PGK Type immediately with fallback and per-question enabled flags.
+            const pgkTypeAEnabled = settings.pgk_type_a_enabled !== false;
+            const pgkTypeBEnabled = settings.pgk_type_b_enabled !== false;
+            let resolvedPgkType = q.pgk_type || (settings && settings.pgk_type) || 'checkbox';
+            if (q.question_type === 'multiple_choice_complex' && resolvedPgkType === 'checkbox' && !pgkTypeAEnabled && pgkTypeBEnabled) {
+                resolvedPgkType = 'table_validation';
+            }
+            if (q.question_type === 'multiple_choice_complex' && resolvedPgkType === 'table_validation' && !pgkTypeBEnabled && pgkTypeAEnabled) {
+                resolvedPgkType = 'checkbox';
+            }
             const isPlaceholder = settings.is_placeholder === true;
             const placeholderSource = settings.placeholder_source || null;
             const isImagePlaceholder = isPlaceholder && (placeholderSource === 'image' || !!q.image_url);
@@ -820,6 +926,13 @@ async function loadExam(id) {
                         return typeof opt === 'string' ? opt : (opt.option_text || '');
                     });
                 }
+            }
+
+            if (q.question_type === 'multiple_choice_complex' && processedOptions.length === 0 && Array.isArray(settings.pgk_type_a_options)) {
+                processedOptions = settings.pgk_type_a_options.slice();
+            }
+            if (q.question_type === 'multiple_choice_complex' && correctAnswersIndices.length === 0 && Array.isArray(settings.pgk_type_a_correct_answers)) {
+                correctAnswersIndices = settings.pgk_type_a_correct_answers.slice();
             }
 
             // Pad options array if it's multiple choice or PGK checkbox to ensure UI always shows options for correct answer selection
@@ -875,9 +988,9 @@ async function loadExam(id) {
             // --- 3. RESTORE PGK TABLE DATA ---
             let pgkStatements = [];
             let pgkAnswers = [];
-            if (q.question_type === 'multiple_choice_complex' && resolvedPgkType === 'table_validation') {
-                pgkStatements = settings.statements || [];
-                pgkAnswers = settings.statement_answers || [];
+            if (q.question_type === 'multiple_choice_complex') {
+                pgkStatements = settings.statements || settings.pgk_type_b_statements || [];
+                pgkAnswers = settings.statement_answers || settings.pgk_type_b_statement_answers || [];
             }
 
             // --- 4. CONSTRUCT FRONTEND QUESTION OBJECT ---
@@ -913,7 +1026,19 @@ async function loadExam(id) {
                 use_key_only_mode: inferredKeyOnlyMode,
                 answer_layout_mode: effectiveLayoutMode,
                 model2_slots: effectiveModel2Slots,
-                preferred_image_layout_mode: 'model1'
+                preferred_image_layout_mode: 'model1',
+                question_settings: {
+                    ...settings,
+                    pgk_type: resolvedPgkType,
+                    pgk_type_a_enabled: pgkTypeAEnabled,
+                    pgk_type_b_enabled: pgkTypeBEnabled,
+                    pgk_type_a_options: settings.pgk_type_a_options || processedOptions,
+                    pgk_type_a_correct_answers: settings.pgk_type_a_correct_answers || correctAnswersIndices,
+                    pgk_type_b_statements: settings.pgk_type_b_statements || pgkStatements,
+                    pgk_type_b_statement_answers: settings.pgk_type_b_statement_answers || pgkAnswers
+                },
+                pgk_type_a_enabled: pgkTypeAEnabled,
+                pgk_type_b_enabled: pgkTypeBEnabled
             };
         });
 

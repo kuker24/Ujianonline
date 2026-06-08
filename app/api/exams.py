@@ -625,7 +625,13 @@ async def _validate_questions_for_publish(exam_id: int, db: AsyncSession) -> Non
     for idx, q in enumerate(questions, 1):
         q_type = q.question_type
         settings = q.question_settings or {}
+        type_a_enabled = settings.get("pgk_type_a_enabled") is not False
+        type_b_enabled = settings.get("pgk_type_b_enabled") is not False
         pgk_type = q.pgk_type or settings.get("pgk_type", "checkbox")
+        if q_type == "multiple_choice_complex" and pgk_type == "checkbox" and not type_a_enabled and type_b_enabled:
+            pgk_type = "table_validation"
+        if q_type == "multiple_choice_complex" and pgk_type == "table_validation" and not type_b_enabled and type_a_enabled:
+            pgk_type = "checkbox"
 
         question_text = (q.question_text or "").strip()
         has_media = bool(q.image_url or q.video_url or q.audio_url)
@@ -674,19 +680,24 @@ async def _validate_questions_for_publish(exam_id: int, db: AsyncSession) -> Non
                     f"Soal No. {idx} (PG Kompleks): Stimulus/bacaan wajib diisi"
                 )
 
-            if pgk_type == "table_validation":
-                statements = settings.get("statements", []) or []
-                statement_answers = settings.get("statement_answers", []) or []
+            if not type_a_enabled and not type_b_enabled:
+                errors.append(
+                    f"Soal No. {idx} (PG Kompleks): Soal PGK harus memiliki minimal satu tipe aktif: Tipe A atau Tipe B."
+                )
+
+            if pgk_type == "table_validation" and type_b_enabled:
+                statements = settings.get("statements", []) or settings.get("pgk_type_b_statements", []) or []
+                statement_answers = settings.get("statement_answers", []) or settings.get("pgk_type_b_statement_answers", []) or []
                 valid_statements = [s for s in statements if (s or "").strip()]
                 has_image_mode = bool(q.image_url)
 
                 if not has_image_mode and len(valid_statements) < 2:
                     errors.append(
-                        f"Soal No. {idx} (PG Kompleks): Minimal harus ada 2 pernyataan"
+                        f"Soal No. {idx} (PGK Tipe B): Minimal harus ada 2 pernyataan"
                     )
                 elif has_image_mode and len(valid_statements) < 2 and len(statement_answers) < 2:
                     errors.append(
-                        f"Soal No. {idx} (PG Kompleks): Minimal harus ada 2 pernyataan"
+                        f"Soal No. {idx} (PGK Tipe B): Minimal harus ada 2 pernyataan"
                     )
 
                 required_answers_count = len(valid_statements)
@@ -695,9 +706,9 @@ async def _validate_questions_for_publish(exam_id: int, db: AsyncSession) -> Non
 
                 if len(statement_answers) < required_answers_count:
                     errors.append(
-                        f"Soal No. {idx} (PG Kompleks): Jawaban Benar/Salah pernyataan belum lengkap"
+                        f"Soal No. {idx} (PGK Tipe B): Jawaban Benar/Salah pernyataan belum lengkap"
                     )
-            else:
+            elif pgk_type == "checkbox" and type_a_enabled:
                 real_options_count = _count_real_options(q.options)
                 has_embedded_options = _has_embedded_choice_lines(q.question_text)
                 is_image_mode = bool(q.image_url)
@@ -706,12 +717,12 @@ async def _validate_questions_for_publish(exam_id: int, db: AsyncSession) -> Non
 
                 if real_options_count < PGK_CHECKBOX_MIN_OPTIONS and not is_image_mode and not has_embedded_options and not permissive_key_only_mode:
                     errors.append(
-                        f"Soal No. {idx} (PG Kompleks): Minimal harus ada {PGK_CHECKBOX_MIN_OPTIONS} opsi jawaban"
+                        f"Soal No. {idx} (PGK Tipe A): Minimal harus ada {PGK_CHECKBOX_MIN_OPTIONS} opsi jawaban"
                     )
 
                 if correct_count < 2:
                     errors.append(
-                        f"Soal No. {idx} (PG Kompleks): Minimal 2 kunci jawaban harus dicentang"
+                        f"Soal No. {idx} (PGK Tipe A): Minimal 2 kunci jawaban harus dicentang"
                     )
 
     if errors:
