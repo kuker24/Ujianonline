@@ -1,0 +1,1063 @@
+/*
+ * SIAB1 Design System
+ * SIAB1 — Sistem Informasi Asesmen Berintegritas
+ * Visual-only institutional theme. Do not place behavior, routing, or state logic here.
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap');
+
+:root {
+    color-scheme: light;
+
+    /* Brand */
+    --siab1-ink: #071527;
+    --siab1-navy-950: #081a2f;
+    --siab1-navy-900: #0b2347;
+    --siab1-navy-800: #123b73;
+    --siab1-blue-700: #1d4ed8;
+    --siab1-blue-600: #2563eb;
+    --siab1-blue-500: #3b82f6;
+    --siab1-cyan-500: #0ea5e9;
+    --siab1-green-600: #16a34a;
+    --siab1-amber-500: #f59e0b;
+    --siab1-amber-600: #d97706;
+    --siab1-red-600: #dc2626;
+    --siab1-red-700: #b91c1c;
+
+    /* Surfaces */
+    --siab1-bg: #f3f6fb;
+    --siab1-bg-soft: #eef4fb;
+    --siab1-surface: #ffffff;
+    --siab1-surface-raised: #ffffff;
+    --siab1-surface-muted: #f8fafc;
+    --siab1-border: #d9e2ec;
+    --siab1-border-strong: #b8c7da;
+    --siab1-text: #0f172a;
+    --siab1-text-secondary: #475569;
+    --siab1-text-muted: #64748b;
+    --siab1-text-inverse: #ffffff;
+
+    /* Compatibility aliases used by legacy CSS */
+    --primary: var(--siab1-navy-800);
+    --primary-hover: var(--siab1-navy-900);
+    --primary-dark: var(--siab1-navy-900);
+    --primary-light: #e8f1ff;
+    --secondary: var(--siab1-blue-600);
+    --success: var(--siab1-green-600);
+    --warning: var(--siab1-amber-500);
+    --danger: var(--siab1-red-600);
+    --info: var(--siab1-cyan-500);
+    --bg-primary: var(--siab1-bg);
+    --bg-card: var(--siab1-surface);
+    --bg-hover: #edf4ff;
+    --dark: var(--siab1-navy-950);
+    --dark-bg: var(--siab1-bg);
+    --dark-lighter: var(--siab1-surface);
+    --dark-card: var(--siab1-surface-muted);
+    --dark-hover: #e7eef8;
+    --text-primary: var(--siab1-text);
+    --text-secondary: var(--siab1-text-secondary);
+    --text-muted: var(--siab1-text-muted);
+    --border-color: var(--siab1-border);
+    --glass-bg: rgba(255, 255, 255, 0.92);
+    --glass-border: rgba(15, 35, 71, 0.12);
+
+    /* Typography */
+    --siab1-font-sans: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --siab1-font-mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+    --font-sans: var(--siab1-font-sans);
+    --font-display: var(--siab1-font-sans);
+    --font-mono: var(--siab1-font-mono);
+
+    /* Layout */
+    --siab1-radius-xs: 8px;
+    --siab1-radius-sm: 10px;
+    --siab1-radius-md: 14px;
+    --siab1-radius-lg: 18px;
+    --siab1-radius-xl: 24px;
+    --siab1-shadow-sm: 0 1px 2px rgba(8, 26, 47, 0.06);
+    --siab1-shadow-md: 0 12px 28px rgba(8, 26, 47, 0.10);
+    --siab1-shadow-lg: 0 24px 56px rgba(8, 26, 47, 0.14);
+    --shadow: var(--siab1-shadow-md);
+    --shadow-hover: 0 18px 38px rgba(29, 78, 216, 0.16);
+    --shadow-strong: var(--siab1-shadow-lg);
+    --focus-ring: 0 0 0 4px rgba(37, 99, 235, 0.18);
+    --transition-smooth: 180ms ease;
+}
+
+html {
+    background: var(--siab1-bg) !important;
+}
+
+body {
+    font-family: var(--siab1-font-sans) !important;
+    background:
+        radial-gradient(circle at top left, rgba(37, 99, 235, 0.10), transparent 28rem),
+        linear-gradient(180deg, #f7faff 0%, var(--siab1-bg) 46%, #edf3fa 100%) !important;
+    color: var(--siab1-text) !important;
+    letter-spacing: -0.01em;
+    text-rendering: geometricPrecision;
+}
+
+body.dark {
+    background:
+        radial-gradient(circle at top left, rgba(37, 99, 235, 0.14), transparent 24rem),
+        linear-gradient(180deg, #eef4fb 0%, #f8fafc 100%) !important;
+    color: var(--siab1-text) !important;
+}
+
+body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background-image:
+        linear-gradient(rgba(11, 35, 71, 0.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(11, 35, 71, 0.035) 1px, transparent 1px);
+    background-size: 36px 36px;
+    mask-image: linear-gradient(to bottom, rgba(0,0,0,0.55), transparent 65%);
+    z-index: -1;
+}
+
+*, *::before, *::after {
+    font-family: inherit;
+}
+
+::selection {
+    background: rgba(37, 99, 235, 0.18);
+    color: var(--siab1-text);
+}
+
+/* Disable old decorative floating template particles for a formal institutional look. */
+.area,
+.circles,
+.circles li {
+    display: none !important;
+    animation: none !important;
+}
+
+/* Generic text hierarchy. Avoid bare heading color overrides so dark surfaces can opt in. */
+.page-title,
+.header-title,
+.card-title,
+.modal-title,
+.login-header h1,
+.logo h1,
+.sidebar-header h1,
+.siab1-surface h1,
+.siab1-surface h2,
+.siab1-surface h3,
+.siab1-surface h4,
+.siab1-surface h5,
+.siab1-surface h6 {
+    color: var(--siab1-text) !important;
+    font-family: var(--siab1-font-sans) !important;
+    letter-spacing: -0.025em;
+}
+
+p, label, span, small, td, th, li, .form-label, .text-muted,
+.stat-label, .exam-card-meta, .toast-message {
+    font-family: var(--siab1-font-sans) !important;
+}
+
+.text-secondary,
+.text-muted,
+.form-label,
+.stat-label,
+.card-subtitle,
+.exam-card-meta,
+.empty-description,
+.help-text {
+    color: var(--siab1-text-secondary) !important;
+}
+
+/* Brand mark reusable styling */
+.sidebar-header::after,
+.login-header::after,
+.student-header .logo::after {
+    content: 'Sistem Informasi Asesmen Berintegritas';
+    display: block;
+    color: rgba(255, 255, 255, 0.68);
+    font-size: 0.66rem;
+    line-height: 1.25;
+    letter-spacing: 0.03em;
+    margin-top: 0.12rem;
+}
+
+.student-header .logo::after {
+    color: var(--siab1-text-secondary);
+    margin-left: 0.25rem;
+}
+
+/* Layout shells */
+.app-container {
+    background: transparent !important;
+    min-height: 100vh;
+}
+
+.main-content {
+    background: transparent !important;
+    color: var(--siab1-text) !important;
+}
+
+.page-header,
+.content-header,
+.builder-header,
+.analytics-hero,
+.premium-hero,
+.header-section {
+    background: rgba(255, 255, 255, 0.86) !important;
+    border: 1px solid var(--siab1-border) !important;
+    border-radius: var(--siab1-radius-xl) !important;
+    box-shadow: var(--siab1-shadow-sm) !important;
+    backdrop-filter: blur(10px);
+}
+
+.page-header,
+.content-header,
+.builder-header {
+    padding: 1.1rem 1.25rem !important;
+}
+
+.page-title {
+    font-size: clamp(1.45rem, 2vw, 2rem) !important;
+    font-weight: 800 !important;
+    margin: 0 !important;
+}
+
+/* Sidebar */
+.sidebar,
+#sidebar-container .sidebar {
+    background: linear-gradient(180deg, var(--siab1-navy-950), var(--siab1-navy-900)) !important;
+    border-right: 1px solid rgba(255, 255, 255, 0.10) !important;
+    box-shadow: 12px 0 34px rgba(8, 26, 47, 0.18) !important;
+}
+
+.sidebar-header {
+    align-items: flex-start !important;
+    gap: 0.65rem !important;
+    padding: 0.6rem 0.6rem 1.05rem !important;
+    margin-bottom: 0.45rem !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.10) !important;
+    flex-wrap: wrap;
+}
+
+.sidebar-header i {
+    width: 2.35rem !important;
+    height: 2.35rem !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 0.9rem !important;
+    background: rgba(59, 130, 246, 0.16) !important;
+    color: #bfdbfe !important;
+    font-size: 1.1rem !important;
+}
+
+.sidebar-header h1 {
+    color: var(--siab1-text-inverse) !important;
+    font-size: 1.15rem !important;
+    font-weight: 800 !important;
+    line-height: 1.05 !important;
+    margin: 0 !important;
+}
+
+.sidebar-header::after {
+    flex-basis: 100%;
+    margin-left: 3rem;
+    margin-top: -0.45rem;
+}
+
+.nav-link,
+.submenu a,
+.sidebar-footer .nav-link {
+    border-radius: 0.9rem !important;
+    color: rgba(255, 255, 255, 0.76) !important;
+    min-height: 42px !important;
+}
+
+.nav-link i,
+.submenu a i {
+    color: rgba(191, 219, 254, 0.86) !important;
+}
+
+.nav-link:hover,
+.nav-link.active,
+.nav-item.active > .nav-link,
+.submenu a:hover,
+.submenu a.active {
+    background: rgba(59, 130, 246, 0.16) !important;
+    color: #ffffff !important;
+    box-shadow: inset 3px 0 0 #60a5fa !important;
+}
+
+.submenu {
+    background: rgba(7, 21, 39, 0.28) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    border-radius: 1rem !important;
+    margin: 0.35rem 0.25rem 0.55rem !important;
+    padding: 0.35rem !important;
+}
+
+/* Cards and containers */
+.siab1-surface,
+.stat-card,
+.stat-card-premium,
+.metric-card,
+.exam-card,
+.platform-card,
+.platform-section,
+.filter-section,
+.table-container,
+.table-responsive,
+.spreadsheet-container,
+.modal-content,
+.custom-modal-box,
+.assessment-modal-card,
+.dropdown-menu,
+.export-dropdown-menu,
+.live-time-card,
+.analytics-card,
+.chart-card,
+.role-option-card,
+.upload-zone,
+.preview-card,
+.settings-section,
+.monitor-card,
+.security-card,
+.result-card,
+.user-card,
+.glass-card,
+.question-card,
+.stimulus-card,
+.answer-card,
+.navigator-panel,
+.question-nav.card,
+#active-exam-bar,
+#admin-lite-mode-banner {
+    background: var(--siab1-surface) !important;
+    color: var(--siab1-text) !important;
+    border: 1px solid var(--siab1-border) !important;
+    border-radius: var(--siab1-radius-lg) !important;
+    box-shadow: var(--siab1-shadow-sm) !important;
+}
+
+.siab1-dark-surface,
+.siab1-brand-surface {
+    background: linear-gradient(135deg, var(--siab1-navy-950), var(--siab1-navy-800)) !important;
+    color: var(--siab1-text-inverse) !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    border-radius: var(--siab1-radius-lg) !important;
+    box-shadow: var(--siab1-shadow-sm) !important;
+}
+
+.siab1-dark-surface h1,
+.siab1-dark-surface h2,
+.siab1-dark-surface h3,
+.siab1-dark-surface h4,
+.siab1-dark-surface h5,
+.siab1-dark-surface h6,
+.siab1-dark-surface p,
+.siab1-dark-surface span,
+.siab1-dark-surface strong,
+.siab1-brand-surface h1,
+.siab1-brand-surface h2,
+.siab1-brand-surface h3,
+.siab1-brand-surface h4,
+.siab1-brand-surface h5,
+.siab1-brand-surface h6,
+.siab1-brand-surface p,
+.siab1-brand-surface span,
+.siab1-brand-surface strong {
+    color: var(--siab1-text-inverse) !important;
+}
+
+.siab1-warning-surface {
+    background: #fffbeb !important;
+    color: #92400e !important;
+    border: 1px solid #fde68a !important;
+    border-radius: var(--siab1-radius-lg) !important;
+    box-shadow: var(--siab1-shadow-sm) !important;
+}
+
+.siab1-surface:hover,
+.stat-card:hover,
+.exam-card:hover,
+.metric-card:hover,
+.platform-card:hover,
+.role-option-card:hover {
+    box-shadow: var(--siab1-shadow-md) !important;
+    transform: translateY(-1px);
+}
+
+.role-option-card.selected,
+.role-option-card[aria-selected='true'] {
+    background: #eff6ff !important;
+    color: var(--siab1-navy-900) !important;
+    border-color: var(--siab1-blue-600) !important;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12) !important;
+}
+
+.stat-icon,
+.hero-icon-box,
+.header-icon,
+.metric-icon,
+.time-icon,
+.platform-icon,
+.login-icon,
+.logo i {
+    background: linear-gradient(135deg, var(--siab1-navy-800), var(--siab1-blue-600)) !important;
+    color: #ffffff !important;
+    border: 1px solid rgba(255, 255, 255, 0.18) !important;
+    box-shadow: 0 10px 24px rgba(29, 78, 216, 0.18) !important;
+}
+
+.stat-value,
+.metric-value,
+.result-score,
+.time-display {
+    color: var(--siab1-navy-900) !important;
+    font-weight: 800 !important;
+}
+
+/* Buttons */
+.btn,
+.btn-login,
+.hero-btn,
+.preset-btn,
+.period-pill,
+.app-link,
+.number-btn,
+.action-btn,
+button[type='submit'],
+input[type='button'],
+input[type='submit'] {
+    border-radius: 0.85rem !important;
+    font-weight: 700 !important;
+    min-height: 42px;
+    letter-spacing: -0.01em;
+    transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, box-shadow 160ms ease, transform 160ms ease !important;
+}
+
+.btn:hover,
+.btn-login:hover,
+.hero-btn:hover,
+.app-link:hover,
+.action-btn:hover {
+    transform: translateY(-1px) !important;
+}
+
+.btn-primary,
+.btn-login,
+.hero-btn.primary,
+.btn.btn-primary,
+button.btn-primary {
+    background: linear-gradient(135deg, var(--siab1-navy-800), var(--siab1-blue-600)) !important;
+    color: #ffffff !important;
+    border: 1px solid rgba(37, 99, 235, 0.32) !important;
+    box-shadow: 0 10px 22px rgba(37, 99, 235, 0.22) !important;
+}
+
+.btn-secondary,
+.hero-btn.secondary,
+.btn-outline-primary,
+.btn.btn-secondary {
+    background: #ffffff !important;
+    color: var(--siab1-navy-800) !important;
+    border: 1px solid var(--siab1-border-strong) !important;
+    box-shadow: var(--siab1-shadow-sm) !important;
+}
+
+.btn-success,
+.badge-success,
+.status-success,
+.toast-success {
+    --status-color: var(--siab1-green-600);
+}
+
+.btn-success {
+    background: linear-gradient(135deg, #15803d, var(--siab1-green-600)) !important;
+    color: #ffffff !important;
+}
+
+.btn-warning {
+    background: linear-gradient(135deg, var(--siab1-amber-600), var(--siab1-amber-500)) !important;
+    color: #ffffff !important;
+    border-color: rgba(217, 119, 6, 0.35) !important;
+}
+
+.btn-danger,
+.btn-exit,
+button.btn-danger {
+    background: linear-gradient(135deg, var(--siab1-red-700), var(--siab1-red-600)) !important;
+    color: #ffffff !important;
+    border-color: rgba(220, 38, 38, 0.30) !important;
+}
+
+.btn:focus-visible,
+.btn-login:focus-visible,
+.nav-link:focus-visible,
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+    outline: none !important;
+    box-shadow: var(--focus-ring) !important;
+}
+
+/* Forms */
+.form-control,
+.form-select,
+input[type='text'],
+input[type='password'],
+input[type='email'],
+input[type='number'],
+input[type='date'],
+input[type='time'],
+input[type='url'],
+select,
+textarea,
+.number-input,
+.exam-title-input {
+    background: #ffffff !important;
+    color: var(--siab1-text) !important;
+    border: 1px solid var(--siab1-border) !important;
+    border-radius: 0.85rem !important;
+    box-shadow: inset 0 1px 0 rgba(8, 26, 47, 0.02) !important;
+    min-height: 42px;
+}
+
+.form-control::placeholder,
+input::placeholder,
+textarea::placeholder {
+    color: #94a3b8 !important;
+}
+
+.form-control:focus,
+.form-select:focus,
+input:focus,
+textarea:focus,
+select:focus,
+.exam-title-input:focus {
+    border-color: var(--siab1-blue-600) !important;
+    box-shadow: var(--focus-ring) !important;
+}
+
+.form-label,
+.siab1-surface label,
+.login-card label,
+.modal.siab1-surface label,
+.modal-content.siab1-surface label {
+    font-weight: 700 !important;
+    color: var(--siab1-text-secondary) !important;
+}
+
+/* Tables */
+table,
+.table {
+    color: var(--siab1-text) !important;
+    border-color: var(--siab1-border) !important;
+}
+
+.table-container,
+.table-responsive {
+    overflow-x: auto;
+    border-radius: var(--siab1-radius-lg) !important;
+}
+
+thead,
+.table thead,
+table thead tr,
+th {
+    background: #f1f6fc !important;
+    color: var(--siab1-navy-900) !important;
+    border-color: var(--siab1-border) !important;
+    font-weight: 800 !important;
+}
+
+td {
+    border-color: var(--siab1-border) !important;
+    color: var(--siab1-text) !important;
+}
+
+tbody tr:hover {
+    background: rgba(37, 99, 235, 0.045) !important;
+}
+
+/* Badges, pills, alerts */
+.badge,
+.status-pill,
+.stat-badge,
+.live-badge,
+.runtime-badge,
+.period-pill,
+.question-badge {
+    border-radius: 999px !important;
+    border: 1px solid transparent;
+    font-weight: 800 !important;
+    letter-spacing: 0.01em;
+}
+
+.badge-primary,
+.status-primary,
+.badge-info,
+.live-badge {
+    background: #e8f1ff !important;
+    color: var(--siab1-blue-700) !important;
+    border-color: #bfd7ff !important;
+}
+
+.badge-success,
+.status-online,
+.status-success {
+    background: #dcfce7 !important;
+    color: #166534 !important;
+    border-color: #bbf7d0 !important;
+}
+
+.badge-warning,
+.status-warning,
+.runtime-badge,
+.question-badge {
+    background: #fef3c7 !important;
+    color: #92400e !important;
+    border-color: #fde68a !important;
+}
+
+.badge-danger,
+.status-danger,
+.status-offline {
+    background: #fee2e2 !important;
+    color: #991b1b !important;
+    border-color: #fecaca !important;
+}
+
+.alert,
+.toast,
+.notification,
+.security-alert,
+.legacy-notice {
+    border-radius: var(--siab1-radius-md) !important;
+    border: 1px solid var(--siab1-border) !important;
+    background: var(--siab1-surface) !important;
+    color: var(--siab1-text) !important;
+    box-shadow: var(--siab1-shadow-sm) !important;
+}
+
+.alert-success {
+    background: #ecfdf5 !important;
+    border-color: #bbf7d0 !important;
+    color: #166534 !important;
+}
+
+.alert-warning {
+    background: #fffbeb !important;
+    border-color: #fde68a !important;
+    color: #92400e !important;
+}
+
+.alert-danger,
+.alert-error {
+    background: #fef2f2 !important;
+    border-color: #fecaca !important;
+    color: #991b1b !important;
+}
+
+.alert-info {
+    background: #eff6ff !important;
+    border-color: #bfdbfe !important;
+    color: #1e40af !important;
+}
+
+/* Login pages */
+.login-container {
+    background:
+        radial-gradient(circle at 15% 12%, rgba(14, 165, 233, 0.13), transparent 26rem),
+        linear-gradient(135deg, #f8fbff 0%, #eaf2fb 100%) !important;
+}
+
+.login-card {
+    background: rgba(255, 255, 255, 0.94) !important;
+    color: var(--siab1-text) !important;
+    border: 1px solid rgba(11, 35, 71, 0.12) !important;
+    border-radius: 1.65rem !important;
+    box-shadow: var(--siab1-shadow-lg) !important;
+    backdrop-filter: blur(14px) !important;
+}
+
+.login-icon,
+.login-header i.fa-user-graduate,
+.login-header > i {
+    -webkit-text-fill-color: #ffffff !important;
+    background: linear-gradient(135deg, var(--siab1-navy-800), var(--siab1-blue-600)) !important;
+    color: #ffffff !important;
+}
+
+.login-header > i {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 78px !important;
+    height: 78px !important;
+    border-radius: 1.35rem !important;
+    font-size: 2rem !important;
+    margin-bottom: 1.15rem !important;
+}
+
+.login-header h1 {
+    -webkit-text-fill-color: var(--siab1-text) !important;
+    background: none !important;
+    font-weight: 800 !important;
+}
+
+.login-header p {
+    color: var(--siab1-text-secondary) !important;
+}
+
+.password-toggle,
+.toggle-password,
+.input-icon {
+    color: var(--siab1-blue-600) !important;
+}
+
+/* Student shell */
+.student-container {
+    max-width: 1180px !important;
+}
+
+.student-header {
+    background: rgba(255, 255, 255, 0.90) !important;
+    border: 1px solid var(--siab1-border) !important;
+    border-radius: var(--siab1-radius-xl) !important;
+    box-shadow: var(--siab1-shadow-sm) !important;
+}
+
+.student-header .logo {
+    flex-wrap: wrap;
+}
+
+.student-header .logo i {
+    width: 2.45rem;
+    height: 2.45rem;
+    border-radius: 0.9rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.05rem !important;
+}
+
+.student-header .logo h1 {
+    font-size: 1.25rem !important;
+    font-weight: 800 !important;
+}
+
+.student-container .card[style*='linear-gradient'],
+.card[style*='var(--primary)'] {
+    background: linear-gradient(135deg, var(--siab1-navy-900), var(--siab1-navy-800)) !important;
+    color: #ffffff !important;
+    border: 1px solid rgba(255, 255, 255, 0.10) !important;
+}
+
+.student-container .card[style*='linear-gradient'] h1,
+.student-container .card[style*='linear-gradient'] h2,
+.student-container .card[style*='linear-gradient'] h3,
+.student-container .card[style*='linear-gradient'] p,
+.card[style*='var(--primary)'] h1,
+.card[style*='var(--primary)'] h2,
+.card[style*='var(--primary)'] h3,
+.card[style*='var(--primary)'] p {
+    color: #ffffff !important;
+}
+
+/* Exam-taking visual polish. Keeps current DOM, IDs, and handlers intact. */
+.exam-header {
+    background: linear-gradient(135deg, var(--siab1-navy-950), var(--siab1-navy-800)) !important;
+    border-bottom: 1px solid rgba(255,255,255,0.10) !important;
+    box-shadow: 0 12px 28px rgba(8, 26, 47, 0.22) !important;
+}
+
+.exam-header::before {
+    content: 'SIAB1';
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    position: absolute;
+    left: 1rem;
+    top: 0.55rem;
+    min-width: 3.65rem;
+    height: 1.7rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.10);
+    color: #ffffff;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    pointer-events: none;
+}
+
+.exam-header-inner {
+    padding-top: 2.45rem !important;
+}
+
+.exam-meta {
+    color: #bfdbfe !important;
+}
+
+.exam-title {
+    color: #ffffff !important;
+}
+
+.timer-pill {
+    background: rgba(255, 255, 255, 0.12) !important;
+    color: #ffffff !important;
+    border: 1px solid rgba(255, 255, 255, 0.20) !important;
+    box-shadow: none !important;
+}
+
+.timer-pill .timer-value,
+.timer-pill .timer-icon,
+#connection-status,
+#connection-status i {
+    color: #ffffff !important;
+}
+
+.exam-header > .exam-progress-bar,
+.exam-header > .progress-bar {
+    background: rgba(255, 255, 255, 0.13) !important;
+}
+
+.exam-header .exam-progress-fill,
+.exam-header .progress-fill {
+    background: linear-gradient(90deg, var(--siab1-cyan-500), var(--siab1-green-600)) !important;
+    box-shadow: 0 0 10px rgba(14, 165, 233, 0.24) !important;
+}
+
+.exam-main,
+#question-container {
+    background: transparent !important;
+}
+
+.question-card {
+    background: #ffffff !important;
+    color: var(--siab1-text) !important;
+}
+
+.question-text,
+.stimulus-text,
+.option-text,
+.answer-text,
+.question-content,
+.rich-text-content {
+    color: var(--siab1-text) !important;
+}
+
+.question-text {
+    background: #f8fafc !important;
+    border-left-color: var(--siab1-blue-600) !important;
+}
+
+.stimulus-card {
+    background: #f1f6fc !important;
+    border-left-color: var(--siab1-navy-800) !important;
+}
+
+.stimulus-label {
+    color: var(--siab1-navy-800) !important;
+}
+
+.option-btn,
+.option-item,
+.answer-option,
+.matching-option,
+.true-false-option {
+    background: #ffffff !important;
+    color: var(--siab1-text) !important;
+    border: 1.5px solid var(--siab1-border) !important;
+    border-radius: var(--siab1-radius-md) !important;
+    box-shadow: var(--siab1-shadow-sm) !important;
+}
+
+.option-btn:hover,
+.option-item:hover,
+.answer-option:hover {
+    background: #eff6ff !important;
+    border-color: #93c5fd !important;
+}
+
+.option-btn.selected,
+.option-item.selected,
+.answer-option.selected {
+    background: #ecfdf5 !important;
+    border-color: #86efac !important;
+    box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.10) !important;
+}
+
+.exam-footer {
+    background: rgba(255, 255, 255, 0.94) !important;
+    border-top: 1px solid var(--siab1-border) !important;
+    box-shadow: 0 -12px 28px rgba(8, 26, 47, 0.10) !important;
+}
+
+.exam-footer .nav-btn,
+.nav-btn {
+    border-radius: 0.85rem !important;
+}
+
+.question-nav-grid .nav-btn,
+.navigator-grid .nav-btn,
+.question-number-btn {
+    background: #ffffff !important;
+    color: var(--siab1-navy-900) !important;
+    border: 1px solid var(--siab1-border) !important;
+}
+
+.question-nav-grid .nav-btn.answered,
+.navigator-grid .nav-btn.answered,
+.nav-btn.answered {
+    background: #dcfce7 !important;
+    border-color: #86efac !important;
+    color: #166534 !important;
+}
+
+.question-nav-grid .nav-btn.current,
+.question-nav-grid .nav-btn.active,
+.navigator-grid .nav-btn.current,
+.navigator-grid .nav-btn.active,
+.nav-btn.active {
+    background: var(--siab1-navy-800) !important;
+    color: #ffffff !important;
+    border-color: var(--siab1-navy-800) !important;
+}
+
+.question-nav-grid .nav-btn.flagged,
+.navigator-grid .nav-btn.flagged,
+.nav-btn.flagged {
+    background: #fef3c7 !important;
+    color: #92400e !important;
+    border-color: #fbbf24 !important;
+}
+
+/* Modals and overlays */
+.modal-overlay,
+.modal-backdrop,
+.custom-modal-overlay {
+    background: rgba(8, 26, 47, 0.58) !important;
+    backdrop-filter: blur(5px);
+}
+
+.modal.siab1-surface,
+.modal-content.siab1-surface,
+.custom-modal-box.siab1-surface {
+    max-width: min(92vw, 720px);
+}
+
+.siab1-surface input:-webkit-autofill,
+.siab1-surface textarea:-webkit-autofill,
+.siab1-surface select:-webkit-autofill,
+.login-card input:-webkit-autofill,
+.login-card textarea:-webkit-autofill,
+.login-card select:-webkit-autofill,
+.modal.siab1-surface input:-webkit-autofill,
+.modal.siab1-surface textarea:-webkit-autofill,
+.modal.siab1-surface select:-webkit-autofill,
+.modal-content.siab1-surface input:-webkit-autofill,
+.modal-content.siab1-surface textarea:-webkit-autofill,
+.modal-content.siab1-surface select:-webkit-autofill {
+    -webkit-box-shadow: 0 0 0 1000px #ffffff inset !important;
+    -webkit-text-fill-color: var(--siab1-text) !important;
+    caret-color: var(--siab1-text) !important;
+}
+
+/* Empty/loading states */
+.loading,
+.empty-state,
+.error-state,
+.skeleton,
+.loading-overlay {
+    color: var(--siab1-text-secondary) !important;
+}
+
+.spinner,
+.loading-spinner,
+.refresh-spinner {
+    border-color: #dbeafe !important;
+    border-top-color: var(--siab1-blue-600) !important;
+}
+
+/* Embedded reports keep official SIAB1 subtitle colors */
+.header-title,
+.report-title {
+    color: var(--siab1-navy-900) !important;
+}
+
+/* Responsive hardening */
+@media (max-width: 992px) {
+    .page-header,
+    .content-header,
+    .builder-header {
+        border-radius: 1rem !important;
+    }
+
+    .header-actions,
+    .filter-controls,
+    .toolbar-group,
+    .settings-row {
+        gap: 0.65rem !important;
+    }
+
+    .table-container,
+    .table-responsive {
+        max-width: 100%;
+    }
+}
+
+@media (max-width: 640px) {
+    body {
+        font-size: 15px;
+    }
+
+    .login-card {
+        padding: 1.65rem !important;
+        border-radius: 1.25rem !important;
+    }
+
+    .student-container,
+    .main-content {
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+    }
+
+    .student-header,
+    .page-header,
+    .content-header {
+        gap: 0.75rem !important;
+    }
+
+    .btn,
+    .btn-login,
+    .form-control,
+    input,
+    select,
+    textarea {
+        min-height: 44px;
+    }
+
+    .exam-header::before {
+        left: 0.75rem;
+        top: 0.45rem;
+    }
+
+    .exam-header-inner {
+        padding-top: 2.25rem !important;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}

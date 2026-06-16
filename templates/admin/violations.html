@@ -5,10 +5,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" type="image/gif" href="/static/favicon.gif">
-    <title>Dashboard Pelanggaran - Admin Panel | Ujian Online</title>
+    <title>Dashboard Pelanggaran - Admin Panel | SIAB1</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="/static/css/admin.css">
+    <link rel="stylesheet" href="/static/css/admin.css?v=20260616-siab1-ui2">
     <link rel="stylesheet" href="/static/css/responsive.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -678,6 +678,7 @@
             }
         }
     </style>
+    <link rel="stylesheet" href="/static/css/siab1-theme.css?v=20260616-siab1-ui2">
 </head>
 
 <body>
@@ -703,7 +704,7 @@
 
             <div id="alert-container"></div>
 
-            <div class="card filters-bar">
+            <div class="card filters-bar siab1-surface">
                 <div class="filters-controls">
                     <div class="form-group">
                         <label for="exam-filter">Ujian</label>
@@ -784,7 +785,7 @@
             </div>
 
             <div class="section-grid">
-                <div class="card">
+                <div class="card siab1-surface">
                     <div class="section-title">
                         <div>
                             <h3><i class="fas fa-chart-pie"></i> Jenis Pelanggaran</h3>
@@ -796,7 +797,7 @@
                     </div>
                 </div>
 
-                <div class="card">
+                <div class="card siab1-surface">
                     <div class="section-title">
                         <div>
                             <h3><i class="fas fa-chart-line"></i> Trend Waktu</h3>
@@ -810,7 +811,7 @@
             </div>
 
             <div class="section-grid">
-                <div class="card">
+                <div class="card siab1-surface">
                     <div class="section-title">
                         <div>
                             <h3><i class="fas fa-list-alt"></i> Breakdown per Tipe</h3>
@@ -827,7 +828,7 @@
                     </div>
                 </div>
 
-                <div class="card">
+                <div class="card siab1-surface">
                     <div class="section-title">
                         <div>
                             <h3><i class="fas fa-user-secret"></i> Top Pelanggar</h3>
@@ -845,7 +846,7 @@
                 </div>
             </div>
 
-            <div class="card detail-card">
+            <div class="card detail-card siab1-surface">
                 <div class="section-title">
                     <div>
                         <h3><i class="fas fa-table-list"></i> Log Pelanggaran Detail</h3>
@@ -864,7 +865,7 @@
         </main>
     </div>
 
-    <div class="violation-explainer-modal" id="violation-explainer-modal" aria-hidden="true">
+    <div class="violation-explainer-modal siab1-surface" id="violation-explainer-modal" aria-hidden="true">
         <div class="violation-explainer-dialog" role="dialog" aria-modal="true" aria-labelledby="violation-explainer-title">
             <div class="violation-explainer-header">
                 <div>
@@ -898,10 +899,10 @@
         </div>
     </div>
 
-    <script src="/static/js/api.js?v=20260306-phase4"></script>
-    <script src="/static/js/auth.js"></script>
+    <script src="/static/js/api.js?v=20260616-siab1-ui2"></script>
+    <script src="/static/js/auth.js?v=20260616-siab1-ui2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
-    <script src="/static/js/sidebar-loader.js"></script>
+    <script src="/static/js/sidebar-loader.js?v=20260616-siab1-ui2"></script>
     <script>
         if (!auth.requireAuth(['admin', 'developer', 'teacher'])) {
             throw new Error('AUTH_REQUIRED');

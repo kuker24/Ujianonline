@@ -1,0 +1,129 @@
+name: SIAB1 UI Review
+
+on:
+  pull_request:
+  push:
+    branches:
+      - review/siab1-ui-redesign
+
+permissions:
+  contents: read
+
+jobs:
+  web-static:
+    name: Web static validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Whitespace check
+        run: |
+          base_ref="${{ github.base_ref || 'review/sanitized-root-20260531-115153' }}"
+          git fetch --no-tags origin "$base_ref"
+          git diff --check "origin/$base_ref...HEAD"
+          git diff --check
+
+      - name: Verify frontend bundles
+        run: bash scripts/verify_frontend_bundles.sh
+
+      - name: Node syntax checks
+        run: |
+          node --check static/js/api.js
+          node --check static/js/auth.js
+          node --check static/js/exam-system.js
+          node --check static/js/sidebar-loader.js
+          node --check static/sw.js
+
+      - name: Ensure bundle verification left no diff
+        run: git diff --exit-code
+
+  python-tests:
+    name: Python regression tests
+    runs-on: ubuntu-latest
+    env:
+      SECRET_KEY: test-secret-key
+      DATABASE_URL: postgresql+asyncpg://user:pass@localhost/db
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pytest
+
+      - name: Compile application
+        run: python -m compileall app
+
+      - name: SIAB1 UI regression check
+        run: python scripts/check_siab1_ui_regressions.py --inventory
+
+      - name: Pytest regression suite
+        run: |
+          python -m pytest -q tests/test_siab1_ui_regressions.py
+          python -m pytest -q tests/test_normalize_siab1_branding.py
+          python -m pytest -q tests/test_apk_builder_gui_config.py
+          python -m pytest -q tests/test_mobile_first_feature_flags.py
+
+      - name: Security audit report
+        continue-on-error: true
+        run: python scripts/check_security.py
+
+  artifact-guard:
+    name: Forbidden artifact guard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify no forbidden artifacts were added or changed
+        run: |
+          forbidden='(\.apk$|\.aab$|\.jks$|\.keystore$|(^|/)\.env(\..*)?$|\.sql$|\.dump$|(^|/)build/|(^|/)\.dart_tool/|(^|/)node_modules/|(^|/)__pycache__/|\.pyc$)'
+          base_ref="${{ github.base_ref || 'review/sanitized-root-20260531-115153' }}"
+          git fetch --no-tags origin "$base_ref"
+          matches=$(git diff --name-only "origin/$base_ref...HEAD" | grep -E "$forbidden" | grep -v -E '(^|/)\.env\.example$' || true)
+          if [ -n "$matches" ]; then
+            echo "$matches" >&2
+            echo "Forbidden artifact was added or changed in this PR" >&2
+            exit 1
+          fi
+
+  flutter-tests:
+    name: Flutter UI smoke tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: flutter_client_code
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      - name: Flutter analyze
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Flutter widget test
+        run: flutter test test/widget_test.dart

@@ -5,14 +5,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" type="image/gif" href="/static/favicon.gif">
-    <title>Buat Ujian - Ujian Online</title>
+    <title>Buat Ujian - SIAB1</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="/static/css/admin.css">
+    <link rel="stylesheet" href="/static/css/admin.css?v=20260616-siab1-ui2">
     <!-- Responsive -->
     <link rel="stylesheet" href="/static/css/responsive.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
     <link rel="stylesheet" href="/static/css/exam-builder.css?v=20260418-richtext4">
+    <link rel="stylesheet" href="/static/css/siab1-theme.css?v=20260616-siab1-ui2">
 </head>
 
 <body>
@@ -55,7 +56,7 @@
             </div>
 
             <!-- Exam Settings Card -->
-            <div class="builder-settings card">
+            <div class="builder-settings card siab1-surface">
                 <div class="settings-row">
                     <div class="setting-item" style="min-width: 180px;">
                         <label><i class="fas fa-book"></i> Bidang Studi</label>
@@ -243,7 +244,7 @@
 
     <!-- Time Settings Modal -->
     <div class="modal-overlay" id="time-modal">
-        <div class="modal" style="max-width: 500px;">
+        <div class="modal siab1-surface" style="max-width: 500px;">
             <div class="modal-header">
                 <h3 class="modal-title"><i class="fas fa-calendar-alt"></i> Atur Jadwal Ujian</h3>
                 <button class="modal-close" onclick="closeModal('time-modal')">&times;</button>
@@ -308,7 +309,7 @@
 
     <!-- Preview Modal -->
     <div class="modal-overlay" id="preview-modal">
-        <div class="modal" style="max-width: 800px; max-height: 90vh;">
+        <div class="modal siab1-surface" style="max-width: 800px; max-height: 90vh;">
             <div class="modal-header">
                 <h3 class="modal-title" id="preview-modal-title"><i class="fas fa-eye"></i> Preview Ujian</h3>
                 <button class="modal-close" onclick="closeModal('preview-modal')">&times;</button>
@@ -321,7 +322,7 @@
 
     <!-- Smart Tutorial Modal -->
     <div class="modal-overlay" id="tutorial-modal">
-        <div class="modal tutorial-modal">
+        <div class="modal tutorial-modal siab1-surface">
             <div class="modal-header tutorial-header">
                 <h3 class="modal-title"><i class="fas fa-graduation-cap"></i> Tutorial Cerdas Pembuatan Soal</h3>
                 <button class="modal-close" onclick="closeTutorialModal()">&times;</button>
@@ -346,7 +347,7 @@
 
     <!-- Builder Defaults Modal -->
     <div class="modal-overlay" id="builder-defaults-modal">
-        <div class="modal" style="max-width: 680px;">
+        <div class="modal siab1-surface" style="max-width: 680px;">
             <div class="modal-header">
                 <h3 class="modal-title"><i class="fas fa-brain"></i> Pengaturan Default Soal</h3>
                 <button class="modal-close" onclick="closeModal('builder-defaults-modal')">&times;</button>
@@ -417,7 +418,7 @@
 
     <!-- Custom Input Modal (replaces browser prompt) -->
     <div class="modal-overlay" id="input-modal">
-        <div class="modal" style="max-width: 450px;">
+        <div class="modal siab1-surface" style="max-width: 450px;">
             <div class="modal-header">
                 <h3 class="modal-title" id="input-modal-title"><i class="fas fa-pen-to-square"></i> Input</h3>
                 <button class="modal-close" onclick="closeInputModal()">&times;</button>
@@ -437,7 +438,7 @@
 
     <!-- Custom Confirm Modal (replaces browser confirm) -->
     <div class="modal-overlay" id="confirm-modal">
-        <div class="modal" style="max-width: 400px;">
+        <div class="modal siab1-surface" style="max-width: 400px;">
             <div class="modal-header">
                 <h3 class="modal-title" id="confirm-modal-title"><i class="fas fa-question-circle"></i> Konfirmasi</h3>
                 <button class="modal-close" onclick="closeConfirmModal(false)">&times;</button>
@@ -458,7 +459,7 @@
 
     <!-- Publish Exam Modal - Class & Student Selection -->
     <div class="modal-overlay" id="publish-modal">
-        <div class="modal"
+        <div class="modal siab1-surface"
             style="max-width: 800px; max-height: 90vh; display: flex; flex-direction: column; overflow: hidden;">
             <div class="modal-header" style="background: linear-gradient(135deg, var(--primary), var(--secondary));">
                 <h3 class="modal-title" style="color: white;">
@@ -559,7 +560,7 @@
                         Konfirmasi Publish
                     </h4>
 
-                    <div class="card" style="background: rgba(34, 197, 94, 0.1); border-color: rgba(34, 197, 94, 0.3);">
+                    <div class="card siab1-surface" style="background: rgba(34, 197, 94, 0.1); border-color: rgba(34, 197, 94, 0.3);">
                         <div style="display: grid; gap: 1rem;">
                             <div>
                                 <strong style="color: var(--success);"><i class="fas fa-book"></i> Ujian:</strong>
@@ -717,7 +718,7 @@
 
     <!-- Points Configuration Modal - Simple Version -->
     <div class="modal-overlay" id="points-config-modal" style="overflow-y: auto;">
-        <div class="modal" style="max-width: 500px; margin: 2rem auto; max-height: none;">
+        <div class="modal siab1-surface" style="max-width: 500px; margin: 2rem auto; max-height: none;">
             <!-- Header -->
             <div class="modal-header">
                 <h3 class="modal-title">
@@ -807,10 +808,10 @@
         </div>
     </div>
 
-    <script src="/static/js/api.js?v=20260423-devmenu1"></script>
-    <script src="/static/js/auth.js"></script>
+    <script src="/static/js/api.js?v=20260616-siab1-ui2"></script>
+    <script src="/static/js/auth.js?v=20260616-siab1-ui2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
-    <script src="/static/js/sidebar-loader.js"></script>
+    <script src="/static/js/sidebar-loader.js?v=20260616-siab1-ui2"></script>
     <script>
         // Role-based access control
         if (!auth.requireAuth(['admin', 'developer', 'teacher'])) {

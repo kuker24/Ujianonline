@@ -7,11 +7,12 @@
         content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="theme-color" content="#0f172a">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <title>Dashboard - Ujian Online</title>
+    <title>Dashboard - SIAB1</title>
     <link rel="icon" type="image/gif" href="/static/favicon.gif">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="/static/css/student.css">
+    <link rel="stylesheet" href="/static/css/student.css?v=20260616-siab1-ui2">
+    <link rel="stylesheet" href="/static/css/siab1-theme.css?v=20260616-siab1-ui2">
 </head>
 
 <body>
@@ -19,7 +20,7 @@
         <header class="student-header">
             <div class="logo">
                 <i class="fas fa-graduation-cap"></i>
-                <h1>Ujian Online</h1>
+                <h1>SIAB1</h1>
             </div>
             <div style="display: flex; align-items: center; gap: 1rem;">
                 <span id="user-name" style="color: var(--text-secondary);">Siswa</span>
@@ -32,7 +33,7 @@
         <div id="alert-container"></div>
 
         <!-- Token Input Card -->
-        <div class="card" style="margin-bottom: 1.5rem; border: 2px solid var(--primary);">
+        <div class="card siab1-surface" style="margin-bottom: 1.5rem; border: 2px solid var(--primary);">
             <h3 style="margin-bottom: 1rem;"><i class="fas fa-key" style="color: var(--primary);"></i> Masukkan Token
                 Ujian</h3>
             <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
@@ -48,7 +49,7 @@
         </div>
 
         <!-- Welcome -->
-        <div class="card" style="background: linear-gradient(135deg, var(--primary), var(--secondary)); border: none;">
+        <div class="card siab1-surface" style="background: linear-gradient(135deg, var(--primary), var(--secondary)); border: none;">
             <h2 style="margin-bottom: 0.5rem;">👋 Selamat Datang, <span id="welcome-name">Siswa</span>!</h2>
             <p style="color: rgba(255,255,255,0.8);">Silakan masukkan token ujian yang diberikan oleh pengawas untuk
                 memulai.</p>
@@ -57,11 +58,11 @@
 
     <!-- Start Exam Modal -->
     <div class="modal-overlay" id="start-modal">
-        <div class="modal">
+        <div class="modal siab1-surface">
             <h3 style="margin-bottom: 1rem;"><i class="fas fa-triangle-exclamation" style="color: var(--warning);"></i>
                 Mulai Ujian</h3>
             <p style="margin-bottom: 1rem;">Anda akan memulai ujian:</p>
-            <div class="card" style="margin-bottom: 1rem;">
+            <div class="card siab1-surface" style="margin-bottom: 1rem;">
                 <h4 id="modal-exam-title">Nama Ujian</h4>
                 <p style="color: var(--text-secondary); font-size: 0.875rem;" id="modal-exam-desc"></p>
                 <div style="display: flex; gap: 1rem; margin-top: 1rem; flex-wrap: wrap;">
@@ -85,7 +86,7 @@
 
     <!-- Logout Confirmation Modal -->
     <div class="modal-overlay" id="logout-modal">
-        <div class="modal" style="max-width: 400px; text-align: center;">
+        <div class="modal siab1-surface" style="max-width: 400px; text-align: center;">
             <i class="fas fa-right-from-bracket"
                 style="font-size: 3rem; color: var(--warning); margin-bottom: 1rem;"></i>
             <h3 style="margin-bottom: 0.5rem;">Konfirmasi Logout</h3>
@@ -99,8 +100,8 @@
         </div>
     </div>
 
-    <script src="/static/js/api.js?v=20260306-phase4"></script>
-    <script src="/static/js/auth.js?v=20260226-hotfix1"></script>
+    <script src="/static/js/api.js?v=20260616-siab1-ui2"></script>
+    <script src="/static/js/auth.js?v=20260616-siab1-ui2"></script>
     <script>
         if (!auth.requireAuth(['student', 'guruplus'])) {
             throw new Error('AUTH_REQUIRED');

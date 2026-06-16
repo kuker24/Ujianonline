@@ -7,7 +7,7 @@ from tools.apk_builder_gui import (
 
 BASE_RENDER_KWARGS = {
     "normalized_url": "https://man1rokanhulu.cloud/",
-    "app_name": "UJIAN ONLINE MAN 1 Rokan Hulu",
+    "app_name": "SIAB1",
     "force_https": True,
     "cleartext_allowed": False,
     "build_mode": "universal_apk",

@@ -4,11 +4,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>System Monitor - Ujian Online</title>
+    <title>System Monitor - SIAB1</title>
     <link rel="icon" type="image/gif" href="/static/favicon.gif">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="/static/css/admin.css?v=3.2">
+    <link rel="stylesheet" href="/static/css/admin.css?v=20260616-siab1-ui2">
     <link rel="stylesheet" href="/static/css/responsive.css?v=3.2">
 
     <!-- Chart.js for real-time graphs -->
@@ -182,16 +182,17 @@
         }
 
         /* Progress Bars */
-        .progress-bar {
+        .system-progress-bar {
             width: 100%;
             height: 6px;
-            background: rgba(255, 255, 255, 0.1);
+            background: var(--siab1-surface-muted, rgba(255, 255, 255, 0.1));
+            border: 1px solid var(--siab1-border, transparent);
             border-radius: 999px;
             overflow: hidden;
             margin-top: 0.75rem;
         }
 
-        .progress-fill {
+        .system-progress-fill {
             height: 100%;
             transition: width 0.5s ease, background-color 0.3s;
             border-radius: 999px;
@@ -338,6 +339,7 @@
             }
         }
     </style>
+    <link rel="stylesheet" href="/static/css/siab1-theme.css?v=20260616-siab1-ui2">
 </head>
 
 <body class="preload">
@@ -388,8 +390,8 @@
                     <div class="metric-value">
                         <span id="cpuValue">--</span><span class="metric-unit">%</span>
                     </div>
-                    <div class="progress-bar">
-                        <div class="progress-fill" id="cpuProgress"></div>
+                    <div class="system-progress-bar">
+                        <div class="system-progress-fill" id="cpuProgress"></div>
                     </div>
                     <div class="metric-subtitle" id="cpuCores">-- cores</div>
                 </div>
@@ -404,8 +406,8 @@
                     <div class="metric-value">
                         <span id="memoryValue">--</span><span class="metric-unit">%</span>
                     </div>
-                    <div class="progress-bar">
-                        <div class="progress-fill" id="memoryProgress"></div>
+                    <div class="system-progress-bar">
+                        <div class="system-progress-fill" id="memoryProgress"></div>
                     </div>
                     <div class="metric-subtitle" id="memoryDetails">-- GB used / -- GB total</div>
                 </div>
@@ -420,8 +422,8 @@
                     <div class="metric-value">
                         <span id="diskValue">--</span><span class="metric-unit">%</span>
                     </div>
-                    <div class="progress-bar">
-                        <div class="progress-fill" id="diskProgress"></div>
+                    <div class="system-progress-bar">
+                        <div class="system-progress-fill" id="diskProgress"></div>
                     </div>
                     <div class="metric-subtitle" id="diskDetails">-- GB free</div>
                 </div>
@@ -459,8 +461,8 @@
                         <span id="dbActiveConns">--</span><span class="metric-unit">/ <span
                                 id="dbMaxConns">--</span></span>
                     </div>
-                    <div class="progress-bar">
-                        <div class="progress-fill" id="dbConnProgress"></div>
+                    <div class="system-progress-bar">
+                        <div class="system-progress-fill" id="dbConnProgress"></div>
                     </div>
                     <div class="metric-subtitle">Active connections</div>
                 </div>
@@ -475,8 +477,8 @@
                     <div class="metric-value">
                         <span id="dbCacheHit">--</span><span class="metric-unit">%</span>
                     </div>
-                    <div class="progress-bar">
-                        <div class="progress-fill progress-low" id="dbCacheProgress"></div>
+                    <div class="system-progress-bar">
+                        <div class="system-progress-fill progress-low" id="dbCacheProgress"></div>
                     </div>
                     <div class="metric-subtitle">Database performance</div>
                 </div>
@@ -491,8 +493,8 @@
                     <div class="metric-value">
                         <span id="redisCacheHit">--</span><span class="metric-unit">%</span>
                     </div>
-                    <div class="progress-bar">
-                        <div class="progress-fill progress-low" id="redisCacheProgress"></div>
+                    <div class="system-progress-bar">
+                        <div class="system-progress-fill progress-low" id="redisCacheProgress"></div>
                     </div>
                     <div class="metric-subtitle">Cache effectiveness</div>
                 </div>
@@ -526,9 +528,9 @@
 
     <!-- Scripts -->
     <script src="/static/js/mobile-nav.js"></script>
-    <script src="/static/js/api.js?v=20260423-devmenu1"></script>
-    <script src="/static/js/auth.js"></script>
-    <script src="/static/js/sidebar-loader.js"></script>
+    <script src="/static/js/api.js?v=20260616-siab1-ui2"></script>
+    <script src="/static/js/auth.js?v=20260616-siab1-ui2"></script>
+    <script src="/static/js/sidebar-loader.js?v=20260616-siab1-ui2"></script>
 
     <script>
         // Check auth - Admin only for system monitor
@@ -763,7 +765,7 @@
                 bar.style.width = percent + '%';
 
                 // Update color based on percentage
-                bar.className = 'progress-fill';
+                bar.className = 'system-progress-fill';
                 if (percent < 60) {
                     bar.classList.add('progress-low');
                 } else if (percent < 85) {

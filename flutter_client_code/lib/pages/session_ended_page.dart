@@ -37,7 +37,7 @@ class _SessionEndedPageState extends State<SessionEndedPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0f172a),
+      backgroundColor: const Color(0xFF081a2f),
       body: SafeArea(
         child: Center(
           child: Padding(
@@ -51,7 +51,7 @@ class _SessionEndedPageState extends State<SessionEndedPage> {
                   decoration: const BoxDecoration(
                     shape: BoxShape.circle,
                     gradient: LinearGradient(
-                      colors: [Color(0xFF3b82f6), Color(0xFF10b981)],
+                      colors: [Color(0xFF1d4ed8), Color(0xFF16a34a)],
                     ),
                   ),
                   child: const Icon(
@@ -94,7 +94,7 @@ class _SessionEndedPageState extends State<SessionEndedPage> {
                         : const Icon(Icons.logout_rounded),
                     label: Text(_clearing ? 'Menutup...' : 'Tutup Aplikasi'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF3b82f6),
+                      backgroundColor: const Color(0xFF1d4ed8),
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(

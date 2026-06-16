@@ -4,16 +4,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hasil Ujian - Ujian Online</title>
+    <title>Hasil Ujian - SIAB1</title>
     <link rel="icon" type="image/gif" href="/static/favicon.gif">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="/static/css/student.css">
+    <link rel="stylesheet" href="/static/css/student.css?v=20260616-siab1-ui2">
+    <link rel="stylesheet" href="/static/css/siab1-theme.css?v=20260616-siab1-ui2">
 </head>
 
 <body>
     <div class="student-container">
-        <div class="card" style="max-width: 600px; margin: 2rem auto; text-align: center;">
+        <div class="card siab1-surface" style="max-width: 600px; margin: 2rem auto; text-align: center;">
             <div id="result-icon" style="margin-bottom: 1rem;">
                 <i class="fas fa-trophy" style="font-size: 5rem; color: var(--warning);"></i>
             </div>
@@ -34,7 +35,7 @@
                 <span class="badge badge-success" style="font-size: 1.25rem; padding: 0.75rem 1.5rem;">🎉 LULUS</span>
             </div>
 
-            <div class="card" style="background: var(--dark-card); margin-bottom: 2rem;">
+            <div class="card siab1-surface" style="background: var(--dark-card); margin-bottom: 2rem;">
                 <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; text-align: center;">
                     <div>
                         <div style="font-size: 1.5rem; font-weight: 700; color: var(--success);" id="correct-count">0
@@ -59,8 +60,8 @@
         </div>
     </div>
 
-    <script src="/static/js/api.js?v=20260306-phase4"></script>
-    <script src="/static/js/auth.js?v=20260226-hotfix1"></script>
+    <script src="/static/js/api.js?v=20260616-siab1-ui2"></script>
+    <script src="/static/js/auth.js?v=20260616-siab1-ui2"></script>
     <script>
         // Get result from session storage
         const result = JSON.parse(sessionStorage.getItem('exam_result'));

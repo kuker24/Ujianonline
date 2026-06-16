@@ -137,7 +137,7 @@ class _NativeLoginPageState extends State<NativeLoginPage> {
   }) {
     return InputDecoration(
       hintText: hint,
-      prefixIcon: Icon(icon, color: const Color(0xFF60a5fa)),
+      prefixIcon: Icon(icon, color: const Color(0xFF38bdf8)),
       suffixIcon: suffixIcon,
       filled: true,
       fillColor: Colors.white,
@@ -149,7 +149,7 @@ class _NativeLoginPageState extends State<NativeLoginPage> {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(18),
-        borderSide: const BorderSide(color: Color(0xFF2563eb), width: 2),
+        borderSide: const BorderSide(color: Color(0xFF1d4ed8), width: 2),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(18),
@@ -167,7 +167,7 @@ class _NativeLoginPageState extends State<NativeLoginPage> {
       return const _StatusBanner(
         icon: Icons.shield_rounded,
         message: 'Menyiapkan keamanan APK...',
-        color: Color(0xFF2563eb),
+        color: Color(0xFF1d4ed8),
       );
     }
     if (!_securityReady) {
@@ -192,13 +192,13 @@ class _NativeLoginPageState extends State<NativeLoginPage> {
 
     return Scaffold(
       resizeToAvoidBottomInset: true,
-      backgroundColor: const Color(0xFF0f172a),
+      backgroundColor: const Color(0xFF081a2f),
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [Color(0xFF0b2f6f), Color(0xFF0f4fb3), Color(0xFF0b2f6f)],
+            colors: [Color(0xFF081a2f), Color(0xFF123b73), Color(0xFF081a2f)],
           ),
         ),
         child: SafeArea(
@@ -239,7 +239,7 @@ class _NativeLoginPageState extends State<NativeLoginPage> {
                         ),
                       ),
                       const Text(
-                        'Ujian Online',
+                        'SIAB1',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           color: Colors.white,
@@ -272,7 +272,7 @@ class _NativeLoginPageState extends State<NativeLoginPage> {
                       TextFormField(
                         controller: _usernameController,
                         enabled: !_isLoading && !_isPreparingSecurity,
-                        style: const TextStyle(color: Color(0xFF0f172a)),
+                        style: const TextStyle(color: Color(0xFF081a2f)),
                         textInputAction: TextInputAction.next,
                         autofillHints: const [AutofillHints.username],
                         decoration: _inputDecoration(
@@ -290,7 +290,7 @@ class _NativeLoginPageState extends State<NativeLoginPage> {
                       TextFormField(
                         controller: _passwordController,
                         enabled: !_isLoading && !_isPreparingSecurity,
-                        style: const TextStyle(color: Color(0xFF0f172a)),
+                        style: const TextStyle(color: Color(0xFF081a2f)),
                         obscureText: _obscurePassword,
                         textInputAction: _captchaQuestion == null
                             ? TextInputAction.done
@@ -336,7 +336,7 @@ class _NativeLoginPageState extends State<NativeLoginPage> {
                         TextFormField(
                           controller: _captchaAnswerController,
                           enabled: !_isLoading && !_isPreparingSecurity,
-                          style: const TextStyle(color: Color(0xFF0f172a)),
+                          style: const TextStyle(color: Color(0xFF081a2f)),
                           textInputAction: TextInputAction.done,
                           onFieldSubmitted: (_) => _handleLogin(),
                           decoration: _inputDecoration(
@@ -360,9 +360,9 @@ class _NativeLoginPageState extends State<NativeLoginPage> {
                               ? null
                               : _handleLogin,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF2563eb),
+                            backgroundColor: const Color(0xFF1d4ed8),
                             disabledBackgroundColor: const Color(
-                              0xFF2563eb,
+                              0xFF1d4ed8,
                             ).withValues(alpha: 0.45),
                             foregroundColor: Colors.white,
                             elevation: 10,

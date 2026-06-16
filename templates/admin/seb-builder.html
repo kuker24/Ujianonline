@@ -5,10 +5,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" type="image/gif" href="/static/favicon.gif">
-    <title>SEB Legacy PC Builder - Admin Panel | Ujian Online</title>
+    <title>SEB Legacy PC Builder - Admin Panel | SIAB1</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="/static/css/admin.css">
+    <link rel="stylesheet" href="/static/css/admin.css?v=20260616-siab1-ui2">
     <!-- Responsive -->
     <link rel="stylesheet" href="/static/css/responsive.css">
     <style>
@@ -385,6 +385,7 @@
             vertical-align: middle;
         }
     </style>
+    <link rel="stylesheet" href="/static/css/siab1-theme.css?v=20260616-siab1-ui2">
 </head>
 
 <body>
@@ -414,7 +415,7 @@
             <!-- PC Builder Section -->
             <div id="pc-builder" class="builder-section active">
                 <!-- Preset Selection -->
-                <div class="card">
+                <div class="card siab1-surface">
                     <h3 style="margin-bottom: 1rem;">
                         <i class="fas fa-magic"></i> Quick Presets
                     </h3>
@@ -599,7 +600,7 @@
                         </div>
 
                         <!-- Templates -->
-                        <div class="card" style="margin-top: 1rem;">
+                        <div class="card siab1-surface" style="margin-top: 1rem;">
                             <h3 style="margin-bottom: 1rem;">
                                 <i class="fas fa-layer-group"></i> Saved Templates
                             </h3>
@@ -625,7 +626,7 @@
                 </div>
             </div>
             {% else %}
-            <div class="card" id="seb-legacy-disabled-card" style="padding: 1.5rem; border: 1px solid rgba(245, 158, 11, 0.35); background: rgba(245, 158, 11, 0.08);">
+            <div class="card siab1-surface" id="seb-legacy-disabled-card" style="padding: 1.5rem; border: 1px solid rgba(245, 158, 11, 0.35); background: rgba(245, 158, 11, 0.08);">
                 <h3 style="margin-top: 0; color: #fbbf24;">
                     <i class="fas fa-lock"></i> SEB PC/Desktop legacy sedang dinonaktifkan
                 </h3>
@@ -642,9 +643,9 @@
         </main>
     </div>
 
-    <script src="/static/js/api.js?v=20260423-devmenu1"></script>
-    <script src="/static/js/auth.js"></script>
-    <script src="/static/js/sidebar-loader.js"></script>
+    <script src="/static/js/api.js?v=20260616-siab1-ui2"></script>
+    <script src="/static/js/auth.js?v=20260616-siab1-ui2"></script>
+    <script src="/static/js/sidebar-loader.js?v=20260616-siab1-ui2"></script>
     <script src="/static/js/seb-builder.js?v=20260306-phase7"></script>
     <script>
         auth.requireAuth(['admin', 'developer']);

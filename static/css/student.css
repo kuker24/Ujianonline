@@ -599,7 +599,10 @@ body {
     visibility: visible;
 }
 
-.modal {
+.modal.siab1-surface,
+.modal.siab1-dark-surface,
+.modal.siab1-brand-surface,
+.modal.siab1-warning-surface {
     background: var(--dark-lighter);
     border-radius: 1rem;
     padding: 2rem;
@@ -1969,7 +1972,7 @@ body {
     margin-bottom: 1rem;
 }
 
-.progress-bar {
+.exam-progress .progress-bar {
     height: 6px;
     background: rgba(71, 85, 105, 0.4);
     border-radius: 3px;
@@ -1977,7 +1980,7 @@ body {
     margin-bottom: 0.5rem;
 }
 
-.progress-fill {
+.exam-progress .progress-fill {
     height: 100%;
     background: linear-gradient(90deg, #6366f1, #14B8A6, #a78bfa);
     border-radius: 3px;
@@ -1985,7 +1988,7 @@ body {
     position: relative;
 }
 
-.progress-fill::after {
+.exam-progress .progress-fill::after {
     content: '';
     position: absolute;
     right: 0;
@@ -2148,7 +2151,10 @@ body {
     .login-card,
     .card,
     .exam-card,
-    .modal,
+    .modal.siab1-surface,
+    .modal.siab1-dark-surface,
+    .modal.siab1-brand-surface,
+    .modal.siab1-warning-surface,
     .modal-overlay,
     .question-card,
     .mobile-question-nav,

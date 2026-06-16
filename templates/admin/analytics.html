@@ -5,10 +5,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" type="image/gif" href="/static/favicon.gif">
-    <title>Analytics Dashboard | Ujian Online</title>
+    <title>Analytics Dashboard | SIAB1</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="/static/css/admin.css">
+    <link rel="stylesheet" href="/static/css/admin.css?v=20260616-siab1-ui2">
     <link rel="stylesheet" href="/static/css/responsive.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -456,15 +456,16 @@
             color: var(--text-primary);
         }
 
-        .progress-bar {
+        .analytics-progress-bar {
             height: 8px;
-            background: var(--bg-tertiary);
+            background: var(--siab1-surface-muted, var(--bg-tertiary));
+            border: 1px solid var(--siab1-border, transparent);
             border-radius: 4px;
             overflow: hidden;
             width: 100px;
         }
 
-        .progress-fill {
+        .analytics-progress-fill {
             height: 100%;
             border-radius: 4px;
             transition: width 0.5s ease;
@@ -634,6 +635,7 @@
             }
         }
     </style>
+    <link rel="stylesheet" href="/static/css/siab1-theme.css?v=20260616-siab1-ui2">
 </head>
 
 <body>
@@ -820,9 +822,9 @@
         </main>
     </div>
 
-    <script src="/static/js/api.js?v=20260314-analyticsfix1"></script>
-    <script src="/static/js/auth.js"></script>
-    <script src="/static/js/sidebar-loader.js"></script>
+    <script src="/static/js/api.js?v=20260616-siab1-ui2"></script>
+    <script src="/static/js/auth.js?v=20260616-siab1-ui2"></script>
+    <script src="/static/js/sidebar-loader.js?v=20260616-siab1-ui2"></script>
     <script>
         auth.requireAuth(['admin', 'developer', 'teacher']);
 
@@ -1121,8 +1123,8 @@
                             <td><strong>${cls.average}</strong></td>
                             <td><span class="pass-badge ${badgeClass}">${cls.passRate}%</span></td>
                             <td>
-                                <div class="progress-bar">
-                                    <div class="progress-fill" style="width: ${cls.average}%; background: ${barColor};"></div>
+                                <div class="analytics-progress-bar">
+                                    <div class="analytics-progress-fill" style="width: ${cls.average}%; background: ${barColor};"></div>
                                 </div>
                             </td>
                         </tr>
@@ -1230,7 +1232,7 @@
 
         function exportDashboard(format) {
             if (format === 'csv') {
-                let csv = 'Laporan Analytics Ujian Online\n';
+                let csv = 'Laporan Analytics SIAB1\n';
                 csv += `Tanggal: ${new Date().toLocaleDateString('id-ID')}\n\n`;
                 csv += 'Statistik Umum\n';
                 csv += `Total Pengguna,${document.getElementById('total-users').textContent}\n`;

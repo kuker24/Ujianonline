@@ -1,5 +1,5 @@
 /**
- * Authentication Handler for Sistem Ujian Online
+ * Authentication Handler for SIAB1 — Sistem Informasi Asesmen Berintegritas
  */
 
 class AuthManager {

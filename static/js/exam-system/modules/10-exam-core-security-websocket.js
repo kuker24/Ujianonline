@@ -51,7 +51,7 @@ class ExamSystem {
     }
 
     async init() {
-        console.log('Exam System initialized v4.1');
+        console.log('SIAB1 Runtime initialized v4.1');
 
 
         // Initialize offline storage
@@ -424,7 +424,7 @@ class ExamSystem {
             this.shuffleQuestions = startData.shuffle_questions === true;
             this.shuffleOptions = startData.shuffle_options === true;
 
-            // Update exam system properties based on loaded data
+            // Update SIAB1 runtime properties based on loaded data
             this.durationMinutes = startData.duration_minutes;
             this.endTime = new Date(startData.end_time);
 

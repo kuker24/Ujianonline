@@ -5,10 +5,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" type="image/gif" href="/static/favicon.gif">
-    <title>Manajemen Pengguna - Admin Ujian Online</title>
+    <title>Manajemen Pengguna - Admin SIAB1</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    <link href="/static/css/admin.css" rel="stylesheet">
+    <link href="/static/css/admin.css?v=20260616-siab1-ui2" rel="stylesheet">
     <!-- Responsive -->
     <link rel="stylesheet" href="/static/css/responsive.css">
     <style>
@@ -145,6 +145,7 @@
             display: block;
         }
     </style>
+    <link rel="stylesheet" href="/static/css/siab1-theme.css?v=20260616-siab1-ui2">
 </head>
 
 <body class="preload">
@@ -181,7 +182,7 @@
             <div id="alert-container"></div>
 
             <!-- Filters -->
-            <div class="card" style="margin-bottom: 1.5rem;">
+            <div class="card siab1-surface" style="margin-bottom: 1.5rem;">
                 <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: center;">
                     <div class="search-box" style="flex: 1; min-width: 200px;">
                         <i class="fas fa-magnifying-glass"></i>
@@ -215,7 +216,7 @@
             </div>
 
             <!-- Users Table -->
-            <div class="card">
+            <div class="card siab1-surface">
                 <div class="table-container">
                     <table>
                         <thead>
@@ -264,7 +265,7 @@
 
     <!-- Create/Edit User Modal -->
     <div class="modal-overlay" id="user-modal">
-        <div class="modal">
+        <div class="modal siab1-surface">
             <div class="modal-header">
                 <h3 class="modal-title" id="modal-title">
                     <i class="fas fa-user-plus" style="color: var(--primary);"></i> Tambah Pengguna
@@ -350,9 +351,9 @@
 
     <!-- Scripts -->
     <script src="/static/js/mobile-nav.js"></script>
-    <script src="/static/js/api.js?v=20260306-phase4"></script>
-    <script src="/static/js/auth.js"></script>
-    <script src="/static/js/sidebar-loader.js"></script>
+    <script src="/static/js/api.js?v=20260616-siab1-ui2"></script>
+    <script src="/static/js/auth.js?v=20260616-siab1-ui2"></script>
+    <script src="/static/js/sidebar-loader.js?v=20260616-siab1-ui2"></script>
     <!-- Modern Modal Library -->
     <script src="/static/js/modern-modals.js?v=20260306-phase10"></script>
     <script src="/static/js/universal-modal-fix.js"></script>

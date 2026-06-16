@@ -11,7 +11,7 @@ void main() {
     await tester.pump();
 
     expect(find.byType(MaterialApp), findsOneWidget);
-    expect(find.text('Ujian Online'), findsOneWidget);
+    expect(find.text('SIAB1'), findsOneWidget);
     expect(find.text('Silakan login untuk memulai ujian'), findsOneWidget);
     expect(find.text('MASUK'), findsOneWidget);
     expect(find.textContaining('man1rokanhulu.cloud'), findsNothing);

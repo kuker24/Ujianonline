@@ -1,5 +1,5 @@
 # ============================================================================
-# ENHANCED SECURITY PROGUARD RULES FOR UJIAN ONLINE APK
+# ENHANCED SECURITY PROGUARD RULES FOR SIAB1 APK
 # Aggressive obfuscation + optimization for security & performance
 # ============================================================================
 
@@ -160,7 +160,7 @@
 
 # ============================================================================
 # END OF ENHANCED PROGUARD RULES
-# Expected result: 
+# Expected result:
 # - APK size reduced by ~20%
 # - Decompiled code unreadable (class names like 'a.b.c')
 # - All strings encrypted

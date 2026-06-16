@@ -21,7 +21,7 @@ class _SplashPageState extends State<SplashPage>
   late AnimationController _controller;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
-  
+
   // Security check state
   bool _isCheckingSecurity = true;
   bool _securityCheckPassed = false;
@@ -55,22 +55,22 @@ class _SplashPageState extends State<SplashPage>
     );
 
     _controller.forward();
-    
+
     // Perform security check BEFORE allowing app to proceed
     _performSecurityCheck();
   }
-  
+
   /// Perform comprehensive security check on startup
   Future<void> _performSecurityCheck() async {
     try {
       // Wait for splash animation to start
       await Future.delayed(const Duration(milliseconds: 500));
-      
+
       // Perform full security check
       final securityCheck = await SecurityService.performFullSecurityCheck();
-      
+
       if (!mounted) return;
-      
+
       if (!securityCheck.isSecure) {
         setState(() {
           _isCheckingSecurity = false;
@@ -79,10 +79,10 @@ class _SplashPageState extends State<SplashPage>
         });
         return;
       }
-      
+
       // Security passed, now validate build token with server
       await _validateBuildToken();
-      
+
     } catch (e) {
       // If error during check, fail secure (block access)
       if (mounted) {
@@ -94,56 +94,56 @@ class _SplashPageState extends State<SplashPage>
       }
     }
   }
-  
+
   /// Validate build token against server
   Future<void> _validateBuildToken() async {
     try {
       // Load API service config first
       final apiService = ApiService();
       await apiService.loadSavedConfig();
-      
+
       // Skip token validation if server not configured
       if (!apiService.isConfigured) {
         _proceedToApp();
         return;
       }
-      
+
       // Validate build token with server
       final tokenResult = await apiService.validateBuildToken();
-      
+
       if (!mounted) return;
-      
+
       if (tokenResult['update_required'] == true) {
         // Token is outdated, show update required screen
         setState(() {
           _isCheckingSecurity = false;
           _securityCheckPassed = false;
           _tokenCheckRequired = true;
-          _securityErrorMessage = tokenResult['message'] ?? 
+          _securityErrorMessage = tokenResult['message'] ??
               'Versi aplikasi sudah tidak berlaku.\nSilakan download versi terbaru.';
         });
         return;
       }
-      
+
       // Token is valid, proceed
       _proceedToApp();
-      
+
     } catch (e) {
       // On error, allow app to continue (backward compatibility)
       debugPrint('Token validation error: $e');
       _proceedToApp();
     }
   }
-  
+
   /// Proceed to main app after all checks pass
   void _proceedToApp() async {
     if (!mounted) return;
-    
+
     setState(() {
       _isCheckingSecurity = false;
       _securityCheckPassed = true;
     });
-    
+
     await Future.delayed(const Duration(milliseconds: 500));
     if (mounted) {
       widget.onComplete();
@@ -162,11 +162,11 @@ class _SplashPageState extends State<SplashPage>
     if (!_isCheckingSecurity && !_securityCheckPassed) {
       return _buildSecurityBlockedScreen();
     }
-    
+
     // Otherwise show normal splash with loading
     return _buildNormalSplash();
   }
-  
+
   /// Build normal splash screen with animation
   Widget _buildNormalSplash() {
     return Scaffold(
@@ -176,9 +176,9 @@ class _SplashPageState extends State<SplashPage>
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              Color(0xFF0f172a),
-              Color(0xFF1e293b),
-              Color(0xFF0f172a),
+              Color(0xFF081a2f),
+              Color(0xFF0b2347),
+              Color(0xFF081a2f),
             ],
           ),
         ),
@@ -195,7 +195,7 @@ class _SplashPageState extends State<SplashPage>
                   shape: BoxShape.circle,
                   gradient: RadialGradient(
                     colors: [
-                      const Color(0xFF3b82f6).withValues(alpha: 0.2),
+                      const Color(0xFF1d4ed8).withValues(alpha: 0.2),
                       Colors.transparent,
                     ],
                   ),
@@ -212,7 +212,7 @@ class _SplashPageState extends State<SplashPage>
                   shape: BoxShape.circle,
                   gradient: RadialGradient(
                     colors: [
-                      const Color(0xFF10b981).withValues(alpha: 0.2),
+                      const Color(0xFF16a34a).withValues(alpha: 0.2),
                       Colors.transparent,
                     ],
                   ),
@@ -240,10 +240,10 @@ class _SplashPageState extends State<SplashPage>
                           // Title
                           ShaderMask(
                             shaderCallback: (bounds) => const LinearGradient(
-                              colors: [Color(0xFF10b981), Color(0xFF3b82f6)],
+                              colors: [Color(0xFF16a34a), Color(0xFF1d4ed8)],
                             ).createShader(bounds),
                             child: const Text(
-                              'SECURE EXAM',
+                              'SIAB1',
                               style: TextStyle(
                                 color: Colors.white,
                                 fontSize: 32,
@@ -256,12 +256,13 @@ class _SplashPageState extends State<SplashPage>
                           const SizedBox(height: 8),
 
                           Text(
-                            'BROWSER',
+                            'ASESMEN BERINTEGRITAS',
+                            textAlign: TextAlign.center,
                             style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.7),
-                              fontSize: 18,
-                              fontWeight: FontWeight.w300,
-                              letterSpacing: 8,
+                              color: Colors.white.withValues(alpha: 0.74),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 2.2,
                             ),
                           ),
 
@@ -282,7 +283,7 @@ class _SplashPageState extends State<SplashPage>
                           const SizedBox(height: 16),
 
                           Text(
-                            _isCheckingSecurity 
+                            _isCheckingSecurity
                                 ? 'Memverifikasi keamanan...'
                                 : 'Mempersiapkan...',
                             style: TextStyle(
@@ -308,7 +309,7 @@ class _SplashPageState extends State<SplashPage>
                 child: Column(
                   children: [
                     Text(
-                      'Ujian Online',
+                      'SIAB1',
                       style: TextStyle(
                         color: Colors.white.withValues(alpha: 0.4),
                         fontSize: 12,
@@ -331,7 +332,7 @@ class _SplashPageState extends State<SplashPage>
       ),
     );
   }
-  
+
   /// Build security blocked screen when APK is modified
   Widget _buildSecurityBlockedScreen() {
     return Scaffold(
@@ -371,9 +372,9 @@ class _SplashPageState extends State<SplashPage>
                       color: Colors.red,
                     ),
                   ),
-                  
+
                   const SizedBox(height: 40),
-                  
+
                   // Error title
                   const Text(
                     '🚫 AKSES DITOLAK',
@@ -385,9 +386,9 @@ class _SplashPageState extends State<SplashPage>
                     ),
                     textAlign: TextAlign.center,
                   ),
-                  
+
                   const SizedBox(height: 24),
-                  
+
                   // Error message container
                   Container(
                     padding: const EdgeInsets.all(20),
@@ -425,9 +426,9 @@ class _SplashPageState extends State<SplashPage>
                       ],
                     ),
                   ),
-                  
+
                   const SizedBox(height: 32),
-                  
+
                   // Warning box
                   Container(
                     padding: const EdgeInsets.all(16),
@@ -458,9 +459,9 @@ class _SplashPageState extends State<SplashPage>
                       ],
                     ),
                   ),
-                  
+
                   const SizedBox(height: 32),
-                  
+
                   // Instructions
                   Text(
                     'Silakan gunakan APK resmi dari penyelenggara ujian',
@@ -470,9 +471,9 @@ class _SplashPageState extends State<SplashPage>
                     ),
                     textAlign: TextAlign.center,
                   ),
-                  
+
                   const SizedBox(height: 40),
-                  
+
                   // Exit button
                   SizedBox(
                     width: double.infinity,

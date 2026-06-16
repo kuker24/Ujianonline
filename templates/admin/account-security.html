@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" type="image/gif" href="/static/favicon.gif">
-    <title>Keamanan Akun - Admin Panel</title>
+    <title>Keamanan Akun - Admin Panel | SIAB1</title>
 
     <!-- Fonts & Icons -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
@@ -14,7 +14,7 @@
 
     <!-- Core CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/admin.css?v=3.2">
+    <link rel="stylesheet" href="/static/css/admin.css?v=20260616-siab1-ui2">
     <link rel="stylesheet" href="/static/css/responsive.css?v=3.2">
     <link rel="stylesheet" href="/static/css/utilities.css">
     <style>
@@ -123,6 +123,7 @@
             font-size: 1.5rem;
         }
     </style>
+    <link rel="stylesheet" href="/static/css/siab1-theme.css?v=20260616-siab1-ui2">
 </head>
 
 <body>
@@ -188,7 +189,7 @@
             </div>
 
             <!-- Locked Accounts Card -->
-            <div class="card">
+            <div class="card siab1-surface">
                 <div class="action-bar">
                     <h3 style="color: white;"><i class="fas fa-user-lock" style="color: white;"></i> Akun Terkunci</h3>
                     <button class="btn btn-unlock-all" onclick="unlockAll()" id="unlock-all-btn" style="display: none;">
@@ -202,7 +203,7 @@
             </div>
 
             <!-- Info Card -->
-            <div class="card mt-4">
+            <div class="card mt-4 siab1-surface">
                 <h3 style="color: white;"><i class="fas fa-circle-info" style="color: white;"></i> Cara Kerja</h3>
                 <div class="mt-2" style="color: white; line-height: 1.8;">
                     <p><strong style="color: white;">1. Rate Limit:</strong> Maksimal 500 login per IP per menit (untuk sekolah dengan NAT)
@@ -215,11 +216,11 @@
         </main>
     </div>
 
-    <script src="/static/js/api.js?v=20260306-phase4"></script>
-    <script src="/static/js/auth.js"></script>
+    <script src="/static/js/api.js?v=20260616-siab1-ui2"></script>
+    <script src="/static/js/auth.js?v=20260616-siab1-ui2"></script>
     <script src="/static/js/toast.js"></script>
     <script src="/static/js/custom-confirm.js"></script>
-    <script src="/static/js/sidebar-loader.js?v=3.3"></script>
+    <script src="/static/js/sidebar-loader.js?v=20260616-siab1-ui2"></script>
     <script>
         const currentUser = auth.getUser();
         const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'developer';
