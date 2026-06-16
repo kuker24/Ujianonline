@@ -4,7 +4,7 @@
 
 class AppConfig {
   static const String serverUrl = "https://man1rokanhulu.cloud/";
-  static const String appName = "UJIAN ONLINE MAN 1 Rokan Hulu";
+  static const String appName = "SIAB1 — Sistem Informasi Asesmen Berintegritas";
   static const bool forceHttps = true;
   static const bool allowCleartextTraffic = false;
   static const String buildMode = "universal_apk";
