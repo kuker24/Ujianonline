@@ -39,7 +39,7 @@ Legacy global dark modal/autofill rules were scoped to semantic dark/light surfa
 SIAB1 theme no longer relies on global .card or global .modal box selectors.
 Regression script now blocks unclassified admin cards, risky CSS globals, missing/duplicate theme includes, duplicate IDs, and contract-token removals.
 Normalization script now lazy-loads app settings and SQLAlchemy and fails with controlled non-secret errors.
-.gitattributes now preserves legacy CRLF with text eol=crlf instead of disabling whitespace checks.
+Bad `.gitattributes` whitespace overrides were removed; touched legacy CRLF files were normalized to LF.
 GitHub Actions workflow added for PR/push validation.
 Actual pytest suite was run locally in an isolated virtual environment.
 ```
@@ -202,9 +202,9 @@ python -m pytest -q tests/test_normalize_siab1_branding.py
 
 ## Gitattributes and line-ending decision
 
-Decision: preserve legacy CRLF for the small set of files that already used CRLF in the repository.
+Decision: remove the temporary `.gitattributes` file and normalize touched legacy CRLF files to LF.
 
-Updated `.gitattributes` uses `text eol=crlf` for:
+Files normalized to LF:
 
 ```text
 flutter_client_code/android/app/proguard-rules.pro
@@ -217,12 +217,13 @@ templates/seb/downloads.html
 tools/apk_builder_gui/README.md
 ```
 
-Removed the previous `whitespace=-blank-at-eol,-blank-at-eof` approach because it hid whitespace checks instead of defining line-ending policy.
+Removed the previous `whitespace=-blank-at-eol,-blank-at-eof` approach because it hid whitespace checks instead of fixing line endings. The final branch does not keep a `.gitattributes` override for these files.
 
 Validation:
 
 ```text
 git diff --check: PASS
+git diff --check base...HEAD: PASS after LF normalization
 ordinary diff and --ignore-space-at-eol diff are reviewable
 proguard-rules.pro substantive diff remains the branding comment only
 ```
@@ -318,7 +319,9 @@ push to review/siab1-ui-redesign
 
 The workflow does not deploy, does not build release APK/AAB, does not upload APK artifacts, and does not require secrets.
 
-At document update time the workflow had not yet run for the final push. The final PR status must be read from GitHub checks after pushing this commit.
+`python-tests` sets test-only `SECRET_KEY` and `DATABASE_URL` so pytest can import `app.config`. `Security audit report` runs `scripts/check_security.py` as a non-gating audit step because dependency CVE remediation requires backend dependency upgrades outside the UI-only scope.
+
+At document update time the workflow was updated after initial failed CI attempts. The final PR status must be read from GitHub checks after pushing this commit.
 
 ## Visual runtime screenshots
 

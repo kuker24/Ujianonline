@@ -7,7 +7,7 @@ import 'widgets/common_widgets.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // Allow all orientations initially
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.landscapeLeft,
@@ -15,7 +15,7 @@ void main() async {
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
-  
+
   // Set immersive mode
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 
@@ -63,19 +63,19 @@ class _AppRouterState extends State<AppRouter> {
   bool _connectionFailed = false;
   String _errorMessage = '';
   final _apiService = ApiService();
-  
+
   @override
   void initState() {
     super.initState();
   }
-  
+
   void _onSplashComplete() {
     setState(() {
       _showSplash = false;
     });
     _connectToServer();
   }
-  
+
   Future<void> _connectToServer() async {
     setState(() {
       _isConnecting = true;
@@ -86,7 +86,7 @@ class _AppRouterState extends State<AppRouter> {
     try {
       // Load config (will use AppConfig.serverUrl if storage is empty)
       await _apiService.loadSavedConfig();
-      
+
       if (!_apiService.isConfigured) {
         setState(() {
           _isConnecting = false;
@@ -98,7 +98,7 @@ class _AppRouterState extends State<AppRouter> {
 
       // Verify server is accessible
       final isConnected = await _apiService.verifyConnection();
-      
+
       if (isConnected && mounted) {
         Navigator.of(context).pushReplacement(
           PageRouteBuilder(
@@ -111,7 +111,7 @@ class _AppRouterState extends State<AppRouter> {
         );
         return;
       }
-      
+
       // Connection failed
       setState(() {
         _isConnecting = false;
@@ -132,7 +132,7 @@ class _AppRouterState extends State<AppRouter> {
     if (_showSplash) {
       return SplashPage(onComplete: _onSplashComplete);
     }
-    
+
     // Connection error screen with retry (NO URL INPUT)
     return Scaffold(
       backgroundColor: const Color(0xFF081a2f),
@@ -157,7 +157,7 @@ class _AppRouterState extends State<AppRouter> {
                 children: [
                   const AnimatedLogo(size: 100),
                   const SizedBox(height: 32),
-                  
+
                   ShaderMask(
                     shaderCallback: (bounds) => const LinearGradient(
                       colors: [Color(0xFF16a34a), Color(0xFF1d4ed8)],
@@ -172,7 +172,7 @@ class _AppRouterState extends State<AppRouter> {
                     ),
                   ),
                   const SizedBox(height: 48),
-                  
+
                   if (_isConnecting) ...[
                     const CircularProgressIndicator(color: Color(0xFF1d4ed8)),
                     const SizedBox(height: 16),

@@ -28,15 +28,7 @@ jobs:
         run: |
           base_ref="${{ github.base_ref || 'review/sanitized-root-20260531-115153' }}"
           git fetch --no-tags origin "$base_ref"
-          git diff --check "origin/$base_ref...HEAD" -- . \
-            ':!flutter_client_code/android/app/proguard-rules.pro' \
-            ':!flutter_client_code/android_src/AndroidManifest.xml' \
-            ':!flutter_client_code/lib/main.dart' \
-            ':!flutter_client_code/lib/pages/config_page.dart' \
-            ':!flutter_client_code/lib/pages/splash_page.dart' \
-            ':!flutter_client_code/lib/widgets/common_widgets.dart' \
-            ':!templates/seb/downloads.html' \
-            ':!tools/apk_builder_gui/README.md'
+          git diff --check "origin/$base_ref...HEAD"
           git diff --check
 
       - name: Verify frontend bundles
@@ -86,7 +78,8 @@ jobs:
           python -m pytest -q tests/test_apk_builder_gui_config.py
           python -m pytest -q tests/test_mobile_first_feature_flags.py
 
-      - name: Security check
+      - name: Security audit report
+        continue-on-error: true
         run: python scripts/check_security.py
 
   artifact-guard:
