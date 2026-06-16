@@ -114,7 +114,7 @@ async def test_apk_build_endpoint_disabled_without_blocking_apk_info(monkeypatch
 
     with pytest.raises(HTTPException) as exc_info:
         await apk.legacy_build_apk(
-            app_name="Ujian Online",
+            app_name="SIAB1",
             package_name="com.school.examapp",
             server_url="https://example.test",
             build_mode="universal_apk",

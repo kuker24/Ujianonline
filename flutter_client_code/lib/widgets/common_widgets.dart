@@ -65,10 +65,8 @@ class GradientButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final gradientColors = colors ?? [
-      const Color(0xFF3b82f6),
-      const Color(0xFF2563eb),
-    ];
+    final gradientColors =
+        colors ?? [const Color(0xFF123b73), const Color(0xFF2563eb)];
 
     return Container(
       decoration: BoxDecoration(
@@ -157,13 +155,15 @@ class _AnimatedLogoState extends State<AnimatedLogo>
       vsync: this,
     )..repeat(reverse: true);
 
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.05).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _scaleAnimation = Tween<double>(
+      begin: 1.0,
+      end: 1.05,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
 
-    _glowAnimation = Tween<double>(begin: 0.3, end: 0.6).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _glowAnimation = Tween<double>(
+      begin: 0.3,
+      end: 0.6,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
   }
 
   @override
@@ -186,12 +186,12 @@ class _AnimatedLogoState extends State<AnimatedLogo>
               gradient: const LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [Color(0xFF10b981), Color(0xFF3b82f6)],
+                colors: [Color(0xFF123b73), Color(0xFF2563eb)],
               ),
               borderRadius: BorderRadius.circular(widget.size * 0.25),
               boxShadow: [
                 BoxShadow(
-                  color: Color.fromRGBO(59, 130, 246, _glowAnimation.value),
+                  color: Color.fromRGBO(37, 99, 235, _glowAnimation.value),
                   blurRadius: 40,
                   spreadRadius: 10,
                 ),
@@ -261,7 +261,7 @@ class LoadingOverlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: const Color(0xFF1a1a2e),
+      color: const Color(0xFF081a2f),
       child: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -270,7 +270,7 @@ class LoadingOverlay extends StatelessWidget {
               width: 60,
               height: 60,
               child: CircularProgressIndicator(
-                color: Color(0xFF3b82f6),
+                color: Color(0xFF1d4ed8),
                 strokeWidth: 3,
               ),
             ),

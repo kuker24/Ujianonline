@@ -397,40 +397,40 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
             ? minProbeIntervalSeconds
             : AppConfig.reconnectProbeIntervalSeconds;
 
-    _serverReconnectTimer =
-        Timer.periodic(const Duration(seconds: probeIntervalSeconds), (
-      _,
-    ) async {
-      if (_examSubmitted) {
-        _stopServerReconnectLoop(resetState: true);
-        return;
-      }
-
-      if (_serverReconnectProbeInFlight) return;
-      _serverReconnectProbeInFlight = true;
-
-      try {
-        final reachable = await _apiService.verifyConnection(
-          timeout: const Duration(seconds: 4),
-        );
-
-        if (reachable) {
-          _recoverFromServerOutage();
+    _serverReconnectTimer = Timer.periodic(
+      const Duration(seconds: probeIntervalSeconds),
+      (_) async {
+        if (_examSubmitted) {
+          _stopServerReconnectLoop(resetState: true);
           return;
         }
 
-        _serverOutageProbeFailures += 1;
-        _updateEmergencyExitPolicy();
-        unawaited(_refreshQueueIndicators());
-        if (mounted && _errorMessage != null) {
-          setState(() {
-            _errorMessage = _buildOutageMessage();
-          });
+        if (_serverReconnectProbeInFlight) return;
+        _serverReconnectProbeInFlight = true;
+
+        try {
+          final reachable = await _apiService.verifyConnection(
+            timeout: const Duration(seconds: 4),
+          );
+
+          if (reachable) {
+            _recoverFromServerOutage();
+            return;
+          }
+
+          _serverOutageProbeFailures += 1;
+          _updateEmergencyExitPolicy();
+          unawaited(_refreshQueueIndicators());
+          if (mounted && _errorMessage != null) {
+            setState(() {
+              _errorMessage = _buildOutageMessage();
+            });
+          }
+        } finally {
+          _serverReconnectProbeInFlight = false;
         }
-      } finally {
-        _serverReconnectProbeInFlight = false;
-      }
-    });
+      },
+    );
   }
 
   void _recoverFromServerOutage() {
@@ -501,8 +501,9 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
       return;
     }
 
-    final pending =
-        await _resilienceService.getPendingAnswerEventCount(sessionId);
+    final pending = await _resilienceService.getPendingAnswerEventCount(
+      sessionId,
+    );
     if (!mounted) return;
     if (_queuedAnswerEventCount != pending) {
       setState(() {
@@ -555,10 +556,12 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
   Future<void> _startAnswerJournalSyncLoop() async {
     _answerJournalSyncTimer?.cancel();
     await _refreshRuntimePolicy();
-    _answerJournalSyncTimer =
-        Timer.periodic(Duration(seconds: _answerJournalSyncSeconds), (_) {
-      unawaited(_flushAnswerJournalQueue());
-    });
+    _answerJournalSyncTimer = Timer.periodic(
+      Duration(seconds: _answerJournalSyncSeconds),
+      (_) {
+        unawaited(_flushAnswerJournalQueue());
+      },
+    );
   }
 
   void _stopAnswerJournalSyncLoop() {
@@ -980,10 +983,12 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
   /// Start polling server for admin commands (emergency exit, terminate)
   void _startServerCommandPolling() {
     _serverCommandTimer?.cancel();
-    _serverCommandTimer =
-        Timer.periodic(Duration(seconds: _commandPollSeconds), (_) {
-      _checkServerCommands();
-    });
+    _serverCommandTimer = Timer.periodic(
+      Duration(seconds: _commandPollSeconds),
+      (_) {
+        _checkServerCommands();
+      },
+    );
     debugPrint('🔄 Server command polling started (${_commandPollSeconds}s)');
   }
 
@@ -1128,7 +1133,7 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
       builder: (ctx) => PopScope(
         canPop: false,
         child: AlertDialog(
-          backgroundColor: const Color(0xFF1e293b),
+          backgroundColor: const Color(0xFF0b2347),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
             side: const BorderSide(color: Colors.red, width: 3),
@@ -1219,7 +1224,7 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
       builder: (dialogContext) => PopScope(
         canPop: false,
         child: AlertDialog(
-          backgroundColor: const Color(0xFF1e293b),
+          backgroundColor: const Color(0xFF0b2347),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
             side: const BorderSide(color: Colors.orange, width: 2),
@@ -1295,7 +1300,7 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
       barrierDismissible: false,
       barrierColor: Colors.red.withValues(alpha: 0.8),
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1e293b),
+        backgroundColor: const Color(0xFF0b2347),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
           side: const BorderSide(color: Colors.red, width: 3),
@@ -1399,7 +1404,7 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
       builder: (dialogContext) => PopScope(
         canPop: false,
         child: AlertDialog(
-          backgroundColor: const Color(0xFF1e293b),
+          backgroundColor: const Color(0xFF0b2347),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
             side: const BorderSide(color: Colors.red, width: 3),
@@ -1486,7 +1491,7 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
                     barrierDismissible: false,
                     barrierColor: Colors.red.withValues(alpha: 0.95),
                     builder: (context) => AlertDialog(
-                      backgroundColor: const Color(0xFF1e293b),
+                      backgroundColor: const Color(0xFF0b2347),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(20),
                         side: const BorderSide(color: Colors.red, width: 3),
@@ -1661,8 +1666,9 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
             : 1.0;
 
     final tabViolationType = minorSwitch ? 'TAB_SWITCH_MINOR' : 'TAB_SWITCH';
-    final temporarilyDisabled =
-        _isViolationTemporarilyDisabled(tabViolationType);
+    final temporarilyDisabled = _isViolationTemporarilyDisabled(
+      tabViolationType,
+    );
 
     // Minor switch is logged as low-confidence and doesn't increase hard count.
     if (!minorSwitch && !temporarilyDisabled) {
@@ -1722,7 +1728,7 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
       if (window.onTabSwitch) {
         window.onTabSwitch($_tabSwitchCount);
       }
-      // Also update exam system if available
+      // Also update SIAB1 runtime if available
       if (window.examSystem && window.examSystem.recordViolation) {
         window.examSystem.recordViolation('${minorSwitch ? 'tab_switch_minor' : 'tab_switch'}', $_tabSwitchCount, true); // true = fromNative
       }
@@ -1815,7 +1821,7 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
       builder: (context) => PopScope(
         canPop: false,
         child: AlertDialog(
-          backgroundColor: const Color(0xFF1e293b),
+          backgroundColor: const Color(0xFF0b2347),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
             side: const BorderSide(color: Colors.red, width: 3),
@@ -1939,7 +1945,7 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
       builder: (context) => PopScope(
         canPop: false,
         child: AlertDialog(
-          backgroundColor: const Color(0xFF1e293b),
+          backgroundColor: const Color(0xFF0b2347),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
             side: const BorderSide(color: Colors.red, width: 3),
@@ -2116,8 +2122,9 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
   }
 
   Future<Map<String, String>> _buildImagePreviewHeaders(String imageUrl) async {
-    final headers =
-        Map<String, String>.from(_apiService.getSebHeaders(imageUrl));
+    final headers = Map<String, String>.from(
+      _apiService.getSebHeaders(imageUrl),
+    );
     final token = await _apiService.getToken();
     if (token != null && token.isNotEmpty) {
       headers['Authorization'] = 'Bearer $token';
@@ -2285,7 +2292,7 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
       builder: (context) => PopScope(
         canPop: false,
         child: AlertDialog(
-          backgroundColor: const Color(0xFF1e293b),
+          backgroundColor: const Color(0xFF0b2347),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
             side: const BorderSide(color: Colors.red, width: 3),
@@ -2370,7 +2377,7 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
         }
       },
       child: Scaffold(
-        backgroundColor: const Color(0xFF0f172a),
+        backgroundColor: const Color(0xFF081a2f),
         body: SafeArea(
           child: Stack(
             children: [
@@ -2496,9 +2503,11 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
                               int.tryParse(_currentSessionId ?? '') ?? 0;
                           if (sessionIdInt > 0) {
                             unawaited(
-                                _primeOfflinePackageForSession(sessionIdInt));
+                              _primeOfflinePackageForSession(sessionIdInt),
+                            );
                             unawaited(
-                                _restoreResumeStateForSession(sessionIdInt));
+                              _restoreResumeStateForSession(sessionIdInt),
+                            );
                             unawaited(_flushAnswerJournalQueue());
                           }
                           unawaited(_refreshQueueIndicators());
@@ -2601,10 +2610,12 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
                         final sessionIdInt =
                             int.tryParse(_currentSessionId ?? '') ?? 0;
                         final serverTimeEpochMs = int.tryParse(
-                                '${payload['server_time_epoch_ms'] ?? 0}') ??
+                              '${payload['server_time_epoch_ms'] ?? 0}',
+                            ) ??
                             0;
                         final remainingSeconds = int.tryParse(
-                                '${payload['remaining_seconds'] ?? 0}') ??
+                              '${payload['remaining_seconds'] ?? 0}',
+                            ) ??
                             0;
                         if (sessionIdInt <= 0 ||
                             serverTimeEpochMs <= 0 ||
@@ -2635,8 +2646,9 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
 
                         await _persistResumeSnapshot(
                           serverTimeEpochMs: serverTimeEpochMs,
-                          connectionState:
-                              _getConnectionUiLabel(_getConnectionUiState()),
+                          connectionState: _getConnectionUiLabel(
+                            _getConnectionUiState(),
+                          ),
                         );
                         return true;
                       },
@@ -2767,7 +2779,7 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
                           builder: (ctx) => PopScope(
                             canPop: false,
                             child: AlertDialog(
-                              backgroundColor: const Color(0xFF1e293b),
+                              backgroundColor: const Color(0xFF0b2347),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(20),
                                 side: const BorderSide(
@@ -2823,8 +2835,9 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
 
                                       // Navigate to session-ended page and clear entire navigation stack
                                       // This prevents black screen by ensuring proper destination
-                                      Navigator.of(this.context)
-                                          .pushAndRemoveUntil(
+                                      Navigator.of(
+                                        this.context,
+                                      ).pushAndRemoveUntil(
                                         MaterialPageRoute(
                                           builder: (_) =>
                                               const SessionEndedPage(),
@@ -2839,9 +2852,7 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
                                         vertical: 14,
                                       ),
                                       shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(
-                                          10,
-                                        ),
+                                        borderRadius: BorderRadius.circular(10),
                                       ),
                                     ),
                                     child: const Text(
@@ -2939,7 +2950,7 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
                           builder: (ctx) => PopScope(
                             canPop: false,
                             child: AlertDialog(
-                              backgroundColor: const Color(0xFF1e293b),
+                              backgroundColor: const Color(0xFF0b2347),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(20),
                                 side: const BorderSide(
@@ -2994,8 +3005,9 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
                                       Navigator.of(ctx).pop();
 
                                       // Navigate to session-ended page and clear entire navigation stack
-                                      Navigator.of(this.context)
-                                          .pushAndRemoveUntil(
+                                      Navigator.of(
+                                        this.context,
+                                      ).pushAndRemoveUntil(
                                         MaterialPageRoute(
                                           builder: (_) =>
                                               const SessionEndedPage(),
@@ -3216,7 +3228,7 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
                     value: _loadingProgress > 0 ? _loadingProgress : null,
                     backgroundColor: Colors.transparent,
                     valueColor: const AlwaysStoppedAnimation<Color>(
-                      Color(0xFF3b82f6),
+                      Color(0xFF1d4ed8),
                     ),
                     minHeight: 3,
                   ),
@@ -3241,7 +3253,7 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
 
   Widget _buildSecurityWarningScreen() {
     return Scaffold(
-      backgroundColor: const Color(0xFF0f172a),
+      backgroundColor: const Color(0xFF081a2f),
       body: SafeArea(
         child: Center(
           child: Padding(
@@ -3311,7 +3323,7 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
 
   Widget _buildErrorScreen() {
     return Scaffold(
-      backgroundColor: const Color(0xFF0f172a),
+      backgroundColor: const Color(0xFF081a2f),
       body: SafeArea(
         child: Center(
           child: Padding(
@@ -3407,7 +3419,7 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1e293b),
+        backgroundColor: const Color(0xFF0b2347),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
           side: const BorderSide(color: Colors.orange, width: 2),
@@ -3451,10 +3463,7 @@ class _ExamPageState extends State<ExamPage> with WidgetsBindingObserver {
             details:
                 'Emergency exit activated due to prolonged server outage ($_serverOutageProbeFailures failed probes)',
           )
-          .timeout(
-            const Duration(seconds: 2),
-            onTimeout: () => false,
-          );
+          .timeout(const Duration(seconds: 2), onTimeout: () => false);
     }
 
     _stopServerCommandPolling();

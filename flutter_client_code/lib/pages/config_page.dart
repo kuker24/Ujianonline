@@ -14,43 +14,43 @@ class ConfigPage extends StatefulWidget {
 
 class _ConfigPageState extends State<ConfigPage> with TickerProviderStateMixin {
   final _apiService = ApiService();
-  
+
   bool _isLoading = true;
   bool _showQrScanner = false;
   double _loadingProgress = 0.0;
   String _loadingText = 'Memuat aplikasi...';
-  
+
   late AnimationController _progressController;
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
-  
+
   @override
   void initState() {
     super.initState();
-    
+
     // Progress animation controller
     _progressController = AnimationController(
       duration: const Duration(milliseconds: 2000),
       vsync: this,
     );
-    
+
     // Pulse animation for logo
     _pulseController = AnimationController(
       duration: const Duration(milliseconds: 1500),
       vsync: this,
     )..repeat(reverse: true);
-    
+
     _pulseAnimation = Tween<double>(begin: 0.95, end: 1.05).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
-    
+
     // Start loading sequence
     _startLoadingSequence();
   }
-  
+
   Future<void> _startLoadingSequence() async {
     await _loadSavedConfig();
-    
+
     // Simulate game-like loading with stages
     final stages = [
       {'progress': 0.2, 'text': 'Memuat sistem keamanan...'},
@@ -59,16 +59,16 @@ class _ConfigPageState extends State<ConfigPage> with TickerProviderStateMixin {
       {'progress': 0.8, 'text': 'Memproses data...'},
       {'progress': 1.0, 'text': 'Siap!'},
     ];
-    
+
     for (var stage in stages) {
       await Future.delayed(const Duration(milliseconds: 400));
       if (!mounted) return;
-      
+
       setState(() {
         _loadingProgress = stage['progress'] as double;
         _loadingText = stage['text'] as String;
       });
-      
+
       // Try to connect at 60% progress
       if (_loadingProgress == 0.6) {
         final connected = await _tryAutoConnect();
@@ -78,7 +78,7 @@ class _ConfigPageState extends State<ConfigPage> with TickerProviderStateMixin {
         }
       }
     }
-    
+
     // Loading complete - show main menu
     await Future.delayed(const Duration(milliseconds: 500));
     if (mounted) {
@@ -87,11 +87,11 @@ class _ConfigPageState extends State<ConfigPage> with TickerProviderStateMixin {
       });
     }
   }
-  
+
   Future<void> _loadSavedConfig() async {
     await _apiService.loadSavedConfig();
   }
-  
+
   Future<bool> _tryAutoConnect() async {
     try {
       if (_apiService.isConfigured) {
@@ -105,14 +105,15 @@ class _ConfigPageState extends State<ConfigPage> with TickerProviderStateMixin {
     }
     return false;
   }
-  
+
   void _startExam() async {
     if (_apiService.isConfigured) {
       final isConnected = await _apiService.verifyConnection();
       if (isConnected) {
         Navigator.of(context).pushReplacement(
           PageRouteBuilder(
-            pageBuilder: (_, __, ___) => ExamPage(examUrl: _apiService.getExamUrl()),
+            pageBuilder: (_, __, ___) =>
+                ExamPage(examUrl: _apiService.getExamUrl()),
             transitionsBuilder: (_, animation, __, child) {
               return FadeTransition(opacity: animation, child: child);
             },
@@ -122,11 +123,11 @@ class _ConfigPageState extends State<ConfigPage> with TickerProviderStateMixin {
         return;
       }
     }
-    
+
     // Show connection dialog if not connected
     _showConnectionDialog();
   }
-  
+
   void _showConnectionDialog() {
     showDialog(
       context: context,
@@ -138,32 +139,33 @@ class _ConfigPageState extends State<ConfigPage> with TickerProviderStateMixin {
       ),
     );
   }
-  
+
   void _clearCache() async {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const Center(
-        child: CircularProgressIndicator(color: Colors.white),
-      ),
+      builder: (context) =>
+          const Center(child: CircularProgressIndicator(color: Colors.white)),
     );
-    
+
     await Future.delayed(const Duration(seconds: 1));
     await _apiService.clearConfig();
-    
+
     if (mounted) {
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('Cache berhasil dibersihkan'),
-          backgroundColor: const Color(0xFF10b981),
+          backgroundColor: const Color(0xFF16a34a),
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
         ),
       );
     }
   }
-  
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -172,30 +174,26 @@ class _ConfigPageState extends State<ConfigPage> with TickerProviderStateMixin {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              Color(0xFF0f172a),
-              Color(0xFF1e293b),
-              Color(0xFF334155),
-            ],
+            colors: [Color(0xFF081a2f), Color(0xFF0b2347), Color(0xFF123b73)],
           ),
         ),
         child: SafeArea(
-          child: _showQrScanner 
-              ? _buildQrScanner() 
-              : _isLoading 
-                  ? _buildLoadingScreen() 
+          child: _showQrScanner
+              ? _buildQrScanner()
+              : _isLoading
+                  ? _buildLoadingScreen()
                   : _buildMainMenu(),
         ),
       ),
     );
   }
-  
+
   Widget _buildLoadingScreen() {
     return Stack(
       children: [
         // Animated background particles
         ...List.generate(15, (index) => _buildFloatingParticle(index)),
-        
+
         Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -209,11 +207,11 @@ class _ConfigPageState extends State<ConfigPage> with TickerProviderStateMixin {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     gradient: const LinearGradient(
-                      colors: [Color(0xFF3b82f6), Color(0xFF8b5cf6)],
+                      colors: [Color(0xFF1d4ed8), Color(0xFF0ea5e9)],
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF3b82f6).withValues(alpha: 0.5),
+                        color: const Color(0xFF1d4ed8).withValues(alpha: 0.5),
                         blurRadius: 40,
                         spreadRadius: 10,
                       ),
@@ -226,16 +224,16 @@ class _ConfigPageState extends State<ConfigPage> with TickerProviderStateMixin {
                   ),
                 ),
               ),
-              
+
               const SizedBox(height: 60),
-              
+
               // App Name
               ShaderMask(
                 shaderCallback: (bounds) => const LinearGradient(
-                  colors: [Color(0xFF60a5fa), Color(0xFFa78bfa)],
+                  colors: [Color(0xFF38bdf8), Color(0xFF38bdf8)],
                 ).createShader(bounds),
                 child: const Text(
-                  'UJIAN ONLINE',
+                  'SIAB1',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 32,
@@ -244,20 +242,21 @@ class _ConfigPageState extends State<ConfigPage> with TickerProviderStateMixin {
                   ),
                 ),
               ),
-              
+
               const SizedBox(height: 8),
-              
+
               Text(
-                'Secure Exam Browser',
+                'Sistem Informasi Asesmen Berintegritas',
+                textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.6),
-                  fontSize: 14,
-                  letterSpacing: 1,
+                  color: Colors.white.withValues(alpha: 0.68),
+                  fontSize: 13,
+                  letterSpacing: 0.3,
                 ),
               ),
-              
+
               const SizedBox(height: 60),
-              
+
               // Progress Bar
               Container(
                 width: 280,
@@ -290,12 +289,14 @@ class _ConfigPageState extends State<ConfigPage> with TickerProviderStateMixin {
                           height: 8,
                           decoration: BoxDecoration(
                             gradient: const LinearGradient(
-                              colors: [Color(0xFF3b82f6), Color(0xFF8b5cf6)],
+                              colors: [Color(0xFF1d4ed8), Color(0xFF0ea5e9)],
                             ),
                             borderRadius: BorderRadius.circular(16),
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFF3b82f6).withValues(alpha: 0.6),
+                                color: const Color(
+                                  0xFF1d4ed8,
+                                ).withValues(alpha: 0.6),
                                 blurRadius: 8,
                               ),
                             ],
@@ -306,9 +307,9 @@ class _ConfigPageState extends State<ConfigPage> with TickerProviderStateMixin {
                   ),
                 ),
               ),
-              
+
               const SizedBox(height: 24),
-              
+
               // Loading Text
               Text(
                 _loadingText,
@@ -317,14 +318,14 @@ class _ConfigPageState extends State<ConfigPage> with TickerProviderStateMixin {
                   fontSize: 14,
                 ),
               ),
-              
+
               const SizedBox(height: 8),
-              
+
               // Percentage
               Text(
                 '${(_loadingProgress * 100).toInt()}%',
                 style: const TextStyle(
-                  color: Color(0xFF60a5fa),
+                  color: Color(0xFF38bdf8),
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
                 ),
@@ -335,13 +336,13 @@ class _ConfigPageState extends State<ConfigPage> with TickerProviderStateMixin {
       ],
     );
   }
-  
+
   Widget _buildMainMenu() {
     return Stack(
       children: [
         // Animated background
         ...List.generate(10, (index) => _buildFloatingParticle(index)),
-        
+
         Center(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(32),
@@ -355,11 +356,11 @@ class _ConfigPageState extends State<ConfigPage> with TickerProviderStateMixin {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     gradient: const LinearGradient(
-                      colors: [Color(0xFF3b82f6), Color(0xFF8b5cf6)],
+                      colors: [Color(0xFF1d4ed8), Color(0xFF0ea5e9)],
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF3b82f6).withValues(alpha: 0.3),
+                        color: const Color(0xFF1d4ed8).withValues(alpha: 0.3),
                         blurRadius: 30,
                         spreadRadius: 5,
                       ),
@@ -371,13 +372,13 @@ class _ConfigPageState extends State<ConfigPage> with TickerProviderStateMixin {
                     color: Colors.white,
                   ),
                 ),
-                
+
                 const SizedBox(height: 32),
-                
+
                 // Welcome Text
                 ShaderMask(
                   shaderCallback: (bounds) => const LinearGradient(
-                    colors: [Color(0xFF60a5fa), Color(0xFFa78bfa)],
+                    colors: [Color(0xFF38bdf8), Color(0xFF38bdf8)],
                   ).createShader(bounds),
                   child: const Text(
                     'SELAMAT DATANG',
@@ -389,9 +390,9 @@ class _ConfigPageState extends State<ConfigPage> with TickerProviderStateMixin {
                     ),
                   ),
                 ),
-                
+
                 const SizedBox(height: 8),
-                
+
                 Text(
                   'Pilih menu untuk melanjutkan',
                   style: TextStyle(
@@ -399,30 +400,30 @@ class _ConfigPageState extends State<ConfigPage> with TickerProviderStateMixin {
                     fontSize: 14,
                   ),
                 ),
-                
+
                 const SizedBox(height: 60),
-                
+
                 // Menu Buttons
                 _buildMenuButton(
                   icon: Icons.play_circle_filled_rounded,
                   title: 'Mulai Ujian',
                   subtitle: 'Bergabung ke sesi ujian',
-                  gradient: const [Color(0xFF10b981), Color(0xFF059669)],
+                  gradient: const [Color(0xFF16a34a), Color(0xFF059669)],
                   onTap: _startExam,
                 ),
-                
+
                 const SizedBox(height: 16),
-                
+
                 _buildMenuButton(
                   icon: Icons.cleaning_services_rounded,
                   title: 'Bersihkan Cache',
                   subtitle: 'Hapus data tersimpan',
-                  gradient: const [Color(0xFF3b82f6), Color(0xFF2563eb)],
+                  gradient: const [Color(0xFF1d4ed8), Color(0xFF1d4ed8)],
                   onTap: _clearCache,
                 ),
-                
+
                 const SizedBox(height: 16),
-                
+
                 _buildMenuButton(
                   icon: Icons.exit_to_app_rounded,
                   title: 'Keluar',
@@ -437,7 +438,7 @@ class _ConfigPageState extends State<ConfigPage> with TickerProviderStateMixin {
       ],
     );
   }
-  
+
   Widget _buildMenuButton({
     required IconData icon,
     required String title,
@@ -510,7 +511,7 @@ class _ConfigPageState extends State<ConfigPage> with TickerProviderStateMixin {
       ),
     );
   }
-  
+
   Widget _buildFloatingParticle(int index) {
     final random = index * 0.1;
     return TweenAnimationBuilder<double>(
@@ -530,7 +531,7 @@ class _ConfigPageState extends State<ConfigPage> with TickerProviderStateMixin {
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
                   colors: [
-                    const Color(0xFF60a5fa).withValues(alpha: 0.8),
+                    const Color(0xFF38bdf8).withValues(alpha: 0.8),
                     Colors.transparent,
                   ],
                 ),
@@ -547,7 +548,7 @@ class _ConfigPageState extends State<ConfigPage> with TickerProviderStateMixin {
       },
     );
   }
-  
+
   Widget _buildQrScanner() {
     return Stack(
       children: [
@@ -568,7 +569,7 @@ class _ConfigPageState extends State<ConfigPage> with TickerProviderStateMixin {
             width: 280,
             height: 280,
             decoration: BoxDecoration(
-              border: Border.all(color: const Color(0xFF3b82f6), width: 3),
+              border: Border.all(color: const Color(0xFF1d4ed8), width: 3),
               borderRadius: BorderRadius.circular(24),
             ),
           ),
@@ -584,7 +585,7 @@ class _ConfigPageState extends State<ConfigPage> with TickerProviderStateMixin {
       ],
     );
   }
-  
+
   @override
   void dispose() {
     _progressController.dispose();
@@ -596,9 +597,9 @@ class _ConfigPageState extends State<ConfigPage> with TickerProviderStateMixin {
 // Connection Dialog Widget
 class _ConnectionDialog extends StatefulWidget {
   final VoidCallback onConnected;
-  
+
   const _ConnectionDialog({required this.onConnected});
-  
+
   @override
   State<_ConnectionDialog> createState() => _ConnectionDialogState();
 }
@@ -608,7 +609,7 @@ class _ConnectionDialogState extends State<_ConnectionDialog> {
   final _apiService = ApiService();
   bool _isConnecting = false;
   String? _error;
-  
+
   @override
   Widget build(BuildContext context) {
     return Dialog(
@@ -617,7 +618,7 @@ class _ConnectionDialogState extends State<_ConnectionDialog> {
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
           gradient: const LinearGradient(
-            colors: [Color(0xFF1e293b), Color(0xFF334155)],
+            colors: [Color(0xFF0b2347), Color(0xFF123b73)],
           ),
           borderRadius: BorderRadius.circular(24),
           border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
@@ -625,7 +626,11 @@ class _ConnectionDialogState extends State<_ConnectionDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.wifi_off_rounded, color: Color(0xFFef4444), size: 48),
+            const Icon(
+              Icons.wifi_off_rounded,
+              color: Color(0xFFef4444),
+              size: 48,
+            ),
             const SizedBox(height: 16),
             const Text(
               'Tidak Terhubung',
@@ -639,7 +644,10 @@ class _ConnectionDialogState extends State<_ConnectionDialog> {
             Text(
               'Masukkan alamat server untuk melanjutkan',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 14),
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.7),
+                fontSize: 14,
+              ),
             ),
             const SizedBox(height: 24),
             TextField(
@@ -647,7 +655,9 @@ class _ConnectionDialogState extends State<_ConnectionDialog> {
               style: const TextStyle(color: Colors.white),
               decoration: InputDecoration(
                 hintText: '192.168.1.100:8000',
-                hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.3)),
+                hintStyle: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.3),
+                ),
                 filled: true,
                 fillColor: Colors.white.withValues(alpha: 0.05),
                 border: OutlineInputBorder(
@@ -656,9 +666,12 @@ class _ConnectionDialogState extends State<_ConnectionDialog> {
                 ),
               ),
             ),
-            if (_error != null) ...[ 
+            if (_error != null) ...[
               const SizedBox(height: 8),
-              Text(_error!, style: const TextStyle(color: Color(0xFFef4444), fontSize: 12)),
+              Text(
+                _error!,
+                style: const TextStyle(color: Color(0xFFef4444), fontSize: 12),
+              ),
             ],
             const SizedBox(height: 24),
             Row(
@@ -666,7 +679,10 @@ class _ConnectionDialogState extends State<_ConnectionDialog> {
                 Expanded(
                   child: TextButton(
                     onPressed: () => Navigator.pop(context),
-                    child: const Text('Batal', style: TextStyle(color: Colors.white)),
+                    child: const Text(
+                      'Batal',
+                      style: TextStyle(color: Colors.white),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -674,15 +690,20 @@ class _ConnectionDialogState extends State<_ConnectionDialog> {
                   child: ElevatedButton(
                     onPressed: _isConnecting ? null : _connect,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF3b82f6),
+                      backgroundColor: const Color(0xFF1d4ed8),
                       padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
                     child: _isConnecting
                         ? const SizedBox(
                             width: 16,
                             height: 16,
-                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
                           )
                         : const Text('Hubungkan'),
                   ),
@@ -694,20 +715,20 @@ class _ConnectionDialogState extends State<_ConnectionDialog> {
       ),
     );
   }
-  
+
   Future<void> _connect() async {
     setState(() {
       _isConnecting = true;
       _error = null;
     });
-    
+
     try {
       String url = _urlController.text.trim();
       if (!url.startsWith('http')) url = 'http://$url';
-      
+
       await _apiService.initialize(url);
       final connected = await _apiService.verifyConnection();
-      
+
       if (connected) {
         widget.onConnected();
       } else {
@@ -719,7 +740,7 @@ class _ConnectionDialogState extends State<_ConnectionDialog> {
       setState(() => _isConnecting = false);
     }
   }
-  
+
   @override
   void dispose() {
     _urlController.dispose();

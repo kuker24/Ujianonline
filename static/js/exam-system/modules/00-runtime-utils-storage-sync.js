@@ -1,5 +1,5 @@
 /**
- * Exam System JavaScript - Ultimate Fix v4.0
+ * SIAB1 Runtime JavaScript - Ultimate Fix v4.0
  * * CRITICAL FIXES:
  * - Matching Question: Fixed 'pair_id' vs 'id' bug (Auto-detection)
  * - Matching Question: Added fallback for missing option_group

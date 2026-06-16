@@ -9,7 +9,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Mengerjakan Ujian - Ujian Online</title>
+    <title>Mengerjakan Ujian - SIAB1</title>
     <link rel="icon" type="image/gif" href="/static/favicon.gif">
     <!-- Preconnect for faster font loading -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -776,6 +776,7 @@
             z-index: 10000;
         }
     </style>
+    <link rel="stylesheet" href="/static/css/siab1-theme.css?v=20260610-siab1-ui1">
 </head>
 
 <body class="dark">
@@ -1197,7 +1198,7 @@
                     throw new Error('Gagal memulai sesi ujian');
                 }
 
-                // 2. INITIALIZE EXAM SYSTEM WITH SERVER TIME (FIX BUG: TIMER RESET)
+                // 2. INITIALIZE SIAB1 RUNTIME WITH SERVER TIME (FIX BUG: TIMER RESET)
                 window.examSystem = new ExamSystem(
                     startData.session_id,
                     startData.exam_id,
@@ -1207,7 +1208,7 @@
                 );
 
                 // Debug logging for verification
-                console.log('🎯 Exam System Initialized:');
+                console.log('🎯 SIAB1 Runtime Initialized:');
                 console.log('  show_results from API:', startData.show_results);
                 console.log('  ExamSystem.showResults:', window.examSystem.showResults);
 

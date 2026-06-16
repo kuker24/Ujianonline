@@ -1,5 +1,5 @@
 /**
- * Service Worker for Exam System PWA
+ * Service Worker for SIAB1 PWA
  * Provides offline caching for critical assets
  *
  * Version: 1.0 (Phase 2 Offline Resilience)

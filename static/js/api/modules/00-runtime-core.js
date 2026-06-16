@@ -11,7 +11,7 @@
 })();
 
 /**
- * API Client for Sistem Ujian Online v3.0 - GOD MODE
+ * API Client for SIAB1 — Sistem Informasi Asesmen Berintegritas v3.0 - GOD MODE
  * ENHANCED WITH: Silent Token Refresh Interceptor + Request Queue Management
  *
  * CRITICAL FEATURES:

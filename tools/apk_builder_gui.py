@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-UJIAN ONLINE SEB - APK BUILDER GUI v3.1
+SIAB1 - APK BUILDER GUI v3.1
 =======================================
 Desktop GUI untuk konfigurasi dan build Android artifacts (APK/AAB).
 
@@ -240,7 +240,7 @@ def validate_generated_config_text(
 class APKBuilderGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("Ujian Online - APK Builder v3.1")
+        self.root.title("SIAB1 - APK Builder v3.1")
         self.root.geometry("1024x860")
         self.root.resizable(True, True)
 
@@ -255,7 +255,7 @@ class APKBuilderGUI:
         self.flutter_bin = find_flutter(self.flutter_project, self.project_root)
         
         # App Configuration Variables
-        self.app_name_var = tk.StringVar(value="Ujian Online MAN 1 Rokan Hulu")
+        self.app_name_var = tk.StringVar(value="SIAB1")
         self.package_var = tk.StringVar(value="com.man1rokanhulu.examapp")
         self.version_name_var = tk.StringVar(value="1.0.2")
         self.version_code_var = tk.StringVar(value="2")
@@ -337,7 +337,7 @@ class APKBuilderGUI:
         
         title = tk.Label(
             header,
-            text="APK Builder - Ujian Online SEB v3.1",
+            text="APK Builder - SIAB1 v3.1",
             font=("Segoe UI", 20, "bold"),
             bg="#4F46E5",
             fg="white",
@@ -1030,7 +1030,7 @@ class APKBuilderGUI:
                 # Update description
                 content = re.sub(
                     r'^description:\s+.*$',
-                    f'description: {self.app_name_var.get()} - Secure Exam Browser',
+                    f'description: {self.app_name_var.get()} — Sistem Informasi Asesmen Berintegritas',
                     content,
                     flags=re.MULTILINE
                 )
