@@ -8,8 +8,9 @@
     <title>Analytics Dashboard | SIAB1</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="/static/css/admin.css?v=20260616-siab1-ui2">
-    <link rel="stylesheet" href="/static/css/responsive.css">
+    <link rel="stylesheet" href="/static/css/admin.css?v=20260617-siab1-legacy-ui1">
+    <link rel="stylesheet" href="/static/css/siab1-branding.css?v=20260617-siab1-legacy-ui1">
+    <link rel="stylesheet" href="/static/css/responsive.css?v=20260617-siab1-legacy-ui1">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         /* ============================================
@@ -458,8 +459,8 @@
 
         .analytics-progress-bar {
             height: 8px;
-            background: var(--siab1-surface-muted, var(--bg-tertiary));
-            border: 1px solid var(--siab1-border, transparent);
+            background: var(--dark-card);
+            border: 1px solid var(--border-color);
             border-radius: 4px;
             overflow: hidden;
             width: 100px;
@@ -635,7 +636,6 @@
             }
         }
     </style>
-    <link rel="stylesheet" href="/static/css/siab1-theme.css?v=20260616-siab1-ui2">
 </head>
 
 <body>
@@ -822,9 +822,9 @@
         </main>
     </div>
 
-    <script src="/static/js/api.js?v=20260616-siab1-ui2"></script>
-    <script src="/static/js/auth.js?v=20260616-siab1-ui2"></script>
-    <script src="/static/js/sidebar-loader.js?v=20260616-siab1-ui2"></script>
+    <script src="/static/js/api.js?v=20260617-siab1-legacy-ui1"></script>
+    <script src="/static/js/auth.js?v=20260617-siab1-legacy-ui1"></script>
+    <script src="/static/js/sidebar-loader.js?v=20260617-siab1-legacy-ui1"></script>
     <script>
         auth.requireAuth(['admin', 'developer', 'teacher']);
 

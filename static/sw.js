@@ -5,7 +5,7 @@
  * Version: 1.0 (Phase 2 Offline Resilience)
  */
 
-const CACHE_NAME = 'siab1-v20260616-siab1-ui2';
+const CACHE_NAME = 'siab1-v20260617-siab1-legacy-ui1';
 const OFFLINE_URL = '/student/';
 
 // Critical assets to cache for resilient APK WebView startup.
@@ -13,11 +13,15 @@ const OFFLINE_URL = '/student/';
 const CACHE_ASSETS = [
     '/student/',
     '/student/dashboard.html',
-    '/static/css/student.css?v=20260616-siab1-ui2',
-    '/static/css/exam.css?v=20260616-siab1-ui2',
-    '/static/js/auth.js?v=20260616-siab1-ui2',
-    '/static/js/api.js?v=20260616-siab1-ui2',
-    '/static/js/exam-system.js?v=20260616-siab1-ui2'
+    '/static/css/admin.css?v=20260617-siab1-legacy-ui1',
+    '/static/css/student.css?v=20260617-siab1-legacy-ui1',
+    '/static/css/exam.css?v=20260617-siab1-legacy-ui1',
+    '/static/css/responsive.css?v=20260617-siab1-legacy-ui1',
+    '/static/css/siab1-branding.css?v=20260617-siab1-legacy-ui1',
+    '/static/js/auth.js?v=20260617-siab1-legacy-ui1',
+    '/static/js/api.js?v=20260617-siab1-legacy-ui1',
+    '/static/js/sidebar-loader.js?v=20260617-siab1-legacy-ui1',
+    '/static/js/exam-system.js?v=20260617-siab1-legacy-ui1'
 ];
 
 // Install event - cache critical assets

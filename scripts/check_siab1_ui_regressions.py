@@ -22,12 +22,14 @@ from typing import Iterable, Sequence
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BASE_COMMIT = "67fca39f4b3ec9509381f68917caaa4477d19ca9"
 THEME_HREF = "/static/css/siab1-theme.css"
-RELEASE_TOKEN = "20260616-siab1-ui2"
+BRANDING_HREF = "/static/css/siab1-branding.css"
+RELEASE_TOKEN = "20260617-siab1-legacy-ui1"
 CONTROLLED_RUNTIME_ASSETS = (
     "/static/css/admin.css",
     "/static/css/student.css",
     "/static/css/exam.css",
-    "/static/css/siab1-theme.css",
+    "/static/css/responsive.css",
+    "/static/css/siab1-branding.css",
     "/static/js/sidebar-loader.js",
     "/static/js/api.js",
     "/static/js/auth.js",
@@ -35,16 +37,21 @@ CONTROLLED_RUNTIME_ASSETS = (
     "/static/js/profile-modal.js",
 )
 SERVICE_WORKER_CACHE_ASSETS = (
+    "/static/css/admin.css",
     "/static/css/student.css",
     "/static/css/exam.css",
+    "/static/css/responsive.css",
+    "/static/css/siab1-branding.css",
     "/static/js/auth.js",
     "/static/js/api.js",
+    "/static/js/sidebar-loader.js",
     "/static/js/exam-system.js",
 )
 STALE_CACHE_TOKENS = (
     "20260430-perf1",
     "20260418-richtext1",
     "20260610-siab1-ui1",
+    "20260616-siab1-ui2",
 )
 SEMANTIC_SURFACES = {
     "siab1-surface",
@@ -99,10 +106,11 @@ TEXT_SUFFIXES = {
     ".xml",
 }
 CSS_FILE_SOURCES = (
-    "static/css/siab1-theme.css",
+    "static/css/siab1-branding.css",
     "static/css/admin.css",
     "static/css/exam.css",
     "static/css/student.css",
+    "static/css/responsive.css",
 )
 CSS_TEMPLATE_SOURCES = (
     "templates/admin/settings.html",
@@ -283,29 +291,34 @@ def _templates_for_theme_scan(root: Path) -> Iterable[Path]:
 
 
 def check_theme_includes(root: Path = REPO_ROOT) -> list[Issue]:
+    """The broad SIAB1 redesign theme must not be loaded on legacy UI pages."""
     issues: list[Issue] = []
     for path in _templates_for_theme_scan(root):
         rel = path.relative_to(root).as_posix()
         text = path.read_text(encoding="utf-8", errors="ignore")
         if "<head" not in text.lower():
             continue
-        count = text.count(THEME_HREF)
-        if count != 1:
-            issues.append(Issue(rel, 1, f"SIAB1 theme must be included exactly once, found {count}"))
-            continue
-        theme_pos = text.find(THEME_HREF)
-        for match in re.finditer(r"href=[\"'](/static/css/[^\"']+)[\"']", text):
-            href = match.group(1)
-            if href.startswith(THEME_HREF):
-                continue
-            if match.start() > theme_pos:
-                issues.append(
-                    Issue(
-                        rel,
-                        _line_number(text, match.start()),
-                        "SIAB1 theme must load after other local static CSS files",
-                    )
+        for match in re.finditer(re.escape(THEME_HREF), text):
+            issues.append(
+                Issue(
+                    rel,
+                    _line_number(text, match.start()),
+                    "siab1-theme.css must not be loaded globally; keep legacy CSS as the visual source of truth",
                 )
+            )
+        branding_count = text.count(BRANDING_HREF)
+        if branding_count > 1:
+            issues.append(Issue(rel, 1, f"SIAB1 branding CSS must be included at most once, found {branding_count}"))
+
+        is_admin_like = rel.startswith("templates/admin/") or rel.startswith("templates/seb/")
+        is_student_like = rel.startswith("templates/student/")
+        if is_admin_like and "templates/admin/index.html" != rel and "templates/seb/landing.html" != rel:
+            if "/static/css/admin.css" not in text:
+                issues.append(Issue(rel, 1, "legacy admin.css must remain loaded"))
+        if is_student_like and rel != "templates/student/index.html" and "/static/css/student.css" not in text:
+            issues.append(Issue(rel, 1, "legacy student.css must remain loaded"))
+        if rel == "templates/base.html" and "/static/css/exam.css" not in text:
+            issues.append(Issue(rel, 1, "legacy exam.css must remain loaded"))
     return issues
 
 
@@ -443,6 +456,64 @@ def _contains_color_property(body: str) -> bool:
     return bool(re.search(r"\b(?:color|background|background-color|-webkit-text-fill-color)\s*:", body))
 
 
+def check_branding_css_scope(root: Path = REPO_ROOT) -> list[Issue]:
+    path = root / "static/css/siab1-branding.css"
+    if not path.exists():
+        return [Issue("static/css/siab1-branding.css", 1, "branding-only CSS file is required")]
+
+    text = path.read_text(encoding="utf-8", errors="ignore")
+    issues: list[Issue] = []
+    forbidden_patterns = (
+        (r"(^|[^\w-])body($|[^\w-])", "body selector is not allowed in branding CSS"),
+        (r"(^|[^\w-])\.card($|[^\w-])", ".card selector is not allowed in branding CSS"),
+        (r"(^|[^\w-])\.sidebar(?!-header)(?:$|[^\w-])", "generic .sidebar selector is not allowed in branding CSS"),
+        (r"\.main-content(?:$|[^\w-])", ".main-content selector is not allowed in branding CSS"),
+        (r"\.page-header(?:$|[^\w-])", ".page-header selector is not allowed in branding CSS"),
+        (r"color-scheme\s*:", "color-scheme is not allowed in branding CSS"),
+        (r"--(?:dark-bg|dark-card|dark-hover|glass-bg|glass-border|text-primary|text-secondary|bg-card)\s*:", "legacy surface variables must not be redefined in branding CSS"),
+        (r"!important", "!important is not allowed in branding CSS"),
+    )
+    for pattern, message in forbidden_patterns:
+        for match in re.finditer(pattern, text, flags=re.I):
+            issues.append(Issue("static/css/siab1-branding.css", _line_number(text, match.start()), message))
+
+    allowed_prefixes = (
+        ".sidebar-header ",
+        ".sidebar-header.",
+        ".sidebar-header:",
+        ".login-header ",
+        ".login-header.",
+        ".login-header:",
+        ".login-logo ",
+        ".login-logo.",
+        ".login-logo:",
+        ".student-header ",
+        ".student-header.",
+        ".student-header:",
+    )
+    for line, selector, body in _iter_css_rules(text):
+        if selector.strip().startswith("@media"):
+            continue
+        for item in _selector_items(selector):
+            if not item.startswith(allowed_prefixes):
+                issues.append(
+                    Issue(
+                        "static/css/siab1-branding.css",
+                        line,
+                        f"selector {item!r} is outside allowed branding scopes",
+                    )
+                )
+        if re.search(r"\b(?:background|background-color|border|box-shadow)\s*:", body):
+            issues.append(
+                Issue(
+                    "static/css/siab1-branding.css",
+                    line,
+                    "branding CSS must not alter backgrounds, borders, or shadows",
+                )
+            )
+    return issues
+
+
 def check_css_selectors(root: Path = REPO_ROOT) -> list[Issue]:
     issues: list[Issue] = []
     for label, css in _css_sources(root):
@@ -494,18 +565,6 @@ def check_css_selectors(root: Path = REPO_ROOT) -> list[Issue]:
                     Issue(label, line, "global text color !important selector is not allowed")
                 )
 
-            if any(item == ".modal" for item in selectors) and re.search(
-                r"\b(?:background|background-color|color|border|box-shadow|max-width)\s*:", body
-            ):
-                issues.append(
-                    Issue(label, line, "global .modal box styling is not allowed; classify modal content semantically")
-                )
-
-            if ":-webkit-autofill" in selector and "siab1-dark-surface" not in selector:
-                if re.search(r"rgba\(15,\s*23,\s*42|#0f172a|var\(--dark\)|caret-color\s*:\s*white", body, re.I):
-                    issues.append(
-                        Issue(label, line, "dark autofill override must be scoped to dark surfaces only")
-                    )
 
             if "!important" in body and _contains_color_property(body):
                 risky_global = any(item in {"*", ".card", ".modal"} for item in selectors)
@@ -666,6 +725,7 @@ def run_checks(root: Path = REPO_ROOT) -> list[Issue]:
     issues.extend(check_admin_card_surfaces(root))
     issues.extend(check_theme_includes(root))
     issues.extend(check_static_cache_versions(root))
+    issues.extend(check_branding_css_scope(root))
     issues.extend(check_css_selectors(root))
     issues.extend(check_settings_inline_contrast(root))
     issues.extend(check_duplicate_ids(root))
@@ -697,7 +757,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         for issue in issues:
             print(f"  - {issue.format()}")
         return 1
-    print("SIAB1 UI regression check passed: branding, contrast, cache-busting, semantic surfaces, and scoped CSS guardrails are clean.")
+    print("SIAB1 UI regression check passed: legacy UI theme, SIAB1 branding, cache-busting, and scoped CSS guardrails are clean.")
     return 0
 
 

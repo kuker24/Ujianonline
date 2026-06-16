@@ -4,6 +4,7 @@ from scripts.check_siab1_ui_regressions import (
     RELEASE_TOKEN,
     admin_card_inventory,
     check_admin_card_surfaces,
+    check_branding_css_scope,
     check_css_selectors,
     check_duplicate_ids,
     check_legacy_branding,
@@ -22,9 +23,9 @@ def _template_with_head(extra_head: str = "", body: str = "") -> str:
 <!doctype html>
 <html>
 <head>
-    <link rel="stylesheet" href="/static/css/admin.css">
+    <link rel="stylesheet" href="/static/css/admin.css?v={RELEASE_TOKEN}">
+    <link rel="stylesheet" href="/static/css/siab1-branding.css?v={RELEASE_TOKEN}">
     {extra_head}
-    <link rel="stylesheet" href="/static/css/siab1-theme.css?v=test">
 </head>
 <body>{body}</body>
 </html>
@@ -104,37 +105,33 @@ def test_duplicate_id_detected_within_template(tmp_path):
     assert "duplicate DOM id" in issues[0].message
 
 
-def test_missing_theme_is_detected(tmp_path):
+def test_legacy_admin_css_without_siab1_theme_passes(tmp_path):
     _write(
         tmp_path / "templates/admin/users.html",
-        "<html><head><link rel='stylesheet' href='/static/css/admin.css'></head><body></body></html>",
+        _template_with_head(body="<main></main>"),
+    )
+
+    assert check_theme_includes(tmp_path) == []
+
+
+def test_siab1_theme_include_is_detected(tmp_path):
+    _write(
+        tmp_path / "templates/admin/users.html",
+        _template_with_head(extra_head='<link rel="stylesheet" href="/static/css/siab1-theme.css?v=old">'),
     )
 
     issues = check_theme_includes(tmp_path)
 
     assert len(issues) == 1
-    assert "exactly once" in issues[0].message
+    assert "must not be loaded globally" in issues[0].message
 
 
-def test_duplicate_theme_is_detected(tmp_path):
+def test_missing_legacy_admin_css_is_detected(tmp_path):
     _write(
         tmp_path / "templates/admin/users.html",
-        _template_with_head(extra_head='<link rel="stylesheet" href="/static/css/siab1-theme.css?v=again">'),
-    )
-
-    issues = check_theme_includes(tmp_path)
-
-    assert len(issues) == 1
-    assert "exactly once" in issues[0].message
-
-
-def test_theme_loaded_before_local_css_is_detected(tmp_path):
-    _write(
-        tmp_path / "templates/admin/users.html",
-        """
+        f"""
 <html><head>
-<link rel="stylesheet" href="/static/css/siab1-theme.css?v=test">
-<link rel="stylesheet" href="/static/css/admin.css">
+<link rel="stylesheet" href="/static/css/siab1-branding.css?v={RELEASE_TOKEN}">
 </head><body></body></html>
 """,
     )
@@ -142,12 +139,49 @@ def test_theme_loaded_before_local_css_is_detected(tmp_path):
     issues = check_theme_includes(tmp_path)
 
     assert len(issues) == 1
-    assert "must load after" in issues[0].message
+    assert "legacy admin.css" in issues[0].message
+
+
+def test_branding_css_scope_accepts_only_branding_selectors(tmp_path):
+    _write(
+        tmp_path / "static/css/siab1-branding.css",
+        """
+.sidebar-header .siab1-brand-name { line-height: 1.05; }
+.login-header .siab1-brand-subtitle { font-size: 0.82rem; }
+.student-header .siab1-brand-name { letter-spacing: 0.02em; }
+""",
+    )
+
+    assert check_branding_css_scope(tmp_path) == []
+
+
+def test_branding_css_scope_rejects_global_visual_selectors(tmp_path):
+    _write(
+        tmp_path / "static/css/siab1-branding.css",
+        """
+body { color-scheme: light; }
+.card { background: white !important; }
+.sidebar { background: #fff; }
+.main-content { --dark-bg: #fff; }
+.page-header { border: 0; }
+""",
+    )
+
+    messages = [issue.message for issue in check_branding_css_scope(tmp_path)]
+
+    assert any("body selector" in message for message in messages)
+    assert any(".card selector" in message for message in messages)
+    assert any("generic .sidebar" in message for message in messages)
+    assert any(".main-content" in message for message in messages)
+    assert any(".page-header" in message for message in messages)
+    assert any("color-scheme" in message for message in messages)
+    assert any("legacy surface variables" in message for message in messages)
+    assert any("!important" in message for message in messages)
 
 
 def test_css_check_flags_unscoped_progress_and_bare_heading(tmp_path):
     _write(
-        tmp_path / "static/css/siab1-theme.css",
+        tmp_path / "static/css/admin.css",
         ".progress-bar { background: red; }\nh1 { color: white; }\n",
     )
 
@@ -159,7 +193,7 @@ def test_css_check_flags_unscoped_progress_and_bare_heading(tmp_path):
 
 def test_scoped_progress_selector_passes(tmp_path):
     _write(
-        tmp_path / "static/css/siab1-theme.css",
+        tmp_path / "static/css/exam.css",
         ".exam-header > .progress-bar { background: red; }\n",
     )
 
@@ -168,7 +202,7 @@ def test_scoped_progress_selector_passes(tmp_path):
 
 def test_global_card_white_override_is_detected(tmp_path):
     _write(
-        tmp_path / "static/css/siab1-theme.css",
+        tmp_path / "static/css/admin.css",
         ".card { background: white !important; }\n",
     )
 
@@ -177,15 +211,16 @@ def test_global_card_white_override_is_detected(tmp_path):
     assert any("global .card forced white" in issue.message for issue in issues)
 
 
-def test_dark_autofill_override_on_light_surface_is_detected(tmp_path):
+def test_legacy_dark_modal_and_autofill_selectors_are_allowed(tmp_path):
     _write(
         tmp_path / "static/css/admin.css",
-        "input:-webkit-autofill { -webkit-box-shadow: 0 0 0 30px rgba(15, 23, 42, 0.9) inset !important; caret-color: white; }",
+        """
+.modal { background: var(--dark-lighter); border: 1px solid var(--border-color); }
+input:-webkit-autofill { -webkit-box-shadow: 0 0 0 30px rgba(15, 23, 42, 0.9) inset !important; caret-color: white; }
+""",
     )
 
-    issues = check_css_selectors(tmp_path)
-
-    assert any("dark autofill" in issue.message for issue in issues)
+    assert check_css_selectors(tmp_path) == []
 
 
 def test_settings_inline_contrast_flags_white_heading(tmp_path):
@@ -207,7 +242,8 @@ def _write_valid_cache_guard_files(root: Path) -> None:
         f"""
 <html><head>
 <link rel="stylesheet" href="/static/css/admin.css?v={RELEASE_TOKEN}">
-<link rel="stylesheet" href="/static/css/siab1-theme.css?v={RELEASE_TOKEN}">
+<link rel="stylesheet" href="/static/css/siab1-branding.css?v={RELEASE_TOKEN}">
+<link rel="stylesheet" href="/static/css/responsive.css?v={RELEASE_TOKEN}">
 </head><body>
 <script src="/static/js/api.js?v={RELEASE_TOKEN}"></script>
 <script src="/static/js/auth.js?v={RELEASE_TOKEN}"></script>
@@ -220,8 +256,8 @@ def _write_valid_cache_guard_files(root: Path) -> None:
         f"""
 <html><head>
 <link rel="stylesheet" href="/static/css/student.css?v={RELEASE_TOKEN}">
+<link rel="stylesheet" href="/static/css/siab1-branding.css?v={RELEASE_TOKEN}">
 <link rel="stylesheet" href="/static/css/exam.css?v={RELEASE_TOKEN}">
-<link rel="stylesheet" href="/static/css/siab1-theme.css?v={RELEASE_TOKEN}">
 </head><body>
 <script src="/static/js/exam-system.js?v={RELEASE_TOKEN}"></script>
 </body></html>
@@ -235,10 +271,14 @@ def _write_valid_cache_guard_files(root: Path) -> None:
         f"""
 const CACHE_NAME = 'siab1-v{RELEASE_TOKEN}';
 const CACHE_ASSETS = [
+    '/static/css/admin.css?v={RELEASE_TOKEN}',
     '/static/css/student.css?v={RELEASE_TOKEN}',
     '/static/css/exam.css?v={RELEASE_TOKEN}',
+    '/static/css/responsive.css?v={RELEASE_TOKEN}',
+    '/static/css/siab1-branding.css?v={RELEASE_TOKEN}',
     '/static/js/auth.js?v={RELEASE_TOKEN}',
     '/static/js/api.js?v={RELEASE_TOKEN}',
+    '/static/js/sidebar-loader.js?v={RELEASE_TOKEN}',
     '/static/js/exam-system.js?v={RELEASE_TOKEN}'
 ];
 """,
@@ -270,7 +310,7 @@ def test_static_cache_versions_flags_unversioned_controlled_assets(tmp_path):
         f"""
 <html><head>
 <link rel="stylesheet" href="/static/css/admin.css">
-<link rel="stylesheet" href="/static/css/siab1-theme.css?v={RELEASE_TOKEN}">
+<link rel="stylesheet" href="/static/css/siab1-branding.css?v={RELEASE_TOKEN}">
 </head><body></body></html>
 """,
     )

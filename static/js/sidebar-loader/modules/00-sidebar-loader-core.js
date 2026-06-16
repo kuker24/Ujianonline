@@ -15,7 +15,7 @@ class SidebarLoader {
 
         try {
             // Stable versioned cache: avoids a fresh sidebar network request on every admin page.
-            const componentVersion = '20260616-siab1-ui2';
+            const componentVersion = '20260617-siab1-legacy-ui1';
             const cacheKey = `sidebar_html_${componentVersion}`;
             let html = null;
 
@@ -86,7 +86,7 @@ class SidebarLoader {
         <aside class="sidebar" id="main-sidebar">
             <div class="sidebar-header">
                 <i class="fas fa-graduation-cap"></i>
-                <h1>SIAB1</h1>
+                <h1 class="siab1-brand-name">SIAB1</h1>
             </div>
 
             <ul class="nav-menu" id="nav-menu">
