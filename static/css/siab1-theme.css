@@ -136,15 +136,20 @@ body::before {
     animation: none !important;
 }
 
-/* Generic text hierarchy */
-h1, h2, h3, h4, h5, h6,
+/* Generic text hierarchy. Avoid bare heading color overrides so dark surfaces can opt in. */
 .page-title,
 .header-title,
 .card-title,
 .modal-title,
 .login-header h1,
 .logo h1,
-.sidebar-header h1 {
+.sidebar-header h1,
+.siab1-surface h1,
+.siab1-surface h2,
+.siab1-surface h3,
+.siab1-surface h4,
+.siab1-surface h5,
+.siab1-surface h6 {
     color: var(--siab1-text) !important;
     font-family: var(--siab1-font-sans) !important;
     letter-spacing: -0.025em;
@@ -295,7 +300,7 @@ p, label, span, small, td, th, li, .form-label, .text-muted,
 }
 
 /* Cards and containers */
-.card,
+.siab1-surface,
 .stat-card,
 .stat-card-premium,
 .metric-card,
@@ -325,7 +330,45 @@ p, label, span, small, td, th, li, .form-label, .text-muted,
     box-shadow: var(--siab1-shadow-sm) !important;
 }
 
-.card:hover,
+.siab1-dark-surface,
+.siab1-brand-surface {
+    background: linear-gradient(135deg, var(--siab1-navy-950), var(--siab1-navy-800)) !important;
+    color: var(--siab1-text-inverse) !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    border-radius: var(--siab1-radius-lg) !important;
+    box-shadow: var(--siab1-shadow-sm) !important;
+}
+
+.siab1-dark-surface h1,
+.siab1-dark-surface h2,
+.siab1-dark-surface h3,
+.siab1-dark-surface h4,
+.siab1-dark-surface h5,
+.siab1-dark-surface h6,
+.siab1-dark-surface p,
+.siab1-dark-surface span,
+.siab1-dark-surface strong,
+.siab1-brand-surface h1,
+.siab1-brand-surface h2,
+.siab1-brand-surface h3,
+.siab1-brand-surface h4,
+.siab1-brand-surface h5,
+.siab1-brand-surface h6,
+.siab1-brand-surface p,
+.siab1-brand-surface span,
+.siab1-brand-surface strong {
+    color: var(--siab1-text-inverse) !important;
+}
+
+.siab1-warning-surface {
+    background: #fffbeb !important;
+    color: #92400e !important;
+    border: 1px solid #fde68a !important;
+    border-radius: var(--siab1-radius-lg) !important;
+    box-shadow: var(--siab1-shadow-sm) !important;
+}
+
+.siab1-surface:hover,
 .stat-card:hover,
 .exam-card:hover,
 .metric-card:hover,
@@ -755,11 +798,13 @@ tbody tr:hover {
     color: #ffffff !important;
 }
 
-.progress-bar {
-    background: rgba(255,255,255,0.13) !important;
+.exam-header > .exam-progress-bar,
+.exam-header > .progress-bar {
+    background: rgba(255, 255, 255, 0.13) !important;
 }
 
-.progress-fill {
+.exam-header .exam-progress-fill,
+.exam-header .progress-fill {
     background: linear-gradient(90deg, var(--siab1-cyan-500), var(--siab1-green-600)) !important;
     box-shadow: 0 0 10px rgba(14, 165, 233, 0.24) !important;
 }

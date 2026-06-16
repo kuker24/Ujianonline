@@ -160,7 +160,7 @@
 
 # ============================================================================
 # END OF ENHANCED PROGUARD RULES
-# Expected result:
+# Expected result: 
 # - APK size reduced by ~20%
 # - Decompiled code unreadable (class names like 'a.b.c')
 # - All strings encrypted

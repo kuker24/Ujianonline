@@ -456,15 +456,16 @@
             color: var(--text-primary);
         }
 
-        .progress-bar {
+        .analytics-progress-bar {
             height: 8px;
-            background: var(--bg-tertiary);
+            background: var(--siab1-surface-muted, var(--bg-tertiary));
+            border: 1px solid var(--siab1-border, transparent);
             border-radius: 4px;
             overflow: hidden;
             width: 100px;
         }
 
-        .progress-fill {
+        .analytics-progress-fill {
             height: 100%;
             border-radius: 4px;
             transition: width 0.5s ease;
@@ -1122,8 +1123,8 @@
                             <td><strong>${cls.average}</strong></td>
                             <td><span class="pass-badge ${badgeClass}">${cls.passRate}%</span></td>
                             <td>
-                                <div class="progress-bar">
-                                    <div class="progress-fill" style="width: ${cls.average}%; background: ${barColor};"></div>
+                                <div class="analytics-progress-bar">
+                                    <div class="analytics-progress-fill" style="width: ${cls.average}%; background: ${barColor};"></div>
                                 </div>
                             </td>
                         </tr>

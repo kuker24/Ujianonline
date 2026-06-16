@@ -182,16 +182,17 @@
         }
 
         /* Progress Bars */
-        .progress-bar {
+        .system-progress-bar {
             width: 100%;
             height: 6px;
-            background: rgba(255, 255, 255, 0.1);
+            background: var(--siab1-surface-muted, rgba(255, 255, 255, 0.1));
+            border: 1px solid var(--siab1-border, transparent);
             border-radius: 999px;
             overflow: hidden;
             margin-top: 0.75rem;
         }
 
-        .progress-fill {
+        .system-progress-fill {
             height: 100%;
             transition: width 0.5s ease, background-color 0.3s;
             border-radius: 999px;
@@ -389,8 +390,8 @@
                     <div class="metric-value">
                         <span id="cpuValue">--</span><span class="metric-unit">%</span>
                     </div>
-                    <div class="progress-bar">
-                        <div class="progress-fill" id="cpuProgress"></div>
+                    <div class="system-progress-bar">
+                        <div class="system-progress-fill" id="cpuProgress"></div>
                     </div>
                     <div class="metric-subtitle" id="cpuCores">-- cores</div>
                 </div>
@@ -405,8 +406,8 @@
                     <div class="metric-value">
                         <span id="memoryValue">--</span><span class="metric-unit">%</span>
                     </div>
-                    <div class="progress-bar">
-                        <div class="progress-fill" id="memoryProgress"></div>
+                    <div class="system-progress-bar">
+                        <div class="system-progress-fill" id="memoryProgress"></div>
                     </div>
                     <div class="metric-subtitle" id="memoryDetails">-- GB used / -- GB total</div>
                 </div>
@@ -421,8 +422,8 @@
                     <div class="metric-value">
                         <span id="diskValue">--</span><span class="metric-unit">%</span>
                     </div>
-                    <div class="progress-bar">
-                        <div class="progress-fill" id="diskProgress"></div>
+                    <div class="system-progress-bar">
+                        <div class="system-progress-fill" id="diskProgress"></div>
                     </div>
                     <div class="metric-subtitle" id="diskDetails">-- GB free</div>
                 </div>
@@ -460,8 +461,8 @@
                         <span id="dbActiveConns">--</span><span class="metric-unit">/ <span
                                 id="dbMaxConns">--</span></span>
                     </div>
-                    <div class="progress-bar">
-                        <div class="progress-fill" id="dbConnProgress"></div>
+                    <div class="system-progress-bar">
+                        <div class="system-progress-fill" id="dbConnProgress"></div>
                     </div>
                     <div class="metric-subtitle">Active connections</div>
                 </div>
@@ -476,8 +477,8 @@
                     <div class="metric-value">
                         <span id="dbCacheHit">--</span><span class="metric-unit">%</span>
                     </div>
-                    <div class="progress-bar">
-                        <div class="progress-fill progress-low" id="dbCacheProgress"></div>
+                    <div class="system-progress-bar">
+                        <div class="system-progress-fill progress-low" id="dbCacheProgress"></div>
                     </div>
                     <div class="metric-subtitle">Database performance</div>
                 </div>
@@ -492,8 +493,8 @@
                     <div class="metric-value">
                         <span id="redisCacheHit">--</span><span class="metric-unit">%</span>
                     </div>
-                    <div class="progress-bar">
-                        <div class="progress-fill progress-low" id="redisCacheProgress"></div>
+                    <div class="system-progress-bar">
+                        <div class="system-progress-fill progress-low" id="redisCacheProgress"></div>
                     </div>
                     <div class="metric-subtitle">Cache effectiveness</div>
                 </div>
@@ -764,7 +765,7 @@
                 bar.style.width = percent + '%';
 
                 // Update color based on percentage
-                bar.className = 'progress-fill';
+                bar.className = 'system-progress-fill';
                 if (percent < 60) {
                     bar.classList.add('progress-low');
                 } else if (percent < 85) {

@@ -65,8 +65,10 @@ class GradientButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final gradientColors =
-        colors ?? [const Color(0xFF123b73), const Color(0xFF2563eb)];
+    final gradientColors = colors ?? [
+      const Color(0xFF123b73),
+      const Color(0xFF2563eb),
+    ];
 
     return Container(
       decoration: BoxDecoration(
@@ -155,15 +157,13 @@ class _AnimatedLogoState extends State<AnimatedLogo>
       vsync: this,
     )..repeat(reverse: true);
 
-    _scaleAnimation = Tween<double>(
-      begin: 1.0,
-      end: 1.05,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.05).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
 
-    _glowAnimation = Tween<double>(
-      begin: 0.3,
-      end: 0.6,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+    _glowAnimation = Tween<double>(begin: 0.3, end: 0.6).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
   }
 
   @override

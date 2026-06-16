@@ -7,7 +7,7 @@ import 'widgets/common_widgets.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
+  
   // Allow all orientations initially
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.landscapeLeft,
@@ -15,7 +15,7 @@ void main() async {
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
-
+  
   // Set immersive mode
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 
@@ -63,19 +63,19 @@ class _AppRouterState extends State<AppRouter> {
   bool _connectionFailed = false;
   String _errorMessage = '';
   final _apiService = ApiService();
-
+  
   @override
   void initState() {
     super.initState();
   }
-
+  
   void _onSplashComplete() {
     setState(() {
       _showSplash = false;
     });
     _connectToServer();
   }
-
+  
   Future<void> _connectToServer() async {
     setState(() {
       _isConnecting = true;
@@ -86,20 +86,19 @@ class _AppRouterState extends State<AppRouter> {
     try {
       // Load config (will use AppConfig.serverUrl if storage is empty)
       await _apiService.loadSavedConfig();
-
+      
       if (!_apiService.isConfigured) {
         setState(() {
           _isConnecting = false;
           _connectionFailed = true;
-          _errorMessage =
-              'Server URL tidak dikonfigurasi.\nHubungi administrator.';
+          _errorMessage = 'Server URL tidak dikonfigurasi.\nHubungi administrator.';
         });
         return;
       }
 
       // Verify server is accessible
       final isConnected = await _apiService.verifyConnection();
-
+      
       if (isConnected && mounted) {
         Navigator.of(context).pushReplacement(
           PageRouteBuilder(
@@ -112,13 +111,12 @@ class _AppRouterState extends State<AppRouter> {
         );
         return;
       }
-
+      
       // Connection failed
       setState(() {
         _isConnecting = false;
         _connectionFailed = true;
-        _errorMessage =
-            'Gagal terhubung ke ${_apiService.serverUrl}\n\nPastikan:\n• HP terhubung ke Wi-Fi yang sama dengan server\n• Server ujian sedang aktif';
+        _errorMessage = 'Gagal terhubung ke ${_apiService.serverUrl}\n\nPastikan:\n• HP terhubung ke Wi-Fi yang sama dengan server\n• Server ujian sedang aktif';
       });
     } catch (e) {
       setState(() {
@@ -134,7 +132,7 @@ class _AppRouterState extends State<AppRouter> {
     if (_showSplash) {
       return SplashPage(onComplete: _onSplashComplete);
     }
-
+    
     // Connection error screen with retry (NO URL INPUT)
     return Scaffold(
       backgroundColor: const Color(0xFF081a2f),
@@ -143,7 +141,11 @@ class _AppRouterState extends State<AppRouter> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF081a2f), Color(0xFF0b2347), Color(0xFF081a2f)],
+            colors: [
+              Color(0xFF081a2f),
+              Color(0xFF0b2347),
+              Color(0xFF081a2f),
+            ],
           ),
         ),
         child: SafeArea(
@@ -155,6 +157,7 @@ class _AppRouterState extends State<AppRouter> {
                 children: [
                   const AnimatedLogo(size: 100),
                   const SizedBox(height: 32),
+                  
                   ShaderMask(
                     shaderCallback: (bounds) => const LinearGradient(
                       colors: [Color(0xFF16a34a), Color(0xFF1d4ed8)],
@@ -169,14 +172,13 @@ class _AppRouterState extends State<AppRouter> {
                     ),
                   ),
                   const SizedBox(height: 48),
+                  
                   if (_isConnecting) ...[
                     const CircularProgressIndicator(color: Color(0xFF1d4ed8)),
                     const SizedBox(height: 16),
                     Text(
                       'Menghubungkan ke Server...',
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.7),
-                      ),
+                      style: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
                     ),
                   ] else if (_connectionFailed) ...[
                     Container(
@@ -185,26 +187,16 @@ class _AppRouterState extends State<AppRouter> {
                       decoration: BoxDecoration(
                         color: Colors.red.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: Colors.red.withValues(alpha: 0.3),
-                        ),
+                        border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
                       ),
                       child: Column(
                         children: [
-                          const Icon(
-                            Icons.cloud_off_rounded,
-                            color: Colors.red,
-                            size: 56,
-                          ),
+                          const Icon(Icons.cloud_off_rounded, color: Colors.red, size: 56),
                           const SizedBox(height: 16),
                           Text(
                             _errorMessage,
                             textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 14,
-                              height: 1.5,
-                            ),
+                            style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.5),
                           ),
                         ],
                       ),
@@ -229,3 +221,4 @@ class _AppRouterState extends State<AppRouter> {
     );
   }
 }
+

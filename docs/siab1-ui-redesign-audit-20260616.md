@@ -1,556 +1,352 @@
-# SIAB1 Total UI Redesign Audit
+# SIAB1 UI Redesign Audit and Review Remediation
 
 Date: 2026-06-16
 Branch/worktree: `review/siab1-ui-redesign` at `/tmp/ujianonline-siab1-ui-work`
+Base reviewed against: `67fca39f4b3ec9509381f68917caaa4477d19ca9`
 
 ## Scope and hard boundary
 
-Goal: visual-only redesign to SIAB1.
+Goal: complete the SIAB1 visual redesign and remediate review findings without changing runtime behavior.
 
-Brand:
+Official brand:
 
 ```text
 SIAB1
 SIAB1 — Sistem Informasi Asesmen Berintegritas
 ```
 
-Strictly not changed:
+Confirmed out of scope / not changed:
 
 ```text
-Backend business logic
-API endpoint behavior
-Database/model/migration
-Routing/URL paths
-Authentication/authorization flow
-Exam start/answer/save/submit flow
-Timer behavior
-Anti-cheat/kiosk/security logic
-APK token/signature mechanism
-Queue/runtime buffer/final submit behavior
+Exam logic, timer, start/save/sync/final-submit flow
+Authentication/login flow and authorization/permission logic
+WebSocket behavior
+Anti-cheat, kiosk/security, APK token validation, APK signature validation
+Routes, endpoint URLs, API payload contracts
+Database schema and migrations
+Android package name
+VPS deployment or merge to a base branch
 ```
 
-## 1. UI pages found
+## Review findings remediation
 
-### Public/authentication
+### A. Runtime branding fallbacks
 
-```text
-templates/base.html
-templates/admin/index.html
-templates/student/index.html
-templates/seb/landing.html
-templates/seb/downloads.html
-```
-
-Covered states/components:
+Fixed visible/default runtime branding in:
 
 ```text
-admin/guru/operator/pengawas login shell
-student login shell
-captcha panel
-access/download instructions for SEB legacy surfaces
-base exam shell metadata/head
-```
-
-### Admin / super admin / operator / guru / pengawas / panitia shared web UI
-
-```text
-templates/admin/layout.html
-templates/admin/dashboard.html
-templates/admin/users.html
-templates/admin/bulk-users.html
-templates/admin/exams.html
-templates/admin/exam-builder.html
-templates/admin/exam-templates.html
-templates/admin/results.html
-templates/admin/grading.html
-templates/admin/analytics.html
-templates/admin/exam-analytics.html
-templates/admin/monitoring.html
-templates/admin/violations.html
-templates/admin/settings.html
-templates/admin/account-security.html
-templates/admin/activity.html
-templates/admin/system-monitor.html
-templates/admin/media.html
-templates/admin/seb-builder.html
-```
-
-Covered surfaces:
-
-```text
-sidebar
-header/page-header
-cards/stat cards
-filters/search
-forms
-modals/dialogs
-alerts/toasts
-badges/status pills
-tables/pagination containers
-export/report titles
-monitoring/recovery panels
-exam builder/editor visual shell
-settings/APK settings visual shell
-```
-
-### Student/peserta web UI
-
-```text
-templates/student/dashboard.html
-templates/student/exam.html
-templates/student/result.html
-templates/exam/questions.html  (via templates/base.html)
-```
-
-Covered surfaces:
-
-```text
-token input
-start exam confirmation modal
-logout confirmation modal
-exam header
-timer
-connection indicator
-answer-save/sync visual indicators via existing classes
-question card
-stimulus card
-answer options
-question navigator
-exam footer navigation
-submit/exit button
-result card
-```
-
-### Flutter/APK UI
-
-```text
-flutter_client_code/lib/main.dart
-flutter_client_code/lib/pages/splash_page.dart
-flutter_client_code/lib/pages/config_page.dart
-flutter_client_code/lib/pages/native_login_page.dart
-flutter_client_code/lib/pages/exam_page.dart
-flutter_client_code/lib/pages/session_ended_page.dart
-flutter_client_code/lib/widgets/common_widgets.dart
-flutter_client_code/android/app/src/main/AndroidManifest.xml
-flutter_client_code/android/app/src/main/res/drawable/launch_background.xml
-flutter_client_code/android/app/src/main/res/drawable-v21/launch_background.xml
-flutter_client_code/android_src/AndroidManifest.xml
-```
-
-Covered surfaces:
-
-```text
-Android app label
-native launch background
-splash/loading
-security/update blocked screen visual colors/text branding
-server connection failure screen
-native APK login
-security status banner
-captcha field visual shell
-exam WebView wrapper loading/error/security dialogs
-session-ended page
-reusable Flutter glass container, gradient button, animated logo, status chip, loading overlay
-```
-
-### APK Builder local GUI metadata
-
-```text
-tools/apk_builder_gui.py
-tools/apk_builder_gui/apk_builder_config.json
-tools/apk_builder_gui/README.md
-```
-
-Reason: future local APK generation would otherwise reintroduce old displayed app name into generated `config.dart`/metadata.
-
-## 2. UI files changed
-
-```text
-static/css/siab1-theme.css
-static/css/exam.css
-static/components/sidebar.html
-static/sw.js
-static/js/sidebar-loader.js
-static/js/sidebar-loader/modules/00-sidebar-loader-core.js
-static/js/exam-system.js
-static/js/exam-system/modules/00-runtime-utils-storage-sync.js
-static/js/exam-system/modules/10-exam-core-security-websocket.js
-static/js/api.js
-static/js/api/modules/00-runtime-core.js
-static/js/auth.js
-static/js/auth/modules/00-auth-manager-core.js
-
-templates/base.html
-templates/admin/account-security.html
-templates/admin/activity.html
-templates/admin/analytics.html
-templates/admin/bulk-users.html
-templates/admin/dashboard.html
-templates/admin/exam-analytics.html
-templates/admin/exam-builder.html
-templates/admin/exam-templates.html
-templates/admin/exams.html
-templates/admin/grading.html
-templates/admin/index.html
-templates/admin/layout.html
-templates/admin/media.html
-templates/admin/monitoring.html
-templates/admin/results.html
-templates/admin/seb-builder.html
-templates/admin/settings.html
-templates/admin/system-monitor.html
-templates/admin/users.html
-templates/admin/violations.html
-templates/seb/downloads.html
-templates/seb/landing.html
-templates/student/dashboard.html
-templates/student/exam.html
-templates/student/index.html
-templates/student/result.html
-
-flutter_client_code/android/app/proguard-rules.pro
-flutter_client_code/android/app/src/main/AndroidManifest.xml
-flutter_client_code/android/app/src/main/res/drawable/launch_background.xml
-flutter_client_code/android/app/src/main/res/drawable-v21/launch_background.xml
-flutter_client_code/android_src/AndroidManifest.xml
-flutter_client_code/lib/config.dart
-flutter_client_code/lib/main.dart
-flutter_client_code/lib/pages/config_page.dart
-flutter_client_code/lib/pages/exam_page.dart
-flutter_client_code/lib/pages/native_login_page.dart
-flutter_client_code/lib/pages/session_ended_page.dart
-flutter_client_code/lib/pages/splash_page.dart
-flutter_client_code/lib/widgets/common_widgets.dart
-flutter_client_code/pubspec.yaml
-flutter_client_code/test/widget_test.dart
-
-tools/apk_builder_gui.py
-tools/apk_builder_gui/apk_builder_config.json
-tools/apk_builder_gui/README.md
-tests/test_apk_builder_gui_config.py
-tests/test_mobile_first_feature_flags.py
-```
-
-Notes:
-
-```text
-static/js/api*.js and static/js/auth*.js changes are comment/branding text only.
-static/js/exam-system*.js changes are comment/console text only.
-No app/ backend file changed.
-```
-
-## 3. Visual components created or updated
-
-Created:
-
-```text
-SIAB1 global CSS design system: static/css/siab1-theme.css
-```
-
-Updated through design tokens and global cascade:
-
-```text
-Primary/secondary/danger/success/warning buttons
-Icon buttons
-Text inputs/password inputs/search inputs/selects/textareas
-Form labels/helper text/focus states
-Cards/stat cards/dashboard widgets
-Tables/table headers/table rows/table containers
-Sidebar/nav/submenu/sidebar footer
-Headers/page headers/builder headers/content headers
-Badges/status pills/live/runtime badges
-Alerts/toasts/notifications
-Modals/dialog overlays
-Loading/spinner/empty/error states
-Exam timer pill
-Question cards
-Stimulus cards
-Answer options
-Question navigator states: unanswered/answered/active/flagged
-Connection/security indicators
-Student dashboard cards
-Flutter gradient button
-Flutter animated logo
-Flutter status chip
-Flutter loading overlay
-Android native launch background
-```
-
-## 4. SIAB1 design system summary
-
-### Color tokens
-
-```text
-Primary navy: #0b2347 / #123b73
-Interaction blue: #2563eb / #3b82f6
-Info cyan: #0ea5e9
-Success green: #16a34a
-Warning amber: #f59e0b / #d97706
-Danger red: #dc2626 / #b91c1c
-Neutral background: #f3f6fb
-Surface: #ffffff
-Border: #d9e2ec
-Text: #0f172a
-Secondary text: #475569 / #64748b
-```
-
-### Typography
-
-```text
-Web: Plus Jakarta Sans with Inter/system fallback
-Mono/timer: JetBrains Mono fallback
-Hierarchy: heavier 700/800 headings, 500/600 controls, readable body line-height
-```
-
-### Shape/elevation
-
-```text
-Radius: 8/10/14/18/24px scale
-Shadow: low-noise institutional shadows, no heavy template glow
-Focus: visible blue focus ring
-Motion: light hover transform only; prefers-reduced-motion supported
-```
-
-### Visual direction
-
-```text
-Modern institutional dashboard
-Formal navy identity
-Light readable surfaces for long sessions
-Navy exam header for identity and seriousness
-No heavy glassmorphism/neon/purple template look
-```
-
-## 5. UI changes by role
-
-### Public/auth
-
-```text
-Admin login and student login now show SIAB1 branding.
-Old animated decorative particle background disabled by SIAB1 theme.
-Login cards use white institutional surfaces, navy/blue brand mark, clear form focus states.
-CAPTCHA/security panels inherit SIAB1 alert surfaces.
-Page titles/meta branding updated.
-```
-
-### Admin / super admin / operator
-
-```text
-Sidebar brand changed to SIAB1.
-Global admin shell restyled with formal navy sidebar and light content surfaces.
-Dashboard cards/tables/forms/buttons/modals inherit SIAB1 visual tokens.
-Monitoring/recovery/violations/settings/account-security pages receive consistent SIAB1 components.
-Report/export subtitle changed to SIAB1 — Sistem Informasi Asesmen Berintegritas.
-```
-
-### Guru
-
-```text
-Exam list, builder, templates, grading, results, analytics pages inherit the same SIAB1 component system.
-Exam builder receives visual-only styling for cards, controls, question cards, form fields, modal surfaces, and badges through global CSS.
-No question editor logic or PGK behavior changed.
-```
-
-### Pengawas/panitia
-
-```text
-Monitoring, active sessions, pause/recovery controls, violation panels, status badges, and alert cards inherit SIAB1 institutional styling.
-No monitoring API, websocket, pause, reset, recovery, or permission logic changed.
-```
-
-### Siswa/peserta web
-
-```text
-Student login, token dashboard, start-confirm modal, logout modal, exam screen, and result page use SIAB1 colors and surfaces.
-Exam header receives SIAB1 label.
-Timer/connection pills, question cards, answer options, stimulus cards, navigator states, and submit/exit emphasis are visually restyled.
-No exam flow, timer calculation, save/sync, anti-cheat, or submit logic changed.
-```
-
-## 6. Flutter/APK UI changes
-
-```text
-Android app label changed to SIAB1.
-Native launch background changed to SIAB1 navy.
-config.dart appName template changed to SIAB1; build token placeholder remains unchanged.
-Splash screen brand changed to SIAB1 / ASESMEN BERINTEGRITAS.
-Connection/loading screens use SIAB1 navy/blue/green palette.
-Native login page title changed to SIAB1 and visual palette aligned.
-Reusable Flutter widgets updated to SIAB1 navy/blue gradients.
-ExamPage dialogs/loading/error/security surfaces use SIAB1 navy palette.
-Session ended page palette aligned.
-APK Builder default app name/GUI title updated to SIAB1 so future generated APK config does not revert visible branding.
-```
-
-Security unchanged:
-
-```text
-APK build token placeholder remains BUILD-TEMPLATE-LOCAL.
-No token validation bypass touched.
-No signature verification logic touched.
-No kiosk/security/anti-cheat logic changed.
-No package name changed.
-```
-
-## 7. Old branding replaced
-
-Replaced displayed/metadata branding:
-
-```text
-Ujian Online -> SIAB1
-Sistem Ujian Online -> SIAB1 — Sistem Informasi Asesmen Berintegritas
-UJIAN ONLINE MAN 1 Rokan Hulu -> SIAB1
-Ujian Online System -> SIAB1
-Secure Exam Browser / SECURE EXAM visible Flutter labels -> SIAB1
-Admin Ujian Online -> Admin SIAB1
-```
-
-Scan result for UI scope:
-
-```text
-No old branding remains in templates, static visual components/CSS/sidebar, Flutter UI pages/widgets/config/main/pubspec/Android label, or APK Builder GUI metadata.
-```
-
-Intentional not changed:
-
-```text
-tests/test_assessment_docx_generator.py contains "Kepala MAN 1 Rokan Hulu" because it is an institution/person-title document assertion, not UI/system branding.
-Internal repository/folder/service/package identifiers using ujian_online were not changed.
-```
-
-## 8. Files intentionally not changed because backend/logical/security-sensitive
-
-```text
-app/api/**
-app/core/**
-app/database.py
-app/models/**
-app/schemas/**
-app/services/**
-app/tasks/**
-app/utils/**
+app/config.py
+app/models/system_settings.py
+app/locales/id.json
 app/main.py
-docker-compose.production.yml
-docker/**
-config/**
-runtime_control/**
-security/**
-DB migrations / database assets
-APK token/signature service logic files
-answer sync/final submit/runtime buffer files
+app/utils/telegram_alerts.py
+app/core/pdf_generator.py
+templates/**
+static visual/sidebar/service-worker files
+flutter_client_code visible UI/metadata files
+tools/apk_builder_gui defaults/docs
 ```
 
-## 9. Responsive validation
-
-Implemented/respected:
+Examples:
 
 ```text
-SIAB1 theme includes responsive breakpoints at 992px and 640px.
-Controls maintain minimum 44px touch target on mobile.
-Tables remain overflow-x auto in table containers.
-Modal width constrained to min(92vw, 720px).
-Student/exam headers preserve current DOM/flow and use compact SIAB1 labels.
-Exam header remains sticky/current flow.
+Default app_name: Ujian Online -> SIAB1
+system_settings.app_name default/fallback -> SIAB1
+Locale welcome message -> Selamat datang di SIAB1 — Sistem Informasi Asesmen Berintegritas
+FastAPI docs description -> SIAB1 — Sistem Informasi Asesmen Berintegritas ...
+Telegram test alert title -> Test Alert - SIAB1
+PDF visible report subtitles/default certificate institution -> SIAB1 wording
 ```
 
-Source validation performed:
+Technical identifiers intentionally not renamed:
 
 ```text
-All templates received SIAB1 stylesheet link except templates/exam/questions.html, which extends templates/base.html and inherits it.
-No page route/path was changed.
-No event handler names or onclick flows were intentionally changed.
+ujian_online repository/folder/package/service/database-style identifiers
+Android package name
+Environment variable keys
+Database table/column names
 ```
 
-Screenshots:
+### B. White text on white/light cards
+
+Remediated settings-page contrast regressions caused by the SIAB1 light card treatment:
 
 ```text
-Not generated in this environment: no authenticated running web session/live browser state was available for every role. Source-level responsive styling and static checks were completed.
+templates/admin/settings.html
+static/css/siab1-theme.css
 ```
 
-## 10. Function and UX unchanged evidence
+Changes:
 
 ```text
-No backend/app API/database files changed.
-No route URLs changed.
-No form action/API endpoint changed.
-No login handler changed.
-No exam start/answer/save/submit handler changed.
-No timer function changed.
-No anti-cheat/security/kiosk logic changed.
-No APK token/signature validation logic changed.
-No queue/runtime/final submit files changed.
+Removed the risky global .card surface override from the SIAB1 theme.
+Introduced semantic SIAB1 surface classes: .siab1-surface, .siab1-dark-surface, .siab1-brand-surface, .siab1-warning-surface.
+Applied .siab1-surface explicitly to settings cards that are intended to be light.
+Changed settings card headings/strong labels from inline white to SIAB1 dark text.
+Changed light warning/helper text from pale red/amber/green to readable darker tones.
+Changed settings form controls/placeholders to dark text on light inputs.
+Changed backup option/upload/progress panels to light readable surfaces.
+Kept white text only where the element itself remains a dark/colored control (buttons, badges, icon blocks, dark preview panel).
 ```
 
-JS changes:
+Static audit focus included:
 
 ```text
-sidebar-loader displayed <h1> changed only from old brand to SIAB1.
-api/auth/exam-system changes are comments/console branding only; bundles rebuilt and verified.
+Pengaturan Umum
+Pengaturan APK Lanjutan / APK Token
+Backup Data and backup type cards
+Restore Backup / Preview Data
+Telegram Broadcast preview
+Pembersihan
+Warmup/progress/status panels
+Developer, Android APK, maintenance, and freeze panels
 ```
 
-Flutter changes:
+### C. Scoped progress bar styling
 
-```text
-Color/theme/text/app-label changes only.
-No API service, security service, signature verifier, storage, or WebView auth injection logic changed.
+Removed the risky global SIAB1 theme selectors:
+
+```css
+.progress-bar { ... }
+.progress-fill { ... }
 ```
 
-## 11. Validation results
+Replaced with scoped selectors/classes:
 
 ```text
-scripts/verify_frontend_bundles.sh: PASS (28 bundles)
-node --check static/js/api.js: PASS
-node --check static/js/auth.js: PASS
-node --check static/js/exam-system.js: PASS
-node --check static/js/sidebar-loader.js: PASS
-node --check static/sw.js: PASS
-python -m compileall app: PASS
-python -m py_compile tests/test_apk_builder_gui_config.py tests/test_mobile_first_feature_flags.py: PASS
-git diff --check: PASS
-python scripts/check_security.py: PASS (pip-audit unavailable; dependency update warnings only)
-flutter analyze --no-fatal-infos --no-fatal-warnings: PASS exit 0; analyzer reports existing info/warning items
-flutter test --no-pub test/widget_test.dart: PASS
-pytest targeted Python tests: not run because pytest is not installed in this environment
-Forbidden artifact check: PASS
+static/css/siab1-theme.css: .exam-header > .exam-progress-bar / .exam-header .exam-progress-fill
+static/css/exam.css: scoped to .exam-header
+static/css/student.css: scoped to .exam-progress
+
+templates/student/exam.html: exam-progress-bar / exam-progress-fill
+templates/admin/settings.html: settings-backup-progress-bar
+templates/admin/analytics.html: analytics-progress-bar / analytics-progress-fill
+templates/admin/system-monitor.html: system-progress-bar / system-progress-fill
 ```
 
-Flutter analyzer existing non-fatal items:
+This keeps exam progress styling isolated from admin analytics, backup, and system monitor progress bars.
+
+### D. Line-ending and noisy diff cleanup
+
+Cleaned the review-noisy files against base `67fca39f4b3ec9509381f68917caaa4477d19ca9` so substantive diffs are small and reviewable:
 
 ```text
-use_build_context_synchronously in config_page.dart
- deprecated scale member in exam_page.dart
-unnecessary/unused import and unused field in splash_page.dart
-prefer_const_constructors in security_service.dart
-avoid_relative_lib_imports in widget_test.dart
+flutter_client_code/android/app/proguard-rules.pro
+flutter_client_code/android_src/AndroidManifest.xml
+flutter_client_code/lib/main.dart
+flutter_client_code/lib/pages/config_page.dart
+flutter_client_code/lib/pages/splash_page.dart
+flutter_client_code/lib/widgets/common_widgets.dart
+templates/seb/downloads.html
+tools/apk_builder_gui/README.md
 ```
 
-These were not fixed because the instruction explicitly forbids logic/state-management refactors outside visual work.
+Added `.gitattributes` entries for those legacy CRLF files so `git diff --check` does not misclassify preserved carriage returns / inherited final blank lines as new whitespace errors. This is scoped only to the listed legacy files.
 
-## 12. Remaining old UI report
+## Runtime branding normalization
+
+Added opt-in maintenance script:
 
 ```text
-remaining_old_visual_ui=NONE_FOUND_IN_AUDITED_UI_SCOPE
+scripts/normalize_siab1_branding.py
 ```
 
-Residual non-UI old wording intentionally outside UI redesign:
+Purpose:
 
 ```text
-Institutional document test text: "Kepala MAN 1 Rokan Hulu"
-Internal technical identifiers such as repository/folder/package/service/database names using ujian_online
-Historical docs and scripts not part of runtime UI
+Normalize existing persisted system_settings.app_name values that exactly match legacy app branding.
 ```
 
-## Final status
+Exact values eligible for update:
 
 ```text
-source_ui_redesign=COMPLETE
-visual_brand=SIAB1
-backend_changed=NO
-api_changed=NO
-database_changed=NO
-routing_changed=NO
-exam_logic_changed=NO
-security_logic_changed=NO
-apk_token_or_signature_logic_changed=NO
+Ujian Online
+Sistem Ujian Online
+Ujian Online System
+Admin Ujian Online
+```
+
+Target value:
+
+```text
+SIAB1
+```
+
+Safety properties:
+
+```text
+Not imported by app startup.
+Not executed automatically.
+Supports --dry-run and --apply.
+Prints before/after values per row.
+Uses app.config database configuration.
+Does not store credentials.
+Does not modify custom app_name values.
+Idempotent: a second run finds no rows once exact legacy values are normalized.
+```
+
+Usage:
+
+```bash
+python scripts/normalize_siab1_branding.py --dry-run
+python scripts/normalize_siab1_branding.py --apply
+```
+
+Local execution note: not run against a database in this worktree because the local Python environment did not have application dependencies (`SQLAlchemy`/`pydantic_settings`) installed. The script now fails with a user-safe error in that case.
+
+## Regression guard added
+
+Added:
+
+```text
+scripts/check_siab1_ui_regressions.py
+tests/test_siab1_ui_regressions.py
+```
+
+The static guard checks:
+
+```text
+Runtime UI old branding in configured runtime-visible paths.
+Technical identifiers such as ujian_online are not treated as branding failures.
+Unscoped .progress-bar/.progress-fill CSS selectors in SIAB1-relevant CSS/style blocks.
+Global .card * color overrides.
+Bare global heading color overrides.
+Settings inline white heading/strong text that can disappear on SIAB1 light cards.
+Settings form-control white-text override.
+```
+
+## Visual smoke test evidence
+
+Browser screenshots were not produced because no authenticated local web session, seeded accounts, or running full stack was available in this environment.
+
+Static DOM/CSS audit was performed for the required page groups:
+
+```text
+Public/auth: admin login, student login
+Admin: dashboard, settings, users, exams, monitoring, results, system monitor, account security
+Student: dashboard, start-exam modal markup, exam page, question navigator markup, result page, logout modal markup
+SEB: landing, downloads
+Flutter/APK: splash, native login, loading, config/server failure, exam loading/error/dialog, session ended
+```
+
+Viewport-specific browser screenshots/checks at `360x800`, `390x844`, `768x1024`, `1366x768`, and `1920x1080` remain manual follow-up because the authenticated app could not be launched locally here.
+
+Manual smoke checklist for the next authenticated run:
+
+```text
+No white text on light SIAB1 cards.
+No dark text on navy/dark panels.
+Buttons, badges, labels, inputs, placeholders, table headers, alerts, and modals are readable.
+Admin tables retain horizontal scrolling on mobile.
+Sidebar does not cover content on mobile.
+Exam header/timer/progress/navigator remain visible and non-overlapping.
+Touch targets remain at least 44px where mobile controls are used.
+No unintended horizontal overflow.
+Focus ring remains visible on keyboard navigation.
+```
+
+## Local validation actually run
+
+```text
+git diff --check
+Result: PASS (no output)
+
+scripts/verify_frontend_bundles.sh
+Result: PASS — Frontend bundle sync check: OK (28 bundles)
+
+node --check static/js/api.js
+node --check static/js/auth.js
+node --check static/js/exam-system.js
+node --check static/js/sidebar-loader.js
+node --check static/sw.js
+Result: PASS (no output)
+
+python -m compileall app
+Result: PASS
+
+python scripts/check_security.py
+Result: PASS with non-fatal environment warnings
+
+python scripts/check_siab1_ui_regressions.py
+Result: PASS — branding, contrast, and scoped CSS guardrails are clean
+
+python -m py_compile tests/test_apk_builder_gui_config.py tests/test_mobile_first_feature_flags.py tests/test_siab1_ui_regressions.py scripts/check_siab1_ui_regressions.py scripts/normalize_siab1_branding.py
+Result: PASS
+
+flutter analyze --no-fatal-infos --no-fatal-warnings
+Result: PASS exit 0 with existing non-fatal analyzer findings
+
+flutter test --no-pub test/widget_test.dart
+Result: PASS — All tests passed
+```
+
+## Tests not run / unavailable
+
+```text
+pytest -q tests/test_apk_builder_gui_config.py tests/test_mobile_first_feature_flags.py tests/test_siab1_ui_regressions.py
+Result: NOT RUN — pytest command not found in local environment
+
+python scripts/normalize_siab1_branding.py --dry-run
+Result: NOT RUN against DB — local app dependencies/database configuration unavailable; script prints a safe dependency error
+
+Authenticated browser visual screenshot run
+Result: NOT RUN — no local authenticated sessions/accounts/full stack available
+```
+
+## Non-fatal warnings observed
+
+From `python scripts/check_security.py`:
+
+```text
+Telnet client binary found at /usr/bin/telnet (low operational hardening warning; not daemon/listening).
+pip-audit not installed, vulnerability scan skipped.
+10 outdated packages reported, including managed cryptography 48.0.1 -> 49.0.0 and 9 transitive packages.
+```
+
+From `flutter analyze --no-fatal-infos --no-fatal-warnings`:
+
+```text
+use_build_context_synchronously in lib/pages/config_page.dart
+deprecated_member_use for scale in lib/pages/exam_page.dart
+unnecessary import package:flutter/foundation.dart in lib/pages/splash_page.dart
+unused import ../config.dart in lib/pages/splash_page.dart
+unused field _tokenCheckRequired in lib/pages/splash_page.dart
+prefer_const_constructors in lib/services/security_service.dart
+avoid_relative_lib_imports in test/widget_test.dart
+```
+
+These were not fixed because they are pre-existing/non-fatal and outside the visual review-remediation scope.
+
+## CI/GitHub check status
+
+At the time this audit document was updated locally, GitHub PR checks had not run yet. Do not interpret this as CI PASS. Check status must be read from the Pull Request after it is created/pushed.
+
+## Remaining limitations
+
+```text
+No screenshots are attached because no authenticated browser/full-stack session was available.
+No production/VPS validation was performed, by instruction.
+No database normalization was applied; only the opt-in script was added.
+Pytest suite could not be run because pytest is not installed in this environment.
+GitHub CI status is not claimed as PASS until workflows run on the PR.
+Some non-critical legacy dark-card visuals may remain on pages that intentionally keep their old dark card styling; this audit only claims the specific SIAB1 review regressions were remediated and guarded.
+```
+
+## Final local status
+
+```text
+runtime_branding_defaults_fixed=YES
+legacy_database_app_name_handled_by_opt_in_script=YES
+settings_white_on_white_fixed=YES
+progress_bar_selectors_scoped=YES
+line_ending_noise_cleaned=YES
+static_regression_guard_added=YES
+local_required_checks_passed_except_unavailable_pytest=YES
 deployed_to_vps=NO
+merged_to_base=NO
+backend_exam_logic_changed=NO
+api_contract_changed=NO
+database_schema_changed=NO
+authentication_or_security_logic_changed=NO
+apk_aab_keystore_env_database_artifact_added=NO
 ```
