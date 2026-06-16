@@ -15,7 +15,7 @@ class SidebarLoader {
 
         try {
             // Stable versioned cache: avoids a fresh sidebar network request on every admin page.
-            const componentVersion = '20260617-siab1-legacy-ui1';
+            const componentVersion = '20260617-siab1-form-controls1';
             const cacheKey = `sidebar_html_${componentVersion}`;
             let html = null;
 

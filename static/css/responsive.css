@@ -142,13 +142,38 @@ table {
     min-width: 600px;
 }
 
-/* Form inputs touch-friendly */
-input,
+/* Form inputs touch-friendly.
+   Keep native checkbox/radio/file/range/color controls visible across engines. */
+input:not([type]),
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="search"],
+input[type="url"],
+input[type="tel"],
+input[type="number"],
+input[type="date"],
+input[type="datetime-local"],
+input[type="time"],
+input[type="month"],
+input[type="week"],
 textarea,
 select {
     font-size: 16px;
     /* Prevents zoom on iOS */
     padding: 0.75rem;
+}
+
+input[type="file"] {
+    font-size: 16px;
+}
+
+input[type="checkbox"]:not(.custom-checkbox):not(.custom-radio),
+input[type="radio"]:not(.custom-checkbox):not(.custom-radio) {
+    -webkit-appearance: auto;
+    -moz-appearance: auto;
+    appearance: auto;
+    accent-color: var(--primary);
 }
 
 /* ============================================================================
@@ -317,24 +342,26 @@ select {
     }
 }
 
-/* Android Chrome fixes */
-@media screen and (-webkit-min-device-pixel-ratio: 0) {
-    select {
-        background-image: none;
-        -webkit-appearance: none;
-        appearance: none;
-    }
+/* Optional custom select arrow. Native select arrows stay enabled by default. */
+select.custom-select-arrow {
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+        linear-gradient(135deg, currentColor 50%, transparent 50%);
+    background-position: calc(100% - 18px) 50%, calc(100% - 12px) 50%;
+    background-size: 6px 6px, 6px 6px;
+    background-repeat: no-repeat;
+    padding-right: 2.75rem;
 }
 
-/* Firefox mobile */
-@-moz-document url-prefix() {
+select.custom-select-arrow:focus-visible {
+    outline: 3px solid rgba(99, 102, 241, 0.45);
+    outline-offset: 2px;
+}
 
-    input,
-    textarea,
-    select {
-        -moz-appearance: none;
-        appearance: none;
-    }
+select.custom-select-arrow:disabled {
+    cursor: not-allowed;
+    opacity: 0.65;
 }
 
 /* ============================================================================
