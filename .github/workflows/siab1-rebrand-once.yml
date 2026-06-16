@@ -1,0 +1,173 @@
+name: Apply SIAB1 rebrand once
+
+on:
+  push:
+    branches:
+      - chore/siab1-rebrand-20260616
+
+permissions:
+  contents: write
+
+jobs:
+  rebrand:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: chore/siab1-rebrand-20260616
+          fetch-depth: 0
+
+      - name: Replace visible product branding
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from datetime import date
+
+          root = Path('.')
+          full = 'SIAB1 — Sistem Informasi Asesmen Berintegritas'
+          replacements = [
+              ('UJIAN ONLINE MAN 1 Rokan Hulu', full),
+              ('Ujian Online MAN 1 Rokan Hulu', full),
+              ('SISTEM UJIAN ONLINE ENTERPRISE-GRADE', full),
+              ('Sistem Ujian Online Enterprise-Grade', full),
+              ('SISTEM UJIAN ONLINE', full),
+              ('Sistem Ujian Online', full),
+              ('Ujian Online System', 'SIAB1'),
+              ('UJIAN ONLINE SYSTEM', 'SIAB1'),
+              ('Tim Ujian Online', 'Tim SIAB1'),
+              ('UJIAN ONLINE SEB', 'SIAB1'),
+              ('Ujian Online', 'SIAB1'),
+              ('UJIAN ONLINE', 'SIAB1'),
+              ('ujian online', 'SIAB1'),
+          ]
+
+          skip_dirs = {'.git', '.dart_tool', '.gradle', 'build', '__pycache__', 'node_modules', '.venv', 'venv'}
+          skip_suffixes = {
+              '.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.pdf', '.apk', '.aab',
+              '.zip', '.gz', '.tar', '.7z', '.jar', '.jks', '.keystore', '.so', '.class',
+              '.woff', '.woff2', '.ttf', '.otf', '.db', '.sqlite', '.pyc'
+          }
+          changed = []
+          counts = {}
+
+          for path in sorted(root.rglob('*')):
+              if not path.is_file():
+                  continue
+              if any(part in skip_dirs for part in path.parts):
+                  continue
+              if path.as_posix() == '.github/workflows/siab1-rebrand-once.yml':
+                  continue
+              if path.suffix.lower() in skip_suffixes:
+                  continue
+              try:
+                  if path.stat().st_size > 2_000_000:
+                      continue
+                  original = path.read_text(encoding='utf-8')
+              except (UnicodeDecodeError, OSError):
+                  continue
+
+              updated = original
+              replaced_here = 0
+              for old, new in replacements:
+                  amount = updated.count(old)
+                  if amount:
+                      updated = updated.replace(old, new)
+                      counts[old] = counts.get(old, 0) + amount
+                      replaced_here += amount
+
+              if updated != original:
+                  path.write_text(updated, encoding='utf-8')
+                  changed.append((path.as_posix(), replaced_here))
+
+          audit = Path('docs/SIAB1_REBRAND_AUDIT_20260616.md')
+          audit.parent.mkdir(parents=True, exist_ok=True)
+          audit.write_text(
+              '# SIAB1 Rebrand Audit\n\n'
+              'Date: 2026-06-16\n\n'
+              '## Canonical brand\n\n'
+              '- Short name: `SIAB1`\n'
+              '- Full name: `SIAB1 — Sistem Informasi Asesmen Berintegritas`\n\n'
+              '## Scope\n\n'
+              'Visible product branding was replaced across UTF-8 source code, templates, Flutter/Android configuration, JavaScript, scripts, configuration, and documentation.\n\n'
+              'Technical compatibility identifiers without spaces were intentionally preserved, including repository name `Ujianonline`, database/path/service tokens such as `ujian_online`, existing package IDs, URLs, migration identifiers, and deployment directory names. Renaming those identifiers requires a separately planned migration.\n\n'
+              '## Files changed\n\n' +
+              ''.join(f'- `{name}` ({count} replacement(s))\n' for name, count in changed) +
+              '\n## Replacement totals\n\n' +
+              ''.join(f'- `{old}`: {count}\n' for old, count in sorted(counts.items())) +
+              '\n## Validation\n\n'
+              '- Python source compilation is executed by the one-time workflow.\n'
+              '- Old visible phrases are checked after replacement.\n'
+              '- APK package/application IDs and operational identifiers are not migrated in this branding-only change.\n',
+              encoding='utf-8',
+          )
+
+          print(f'Changed {len(changed)} files')
+          for name, count in changed:
+              print(f'{count:4d}  {name}')
+          PY
+
+      - name: Validate source and branding
+        shell: bash
+        run: |
+          python3 -m compileall -q app tools scripts
+          python3 - <<'PY'
+          from pathlib import Path
+
+          required = {
+              'app/config.py': ['SIAB1'],
+              'app/models/system_settings.py': ['SIAB1'],
+              'templates/base.html': ['SIAB1'],
+              'flutter_client_code/lib/config.dart': ['SIAB1'],
+              'flutter_client_code/android/app/src/main/AndroidManifest.xml': ['SIAB1'],
+              'tools/apk_builder_gui.py': ['SIAB1'],
+          }
+          failures = []
+          for filename, needles in required.items():
+              path = Path(filename)
+              if not path.exists():
+                  failures.append(f'missing required file: {filename}')
+                  continue
+              text = path.read_text(encoding='utf-8')
+              for needle in needles:
+                  if needle not in text:
+                      failures.append(f'{filename}: missing {needle}')
+
+          visible_old = []
+          excluded_prefixes = ('.git/', 'docs/SIAB1_REBRAND_AUDIT_20260616.md')
+          for path in Path('.').rglob('*'):
+              if not path.is_file() or any(part in {'.git', 'build', '.dart_tool', '.gradle', '__pycache__'} for part in path.parts):
+                  continue
+              name = path.as_posix()
+              if name.startswith(excluded_prefixes):
+                  continue
+              try:
+                  text = path.read_text(encoding='utf-8')
+              except (UnicodeDecodeError, OSError):
+                  continue
+              for phrase in ('Ujian Online', 'UJIAN ONLINE', 'ujian online', 'Sistem Ujian Online'):
+                  if phrase in text:
+                      visible_old.append(f'{name}: {phrase}')
+                      break
+
+          failures.extend(visible_old)
+          if failures:
+              raise SystemExit('\n'.join(failures))
+          print('SIAB1 branding validation: PASS')
+          PY
+
+      - name: Commit rebrand and remove one-time workflow
+        shell: bash
+        run: |
+          rm -f .github/workflows/siab1-rebrand-once.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "chore: rebrand product to SIAB1"
+          git push origin HEAD:chore/siab1-rebrand-20260616
