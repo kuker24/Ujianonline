@@ -309,13 +309,25 @@ p, label, span, small, td, th, li, .form-label, .text-muted,
 .platform-section,
 .filter-section,
 .table-container,
+.table-responsive,
 .spreadsheet-container,
-.modal,
+.modal-content,
+.custom-modal-box,
+.assessment-modal-card,
 .dropdown-menu,
 .export-dropdown-menu,
 .live-time-card,
 .analytics-card,
 .chart-card,
+.role-option-card,
+.upload-zone,
+.preview-card,
+.settings-section,
+.monitor-card,
+.security-card,
+.result-card,
+.user-card,
+.glass-card,
 .question-card,
 .stimulus-card,
 .answer-card,
@@ -372,9 +384,18 @@ p, label, span, small, td, th, li, .form-label, .text-muted,
 .stat-card:hover,
 .exam-card:hover,
 .metric-card:hover,
-.platform-card:hover {
+.platform-card:hover,
+.role-option-card:hover {
     box-shadow: var(--siab1-shadow-md) !important;
     transform: translateY(-1px);
+}
+
+.role-option-card.selected,
+.role-option-card[aria-selected='true'] {
+    background: #eff6ff !important;
+    color: var(--siab1-navy-900) !important;
+    border-color: var(--siab1-blue-600) !important;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12) !important;
 }
 
 .stat-icon,
@@ -524,7 +545,10 @@ select:focus,
 }
 
 .form-label,
-label {
+.siab1-surface label,
+.login-card label,
+.modal.siab1-surface label,
+.modal-content.siab1-surface label {
     font-weight: 700 !important;
     color: var(--siab1-text-secondary) !important;
 }
@@ -922,8 +946,27 @@ tbody tr:hover {
     backdrop-filter: blur(5px);
 }
 
-.modal {
+.modal.siab1-surface,
+.modal-content.siab1-surface,
+.custom-modal-box.siab1-surface {
     max-width: min(92vw, 720px);
+}
+
+.siab1-surface input:-webkit-autofill,
+.siab1-surface textarea:-webkit-autofill,
+.siab1-surface select:-webkit-autofill,
+.login-card input:-webkit-autofill,
+.login-card textarea:-webkit-autofill,
+.login-card select:-webkit-autofill,
+.modal.siab1-surface input:-webkit-autofill,
+.modal.siab1-surface textarea:-webkit-autofill,
+.modal.siab1-surface select:-webkit-autofill,
+.modal-content.siab1-surface input:-webkit-autofill,
+.modal-content.siab1-surface textarea:-webkit-autofill,
+.modal-content.siab1-surface select:-webkit-autofill {
+    -webkit-box-shadow: 0 0 0 1000px #ffffff inset !important;
+    -webkit-text-fill-color: var(--siab1-text) !important;
+    caret-color: var(--siab1-text) !important;
 }
 
 /* Empty/loading states */

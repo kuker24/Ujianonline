@@ -383,7 +383,7 @@
             <!-- Main Grading Layout -->
             <div id="grading-detail-section" class="grading-layout">
                 <!-- Left: Answer List -->
-                <div class="card">
+                <div class="card siab1-surface">
                     <h3 style="margin-bottom: 1rem;">
                         <i class="fas fa-list"></i> Jawaban Pending
                     </h3>
@@ -572,7 +572,7 @@
                 const typeIcon = answer.question_type === 'essay' ? 'fa-align-left' : 'fa-keyboard';
 
                 return `
-                    <div class="card essay-item" data-id="${answer.answer_id}" onclick="selectAnswer(${answer.answer_id})">
+                    <div class="card essay-item siab1-surface" data-id="${answer.answer_id}" onclick="selectAnswer(${answer.answer_id})">
                         <div class="essay-header">
                             <strong>${answer.student_name}</strong>
                             <div style="display: flex; gap: 0.5rem; align-items: center;">
@@ -717,7 +717,7 @@
             // Render grading panel
             const panel = document.getElementById('grading-panel');
             panel.innerHTML = `
-                <div class="card">
+                <div class="card siab1-surface">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
                         <h3><i class="fas fa-circle-question"></i> Soal</h3>
                         <div style="display: flex; gap: 0.5rem; align-items: center;">
@@ -730,7 +730,7 @@
                     ${correctAnswerHint}
                 </div>
 
-                <div class="card">
+                <div class="card siab1-surface">
                     <h3 style="margin-bottom: 1rem;">
                         <i class="fas fa-user"></i> Jawaban ${escapeHtml(answer.student_name)}
                     </h3>
@@ -742,7 +742,7 @@
                     </div>
                 </div>
 
-                <div class="card grade-form">
+                <div class="card grade-form siab1-surface">
                     <div class="grade-display-section">
                         <div class="grade-display-label">Nilai</div>
                         <div class="grade-display" id="grade-display">-</div>

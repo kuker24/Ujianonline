@@ -1,9 +1,9 @@
-# Preserve legacy CRLF files without treating carriage returns or inherited final blank lines as whitespace errors.
-flutter_client_code/android/app/proguard-rules.pro whitespace=-blank-at-eol,-blank-at-eof
-flutter_client_code/android_src/AndroidManifest.xml whitespace=-blank-at-eol,-blank-at-eof
-flutter_client_code/lib/main.dart whitespace=-blank-at-eol,-blank-at-eof
-flutter_client_code/lib/pages/config_page.dart whitespace=-blank-at-eol,-blank-at-eof
-flutter_client_code/lib/pages/splash_page.dart whitespace=-blank-at-eol,-blank-at-eof
-flutter_client_code/lib/widgets/common_widgets.dart whitespace=-blank-at-eol,-blank-at-eof
-templates/seb/downloads.html whitespace=-blank-at-eol,-blank-at-eof
-tools/apk_builder_gui/README.md whitespace=-blank-at-eol,-blank-at-eof
+# Preserve legacy CRLF line endings for files that already use CRLF in this repository.
+flutter_client_code/android/app/proguard-rules.pro text eol=crlf
+flutter_client_code/android_src/AndroidManifest.xml text eol=crlf
+flutter_client_code/lib/main.dart text eol=crlf
+flutter_client_code/lib/pages/config_page.dart text eol=crlf
+flutter_client_code/lib/pages/splash_page.dart text eol=crlf
+flutter_client_code/lib/widgets/common_widgets.dart text eol=crlf
+templates/seb/downloads.html text eol=crlf
+tools/apk_builder_gui/README.md text eol=crlf

@@ -599,7 +599,10 @@ body {
     visibility: visible;
 }
 
-.modal {
+.modal.siab1-surface,
+.modal.siab1-dark-surface,
+.modal.siab1-brand-surface,
+.modal.siab1-warning-surface {
     background: var(--dark-lighter);
     border-radius: 1rem;
     padding: 2rem;
@@ -2148,7 +2151,10 @@ body {
     .login-card,
     .card,
     .exam-card,
-    .modal,
+    .modal.siab1-surface,
+    .modal.siab1-dark-surface,
+    .modal.siab1-brand-surface,
+    .modal.siab1-warning-surface,
     .modal-overlay,
     .question-card,
     .mobile-question-nav,
