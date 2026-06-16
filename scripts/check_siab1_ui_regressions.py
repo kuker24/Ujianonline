@@ -23,7 +23,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 BASE_COMMIT = "67fca39f4b3ec9509381f68917caaa4477d19ca9"
 THEME_HREF = "/static/css/siab1-theme.css"
 BRANDING_HREF = "/static/css/siab1-branding.css"
-RELEASE_TOKEN = "20260617-siab1-legacy-ui1"
+RELEASE_TOKEN = "20260617-siab1-form-controls1"
 CONTROLLED_RUNTIME_ASSETS = (
     "/static/css/admin.css",
     "/static/css/student.css",
@@ -52,6 +52,7 @@ STALE_CACHE_TOKENS = (
     "20260418-richtext1",
     "20260610-siab1-ui1",
     "20260616-siab1-ui2",
+    "20260617-siab1-legacy-ui1",
 )
 SEMANTIC_SURFACES = {
     "siab1-surface",
@@ -116,6 +117,7 @@ CSS_TEMPLATE_SOURCES = (
     "templates/admin/settings.html",
     "templates/admin/analytics.html",
     "templates/admin/system-monitor.html",
+    "templates/admin/exam-templates.html",
     "templates/student/exam.html",
 )
 TEMPLATE_THEME_SCAN_ROOTS = (
@@ -514,6 +516,92 @@ def check_branding_css_scope(root: Path = REPO_ROOT) -> list[Issue]:
     return issues
 
 
+def check_form_control_visibility(root: Path = REPO_ROOT) -> list[Issue]:
+    """Guard native/custom form controls against cross-browser invisibility regressions."""
+    issues: list[Issue] = []
+
+    responsive_path = root / "static/css/responsive.css"
+    responsive = responsive_path.read_text(encoding="utf-8", errors="ignore") if responsive_path.exists() else ""
+
+    if re.search(
+        r"@-moz-document\s+url-prefix\(\)\s*\{\s*input\s*,\s*textarea\s*,\s*select\s*\{[^{}]*(?:-moz-)?appearance\s*:\s*none",
+        responsive,
+        flags=re.I | re.S,
+    ):
+        issues.append(
+            Issue(
+                "static/css/responsive.css",
+                _line_number(responsive, responsive.lower().find("@-moz-document")),
+                "Firefox must not disable native appearance for all input/textarea/select controls",
+            )
+        )
+
+    if re.search(
+        r"@media\s+screen\s+and\s+\(-webkit-min-device-pixel-ratio:\s*0\)\s*\{\s*select\s*\{[^{}]*(?:background-image\s*:\s*none|appearance\s*:\s*none|-webkit-appearance\s*:\s*none)",
+        responsive,
+        flags=re.I | re.S,
+    ):
+        issues.append(
+            Issue(
+                "static/css/responsive.css",
+                _line_number(responsive, responsive.lower().find("-webkit-min-device-pixel-ratio")),
+                "WebKit/Android native select arrows must not be removed globally",
+            )
+        )
+
+    for label, css in _css_sources(root):
+        for line, selector, body in _iter_css_rules(css):
+            selectors = _selector_items(selector)
+            if re.search(r"(?:^|;)\s*(?:-webkit-appearance|-moz-appearance|appearance)\s*:\s*none\b", body, re.I):
+                if any(item == "input" for item in selectors):
+                    issues.append(Issue(label, line, "global input appearance:none is not allowed"))
+                if {"input", "textarea", "select"}.issubset(set(selectors)):
+                    issues.append(Issue(label, line, "global input/textarea/select appearance:none is not allowed"))
+                for item in selectors:
+                    if re.fullmatch(r"input\[type=['\"]?(?:checkbox|radio)['\"]?\]", item, flags=re.I):
+                        issues.append(Issue(label, line, "native checkbox/radio appearance:none must be scoped to a custom class"))
+
+            if any(item == ".custom-modal-body *" for item in selectors):
+                issues.append(Issue(label, line, ".custom-modal-body * color override is not allowed"))
+
+    exam_templates_path = root / "templates/admin/exam-templates.html"
+    exam_templates = exam_templates_path.read_text(encoding="utf-8", errors="ignore") if exam_templates_path.exists() else ""
+    required_exam_template_snippets = (
+        ("class=\"class-checkbox-row\"", "class-checkbox rows must use visible wrapper labels"),
+        ("class=\"class-checkbox\"", "class-checkbox input class must remain present"),
+        ("class=\"class-checkbox-label\"", "class-checkbox visible label span is required"),
+        (".class-checkbox {", "class-checkbox CSS rule is required"),
+        ("width: 18px;", "class-checkbox must have visible width"),
+        ("height: 18px;", "class-checkbox must have visible height"),
+        ("appearance: auto;", "class-checkbox must keep native checked rendering"),
+        (".class-checkbox:focus-visible", "class-checkbox focus-visible state is required"),
+        (".class-checkbox:disabled", "class-checkbox disabled state is required"),
+        (".class-checkbox-row:has(.class-checkbox:checked)", "class-checkbox checked row enhancement is required"),
+        ("document.querySelectorAll('.class-checkbox:checked')", "class-checkbox checked selector contract must remain unchanged"),
+    )
+    for snippet, message in required_exam_template_snippets:
+        if snippet not in exam_templates:
+            issues.append(Issue("templates/admin/exam-templates.html", 1, message))
+
+    users_text = ""
+    for rel in ("templates/admin/users.html", "templates/admin/bulk-users.html"):
+        path = root / rel
+        if path.exists():
+            users_text += "\n" + path.read_text(encoding="utf-8", errors="ignore")
+    if ".custom-checkbox::before" not in users_text or ".custom-checkbox:checked::before" not in users_text:
+        issues.append(Issue("templates/admin/users.html", 1, "existing custom-checkbox checkmark pseudo-element must be preserved"))
+
+    toggle_sources = ""
+    for rel in ("static/css/admin.css", "templates/admin/settings.html"):
+        path = root / rel
+        if path.exists():
+            toggle_sources += "\n" + path.read_text(encoding="utf-8", errors="ignore")
+    if ".toggle-switch input:checked" not in toggle_sources:
+        issues.append(Issue("static/css/admin.css", 1, "toggle switch checked selector must be preserved"))
+
+    return issues
+
+
 def check_css_selectors(root: Path = REPO_ROOT) -> list[Issue]:
     issues: list[Issue] = []
     for label, css in _css_sources(root):
@@ -726,6 +814,7 @@ def run_checks(root: Path = REPO_ROOT) -> list[Issue]:
     issues.extend(check_theme_includes(root))
     issues.extend(check_static_cache_versions(root))
     issues.extend(check_branding_css_scope(root))
+    issues.extend(check_form_control_visibility(root))
     issues.extend(check_css_selectors(root))
     issues.extend(check_settings_inline_contrast(root))
     issues.extend(check_duplicate_ids(root))
