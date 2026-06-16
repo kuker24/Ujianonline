@@ -16,6 +16,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -23,7 +25,10 @@ jobs:
           node-version: '20'
 
       - name: Whitespace check
-        run: git diff --check
+        run: |
+          base_ref="${{ github.base_ref || 'review/sanitized-root-20260531-115153' }}"
+          git fetch --no-tags origin "$base_ref"
+          git diff --check "origin/$base_ref...HEAD"
 
       - name: Verify frontend bundles
         run: bash scripts/verify_frontend_bundles.sh
@@ -78,6 +83,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Verify no forbidden artifacts were added or changed
         run: |
