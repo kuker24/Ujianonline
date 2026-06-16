@@ -22,6 +22,30 @@ from typing import Iterable, Sequence
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BASE_COMMIT = "67fca39f4b3ec9509381f68917caaa4477d19ca9"
 THEME_HREF = "/static/css/siab1-theme.css"
+RELEASE_TOKEN = "20260616-siab1-ui2"
+CONTROLLED_RUNTIME_ASSETS = (
+    "/static/css/admin.css",
+    "/static/css/student.css",
+    "/static/css/exam.css",
+    "/static/css/siab1-theme.css",
+    "/static/js/sidebar-loader.js",
+    "/static/js/api.js",
+    "/static/js/auth.js",
+    "/static/js/exam-system.js",
+    "/static/js/profile-modal.js",
+)
+SERVICE_WORKER_CACHE_ASSETS = (
+    "/static/css/student.css",
+    "/static/css/exam.css",
+    "/static/js/auth.js",
+    "/static/js/api.js",
+    "/static/js/exam-system.js",
+)
+STALE_CACHE_TOKENS = (
+    "20260430-perf1",
+    "20260418-richtext1",
+    "20260610-siab1-ui1",
+)
 SEMANTIC_SURFACES = {
     "siab1-surface",
     "siab1-dark-surface",
@@ -282,6 +306,96 @@ def check_theme_includes(root: Path = REPO_ROOT) -> list[Issue]:
                         "SIAB1 theme must load after other local static CSS files",
                     )
                 )
+    return issues
+
+
+def _controlled_asset_pattern(asset: str) -> re.Pattern[str]:
+    return re.compile(re.escape(asset) + r"(?:\?v=([^\"'\s)<>]+))?")
+
+
+def _runtime_cache_scan_files(root: Path) -> Iterable[Path]:
+    yield from _templates_for_theme_scan(root)
+    for rel in (
+        "static/sw.js",
+        "static/js/sidebar-loader.js",
+        "static/js/sidebar-loader/modules/00-sidebar-loader-core.js",
+        "docker/nginx.production.conf",
+    ):
+        path = root / rel
+        if path.exists():
+            yield path
+
+
+def check_static_cache_versions(root: Path = REPO_ROOT) -> list[Issue]:
+    """Ensure SIAB1 rollout assets cannot be pinned by old production caches."""
+    issues: list[Issue] = []
+
+    for path in _templates_for_theme_scan(root):
+        rel = path.relative_to(root).as_posix()
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        for asset in CONTROLLED_RUNTIME_ASSETS:
+            for match in _controlled_asset_pattern(asset).finditer(text):
+                token = match.group(1)
+                if token != RELEASE_TOKEN:
+                    issues.append(
+                        Issue(
+                            rel,
+                            _line_number(text, match.start()),
+                            f"{asset} must use release token v={RELEASE_TOKEN}",
+                        )
+                    )
+
+    for rel in (
+        "static/js/sidebar-loader/modules/00-sidebar-loader-core.js",
+        "static/js/sidebar-loader.js",
+    ):
+        path = root / rel
+        if not path.exists():
+            issues.append(Issue(rel, 1, "sidebar loader source/bundle is missing"))
+            continue
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        expected = f"const componentVersion = '{RELEASE_TOKEN}';"
+        if expected not in text:
+            issues.append(Issue(rel, 1, f"sidebar componentVersion must be {RELEASE_TOKEN}"))
+
+    sw_path = root / "static/sw.js"
+    if sw_path.exists():
+        sw_text = sw_path.read_text(encoding="utf-8", errors="ignore")
+        expected_cache = f"const CACHE_NAME = 'siab1-v{RELEASE_TOKEN}';"
+        if expected_cache not in sw_text:
+            issues.append(Issue("static/sw.js", 1, f"service worker CACHE_NAME must be siab1-v{RELEASE_TOKEN}"))
+        for asset in SERVICE_WORKER_CACHE_ASSETS:
+            expected_asset = f"'{asset}?v={RELEASE_TOKEN}'"
+            if expected_asset not in sw_text:
+                issues.append(Issue("static/sw.js", 1, f"CACHE_ASSETS must include {asset}?v={RELEASE_TOKEN}"))
+    else:
+        issues.append(Issue("static/sw.js", 1, "service worker file is missing"))
+
+    nginx_path = root / "docker/nginx.production.conf"
+    if nginx_path.exists():
+        nginx_text = nginx_path.read_text(encoding="utf-8", errors="ignore")
+        sw_pos = nginx_text.find("location = /static/sw.js")
+        static_pos = nginx_text.find("location /static/")
+        if sw_pos == -1:
+            issues.append(Issue("docker/nginx.production.conf", 1, "/static/sw.js no-cache location is required"))
+        elif static_pos != -1 and sw_pos > static_pos:
+            issues.append(Issue("docker/nginx.production.conf", 1, "/static/sw.js location must appear before /static/"))
+        if sw_pos != -1:
+            block = nginx_text[sw_pos : static_pos if static_pos != -1 and static_pos > sw_pos else len(nginx_text)]
+            if "no-store" not in block or "no-cache" not in block or "max-age=0" not in block:
+                issues.append(Issue("docker/nginx.production.conf", 1, "/static/sw.js must send no-store/no-cache headers"))
+    else:
+        issues.append(Issue("docker/nginx.production.conf", 1, "production Nginx config is missing"))
+
+    for path in _runtime_cache_scan_files(root):
+        rel = path.relative_to(root).as_posix()
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        for stale_token in STALE_CACHE_TOKENS:
+            for match in re.finditer(re.escape(stale_token), text):
+                issues.append(
+                    Issue(rel, _line_number(text, match.start()), f"stale cache token {stale_token!r} must not remain in runtime assets")
+                )
+
     return issues
 
 
@@ -551,6 +665,7 @@ def run_checks(root: Path = REPO_ROOT) -> list[Issue]:
     issues.extend(check_legacy_branding(root))
     issues.extend(check_admin_card_surfaces(root))
     issues.extend(check_theme_includes(root))
+    issues.extend(check_static_cache_versions(root))
     issues.extend(check_css_selectors(root))
     issues.extend(check_settings_inline_contrast(root))
     issues.extend(check_duplicate_ids(root))
@@ -582,7 +697,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         for issue in issues:
             print(f"  - {issue.format()}")
         return 1
-    print("SIAB1 UI regression check passed: branding, contrast, semantic surfaces, and scoped CSS guardrails are clean.")
+    print("SIAB1 UI regression check passed: branding, contrast, cache-busting, semantic surfaces, and scoped CSS guardrails are clean.")
     return 0
 
 

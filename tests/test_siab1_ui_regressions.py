@@ -1,11 +1,13 @@
 from pathlib import Path
 
 from scripts.check_siab1_ui_regressions import (
+    RELEASE_TOKEN,
     admin_card_inventory,
     check_admin_card_surfaces,
     check_css_selectors,
     check_duplicate_ids,
     check_legacy_branding,
+    check_static_cache_versions,
     check_theme_includes,
 )
 
@@ -197,3 +199,121 @@ def test_settings_inline_contrast_flags_white_heading(tmp_path):
     issues = check_settings_inline_contrast(tmp_path)
 
     assert any("inline white" in issue.message for issue in issues)
+
+
+def _write_valid_cache_guard_files(root: Path) -> None:
+    _write(
+        root / "templates/admin/users.html",
+        f"""
+<html><head>
+<link rel="stylesheet" href="/static/css/admin.css?v={RELEASE_TOKEN}">
+<link rel="stylesheet" href="/static/css/siab1-theme.css?v={RELEASE_TOKEN}">
+</head><body>
+<script src="/static/js/api.js?v={RELEASE_TOKEN}"></script>
+<script src="/static/js/auth.js?v={RELEASE_TOKEN}"></script>
+<script src="/static/js/sidebar-loader.js?v={RELEASE_TOKEN}"></script>
+</body></html>
+""",
+    )
+    _write(
+        root / "templates/student/exam.html",
+        f"""
+<html><head>
+<link rel="stylesheet" href="/static/css/student.css?v={RELEASE_TOKEN}">
+<link rel="stylesheet" href="/static/css/exam.css?v={RELEASE_TOKEN}">
+<link rel="stylesheet" href="/static/css/siab1-theme.css?v={RELEASE_TOKEN}">
+</head><body>
+<script src="/static/js/exam-system.js?v={RELEASE_TOKEN}"></script>
+</body></html>
+""",
+    )
+    sidebar_source = f"const componentVersion = '{RELEASE_TOKEN}';\n"
+    _write(root / "static/js/sidebar-loader/modules/00-sidebar-loader-core.js", sidebar_source)
+    _write(root / "static/js/sidebar-loader.js", sidebar_source)
+    _write(
+        root / "static/sw.js",
+        f"""
+const CACHE_NAME = 'siab1-v{RELEASE_TOKEN}';
+const CACHE_ASSETS = [
+    '/static/css/student.css?v={RELEASE_TOKEN}',
+    '/static/css/exam.css?v={RELEASE_TOKEN}',
+    '/static/js/auth.js?v={RELEASE_TOKEN}',
+    '/static/js/api.js?v={RELEASE_TOKEN}',
+    '/static/js/exam-system.js?v={RELEASE_TOKEN}'
+];
+""",
+    )
+    _write(
+        root / "docker/nginx.production.conf",
+        """
+location = /static/sw.js {
+    expires -1;
+    add_header Cache-Control "no-store, no-cache, must-revalidate, max-age=0";
+}
+location /static/ {
+    expires 30d;
+}
+""",
+    )
+
+
+def test_static_cache_versions_pass_with_release_token(tmp_path):
+    _write_valid_cache_guard_files(tmp_path)
+
+    assert check_static_cache_versions(tmp_path) == []
+
+
+def test_static_cache_versions_flags_unversioned_controlled_assets(tmp_path):
+    _write_valid_cache_guard_files(tmp_path)
+    _write(
+        tmp_path / "templates/admin/users.html",
+        f"""
+<html><head>
+<link rel="stylesheet" href="/static/css/admin.css">
+<link rel="stylesheet" href="/static/css/siab1-theme.css?v={RELEASE_TOKEN}">
+</head><body></body></html>
+""",
+    )
+
+    issues = check_static_cache_versions(tmp_path)
+
+    assert any("/static/css/admin.css must use release token" in issue.message for issue in issues)
+
+
+def test_static_cache_versions_flags_sidebar_and_service_worker_stale_tokens(tmp_path):
+    _write_valid_cache_guard_files(tmp_path)
+    _write(
+        tmp_path / "static/js/sidebar-loader/modules/00-sidebar-loader-core.js",
+        "const componentVersion = '20260430-perf1';\n",
+    )
+    _write(
+        tmp_path / "static/sw.js",
+        "const CACHE_NAME = 'exam-system-v20260430-perf1';\n"
+        "const CACHE_ASSETS = ['/static/css/exam.css?v=20260418-richtext1'];\n",
+    )
+
+    messages = [issue.message for issue in check_static_cache_versions(tmp_path)]
+
+    assert any("sidebar componentVersion" in message for message in messages)
+    assert any("service worker CACHE_NAME" in message for message in messages)
+    assert any("stale cache token" in message for message in messages)
+
+
+def test_static_cache_versions_requires_sw_no_cache_location_before_static(tmp_path):
+    _write_valid_cache_guard_files(tmp_path)
+    _write(
+        tmp_path / "docker/nginx.production.conf",
+        """
+location /static/ {
+    expires 30d;
+}
+location = /static/sw.js {
+    add_header Cache-Control "public, immutable";
+}
+""",
+    )
+
+    messages = [issue.message for issue in check_static_cache_versions(tmp_path)]
+
+    assert any("must appear before /static/" in message for message in messages)
+    assert any("no-store/no-cache" in message for message in messages)

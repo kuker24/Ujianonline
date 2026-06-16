@@ -256,6 +256,37 @@ settings light-on-light and dark-on-dark inline risks
 settings scoped progress track/fill
 duplicate IDs per template with explicit preserved alternate-exam-shell allowlist
 basic contract-token preservation against base commit for id/name/onclick/onchange/onsubmit/button type/API paths
+production cache-busting token enforcement for SIAB1 runtime CSS/JS
+sidebar componentVersion/cache-key enforcement
+service worker CACHE_NAME and CACHE_ASSETS enforcement
+Nginx /static/sw.js no-store/no-cache location enforcement
+stale runtime token guard for 20260430-perf1, 20260418-richtext1, and 20260610-siab1-ui1
+```
+
+Production cache rollout token:
+
+```text
+20260616-siab1-ui2
+```
+
+Versioned runtime assets covered by the guard:
+
+```text
+/static/css/admin.css?v=20260616-siab1-ui2
+/static/css/student.css?v=20260616-siab1-ui2
+/static/css/exam.css?v=20260616-siab1-ui2
+/static/css/siab1-theme.css?v=20260616-siab1-ui2
+/static/js/sidebar-loader.js?v=20260616-siab1-ui2
+/static/js/api.js?v=20260616-siab1-ui2
+/static/js/auth.js?v=20260616-siab1-ui2
+/static/js/exam-system.js?v=20260616-siab1-ui2
+```
+
+Service worker update:
+
+```text
+CACHE_NAME=siab1-v20260616-siab1-ui2
+/static/sw.js served no-store/no-cache by docker/nginx.production.conf
 ```
 
 Local result:
@@ -278,7 +309,7 @@ Commands and results:
 
 ```text
 python -m pytest -q tests/test_siab1_ui_regressions.py
-15 passed
+19 passed
 
 python -m pytest -q tests/test_normalize_siab1_branding.py
 13 passed
@@ -290,7 +321,7 @@ python -m pytest -q tests/test_mobile_first_feature_flags.py
 12 passed
 
 Combined targeted run:
-43 passed
+47 passed
 ```
 
 ## GitHub Actions workflow results
@@ -321,7 +352,7 @@ The workflow does not deploy, does not build release APK/AAB, does not upload AP
 
 `python-tests` sets test-only `SECRET_KEY` and `DATABASE_URL` so pytest can import `app.config`. `Security audit report` runs `scripts/check_security.py` as a non-gating audit step because dependency CVE remediation requires backend dependency upgrades outside the UI-only scope.
 
-At document update time the workflow was updated after initial failed CI attempts. The final PR status must be read from GitHub checks after pushing this commit.
+At document update time for the cache-busting commit, the previous PR head was green. The final PR status must be read from GitHub checks after pushing the cache-busting commit.
 
 ## Visual runtime screenshots
 
