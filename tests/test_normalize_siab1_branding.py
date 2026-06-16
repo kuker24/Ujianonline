@@ -7,6 +7,7 @@ from scripts.normalize_siab1_branding import (
     LEGACY_APP_NAMES,
     TARGET_APP_NAME,
     async_database_url,
+    asyncpg_connect_args,
     redacted_database_url,
     run_cli,
     safe_database_label,
@@ -239,6 +240,17 @@ def test_async_url_is_not_converted_again():
     url = "postgresql+asyncpg://user:pass@localhost/db"
 
     assert async_database_url(url) == url
+
+
+def test_asyncpg_engine_disables_statement_cache_for_pgbouncer():
+    conn = FakeConn([])
+
+    code, _out, err = run_with_fake(["--dry-run"], conn)
+
+    assert code == 0
+    assert err == []
+    assert conn.engine_kwargs["connect_args"] == {"statement_cache_size": 0}
+    assert asyncpg_connect_args("sqlite+aiosqlite:///tmp.db") == {}
 
 
 def test_no_database_connection_on_argument_error():

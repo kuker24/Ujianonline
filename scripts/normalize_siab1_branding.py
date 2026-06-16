@@ -115,6 +115,13 @@ def validate_database_url(settings: SettingsLike) -> str:
     return async_database_url(database_url)
 
 
+def asyncpg_connect_args(database_url: str) -> dict[str, int]:
+    """Disable asyncpg prepared-statement cache for PgBouncer compatibility."""
+    if database_url.startswith("postgresql+asyncpg://"):
+        return {"statement_cache_size": 0}
+    return {}
+
+
 async def fetch_legacy_rows(conn: Any, *, text_fn: Callable[..., Any], bindparam_fn: Callable[..., Any]) -> list[BrandingRow]:
     stmt = text_fn(
         "SELECT id, app_name FROM system_settings "
@@ -165,6 +172,7 @@ async def run_normalization(
         database_url,
         echo=False,
         pool_pre_ping=bool(getattr(settings, "db_pool_pre_ping", True)),
+        connect_args=asyncpg_connect_args(database_url),
     )
     print_fn(f"Database target: {safe_database_label(database_url)}")
 
