@@ -1,0 +1,45 @@
+/* SIAB1 branding-only helpers.
+ * This file must not theme pages globally; it only adjusts brand text blocks so the
+ * legacy dark/glass UI stays visually unchanged while the official name is visible.
+ */
+.sidebar-header .siab1-brand-name {
+    line-height: 1.05;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+}
+
+.sidebar-header .siab1-brand-subtitle {
+    display: block;
+    margin-top: 0.2rem;
+    font-size: 0.62rem;
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: 0.02em;
+    opacity: 0.72;
+}
+
+.login-header .siab1-brand-name,
+.login-logo .siab1-brand-name,
+.student-header .siab1-brand-name {
+    line-height: 1.1;
+    letter-spacing: 0.02em;
+}
+
+.login-header .siab1-brand-subtitle,
+.login-logo .siab1-brand-subtitle,
+.student-header .siab1-brand-subtitle {
+    display: block;
+    margin-top: 0.35rem;
+    font-size: 0.82rem;
+    font-weight: 500;
+    line-height: 1.35;
+    opacity: 0.78;
+}
+
+@media (max-width: 480px) {
+    .login-header .siab1-brand-subtitle,
+    .login-logo .siab1-brand-subtitle,
+    .student-header .siab1-brand-subtitle {
+        font-size: 0.74rem;
+    }
+}

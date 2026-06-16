@@ -12,8 +12,9 @@
 
     <!-- Core CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/admin.css?v=20260616-siab1-ui2">
-    <link rel="stylesheet" href="/static/css/responsive.css">
+    <link rel="stylesheet" href="/static/css/admin.css?v=20260617-siab1-legacy-ui1">
+    <link rel="stylesheet" href="/static/css/siab1-branding.css?v=20260617-siab1-legacy-ui1">
+    <link rel="stylesheet" href="/static/css/responsive.css?v=20260617-siab1-legacy-ui1">
     <link rel="stylesheet" href="/static/css/utilities.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
     <style>
@@ -23,12 +24,12 @@
             align-items: center;
             gap: 1rem;
             padding: 1rem;
-            border: 2px solid var(--siab1-border, var(--border-color));
+            border: 2px solid var(--border-color);
             border-radius: 0.75rem;
             cursor: pointer;
             transition: all 0.3s ease;
-            background: var(--siab1-surface, #ffffff);
-            color: var(--siab1-text, var(--text-primary));
+            background: var(--dark-card);
+            color: var(--text-primary);
         }
 
         .backup-option:hover {
@@ -77,14 +78,14 @@
 
         /* Upload Zone */
         .upload-zone {
-            border: 2px dashed var(--siab1-border-strong, var(--border-color));
+            border: 2px dashed var(--border-color);
             border-radius: 1rem;
             padding: 2rem;
             text-align: center;
             transition: all 0.3s ease;
             cursor: pointer;
-            background: var(--siab1-surface-muted, rgba(255, 255, 255, 0.04));
-            color: var(--siab1-text, var(--text-primary));
+            background: rgba(255, 255, 255, 0.04);
+            color: var(--text-primary);
         }
 
         .upload-zone:hover,
@@ -107,7 +108,7 @@
             border-radius: 4px;
             overflow: hidden;
             margin-top: 1rem;
-            border: 1px solid var(--siab1-border, transparent);
+            border: 1px solid var(--border-color);
         }
 
         .settings-backup-progress-bar .fill {
@@ -181,16 +182,15 @@
             box-shadow: 0 0 8px rgba(99, 102, 241, 0.4);
         }
 
-        /* Settings surfaces are light under the SIAB1 theme. Keep form text readable. */
+        /* Keep settings form text readable on the legacy dark UI. */
         .form-control {
-            color: var(--siab1-text, var(--text-primary)) !important;
+            color: var(--text-primary) !important;
         }
 
         .form-control::placeholder {
             color: #94a3b8 !important;
         }
     </style>
-    <link rel="stylesheet" href="/static/css/siab1-theme.css?v=20260616-siab1-ui2">
 </head>
 
 <body>
@@ -213,7 +213,7 @@
                 <div id="warmup-glow"
                     style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: radial-gradient(circle at 50% 50%, rgba(249, 115, 22, 0.08), transparent 70%); pointer-events: none; opacity: 0; transition: opacity 0.5s;">
                 </div>
-                <h3 style="margin-bottom: 1rem; color: var(--siab1-text); display: flex; align-items: center; gap: 0.75rem;">
+                <h3 style="margin-bottom: 1rem; color: var(--text-primary); display: flex; align-items: center; gap: 0.75rem;">
                     <span
                         style="width: 42px; height: 42px; border-radius: 12px; background: linear-gradient(135deg, #f97316, #ef4444); display: flex; align-items: center; justify-content: center; font-size: 1.25rem;">🔥</span>
                     Pemanasan Sistem
@@ -243,18 +243,18 @@
                     <!-- Progress Bar -->
                     <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
                         <div
-                            style="flex: 1; height: 10px; background: #e2e8f0; border: 1px solid var(--siab1-border); border-radius: 5px; overflow: hidden;">
+                            style="flex: 1; height: 10px; background: #e2e8f0; border: 1px solid var(--border-color); border-radius: 5px; overflow: hidden;">
                             <div id="warmup-fill"
                                 style="height: 100%; width: 0%; background: linear-gradient(90deg, #f97316, #22c55e); border-radius: 5px; transition: width 0.5s ease;">
                             </div>
                         </div>
                         <span id="warmup-percent"
-                            style="color: var(--siab1-text); font-weight: 700; font-size: 1.1rem; min-width: 48px; text-align: right;">0%</span>
+                            style="color: var(--text-primary); font-weight: 700; font-size: 1.1rem; min-width: 48px; text-align: right;">0%</span>
                     </div>
 
                     <!-- Step Log -->
                     <div id="warmup-log"
-                        style="background: var(--siab1-surface-muted); border: 1px solid var(--siab1-border); border-radius: 12px; padding: 1rem; max-height: 320px; overflow-y: auto; font-family: 'Consolas', 'Courier New', monospace; font-size: 0.85rem; line-height: 1.8;">
+                        style="background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-color); border-radius: 12px; padding: 1rem; max-height: 320px; overflow-y: auto; font-family: 'Consolas', 'Courier New', monospace; font-size: 0.85rem; line-height: 1.8;">
                         <div style="color: var(--text-secondary);"><i class="fas fa-circle-notch fa-spin"
                                 style="color: #f97316;"></i> Memulai pemanasan sistem...</div>
                     </div>
@@ -270,7 +270,7 @@
 
             <!-- General Settings -->
             <div class="card siab1-surface" style="margin-bottom: 1.5rem;">
-                <h3 style="margin-bottom: 1rem; color: var(--siab1-text);"><i class="fas fa-sliders" style="color: var(--primary);"></i>
+                <h3 style="margin-bottom: 1rem; color: var(--text-primary);"><i class="fas fa-sliders" style="color: var(--primary);"></i>
                     Pengaturan Umum</h3>
 
                 <div class="form-group">
@@ -297,7 +297,7 @@
             <div class="card siab1-surface" style="margin-bottom: 1.5rem; border: 1px solid rgba(245, 158, 11, 0.35);">
                 <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
                     <div style="flex: 1; min-width: 260px;">
-                        <h3 style="margin-bottom: 0.5rem; color: var(--siab1-text);">
+                        <h3 style="margin-bottom: 0.5rem; color: var(--text-primary);">
                             <i class="fas fa-mobile-screen-button" style="color: #f59e0b;"></i>
                             Pengaturan APK Lanjutan
                         </h3>
@@ -324,7 +324,7 @@
                     style="position: absolute; top: -10px; right: 20px; background: var(--danger); color: white; padding: 4px 12px; border-radius: 12px; font-size: 0.75rem; font-weight: 600;">
                     <i class="fas fa-lock"></i> MODE KEAMANAN
                 </div>
-                <h3 style="margin-bottom: 1rem; color: var(--siab1-text);">
+                <h3 style="margin-bottom: 1rem; color: var(--text-primary);">
                     <i class="fas fa-mobile-screen" style="color: var(--danger);"></i>
                     Pengaturan APK Token
                 </h3>
@@ -393,7 +393,7 @@
                     <div class="input-group">
                         <input type="text" class="form-control" id="new-update-apk-token"
                             placeholder="Contoh: BUILD-20260305103000-XYZ789"
-                            style="font-family: 'Consolas', monospace; background: #fffbeb; border-color: #f59e0b; color: var(--siab1-text);">
+                            style="font-family: 'Consolas', monospace; background: #fffbeb; border-color: #f59e0b; color: var(--text-primary);">
                         <button class="btn btn-outline-warning" type="button"
                             onclick="navigator.clipboard.readText().then(t => document.getElementById('new-update-apk-token').value = t.trim())"
                             title="Paste dari Clipboard">
@@ -413,7 +413,7 @@
                     <div class="input-group">
                         <textarea class="form-control" id="allowed-signatures" rows="2"
                             placeholder="Contoh: 297ad1bf..., a1b2c3d4... (pisahkan dengan koma/newline)"
-                            style="font-family: 'Consolas', monospace; background: #fef2f2; border-color: var(--danger); color: var(--siab1-text);"></textarea>
+                            style="font-family: 'Consolas', monospace; background: #fef2f2; border-color: var(--danger); color: var(--text-primary);"></textarea>
                     </div>
                     <small class="form-text" style="color: #991b1b;">
                         Label: <strong>stable</strong>.
@@ -428,7 +428,7 @@
                     <div class="input-group">
                         <textarea class="form-control" id="new-update-signatures" rows="2"
                             placeholder="Contoh: b7c8d9..., e1f2g3... (pisahkan dengan koma/newline)"
-                            style="font-family: 'Consolas', monospace; background: #fffbeb; border-color: #f59e0b; color: var(--siab1-text);"></textarea>
+                            style="font-family: 'Consolas', monospace; background: #fffbeb; border-color: #f59e0b; color: var(--text-primary);"></textarea>
                     </div>
                     <small class="form-text" style="color: #92400e;">
                         Label: <strong>new update</strong>. Boleh kosong jika belum ada rilis baru.
@@ -486,7 +486,7 @@
 
             <!-- Developer/Tester Mode Section -->
             <div class="card siab1-surface" style="margin-bottom: 1.5rem;">
-                <h3 style="margin-bottom: 1rem; color: var(--siab1-text);">
+                <h3 style="margin-bottom: 1rem; color: var(--text-primary);">
                     <i class="fas fa-code" style="color: var(--warning);"></i> Mode Developer/Tester
                 </h3>
 
@@ -509,7 +509,7 @@
                 <!-- Toggle Switch -->
                 <div class="form-group">
                     <div
-                        style="display: flex; align-items: center; gap: 1rem; padding: 1rem; background: var(--siab1-surface-muted); border: 1px solid var(--siab1-border); border-radius: 0.75rem;">
+                        style="display: flex; align-items: center; gap: 1rem; padding: 1rem; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-color); border-radius: 0.75rem;">
                         <label class="toggle-switch"
                             style="display: flex; align-items: center; cursor: pointer; margin: 0;">
                             <input type="checkbox" id="developer-mode" onclick="handleDeveloperModeClick(event)"
@@ -517,7 +517,7 @@
                             <span class="slider"></span>
                         </label>
                         <div style="flex: 1; margin-left: 1.5rem;">
-                            <strong style="display: block; margin-bottom: 0.25rem; color: var(--siab1-text);">Izinkan ujian lewat
+                            <strong style="display: block; margin-bottom: 0.25rem; color: var(--text-primary);">Izinkan ujian lewat
                                 browser
                                 biasa</strong>
                             <p style="margin: 0; font-size: 0.875rem; color: var(--text-secondary);">Untuk testing dan
@@ -541,7 +541,7 @@
 
             <!-- Android APK Section -->
             <div class="card siab1-surface" style="margin-bottom: 1.5rem;">
-                <h3 style="margin-bottom: 1rem; color: var(--siab1-text);">
+                <h3 style="margin-bottom: 1rem; color: var(--text-primary);">
                     <i class="fas fa-mobile-alt" style="color: #3b82f6;"></i> Akses Aplikasi Android
                 </h3>
 
@@ -562,7 +562,7 @@
                 <!-- Toggle Switch -->
                 <div class="form-group">
                     <div
-                        style="display: flex; align-items: center; gap: 1rem; padding: 1rem; background: var(--siab1-surface-muted); border: 1px solid var(--siab1-border); border-radius: 0.75rem;">
+                        style="display: flex; align-items: center; gap: 1rem; padding: 1rem; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-color); border-radius: 0.75rem;">
                         <label class="toggle-switch"
                             style="display: flex; align-items: center; cursor: pointer; margin: 0;">
                             <input type="checkbox" id="mobile-apps-mode" onclick="handleMobileAppsClick(event)"
@@ -570,7 +570,7 @@
                             <span class="slider"></span>
                         </label>
                         <div style="flex: 1; margin-left: 1.5rem;">
-                            <strong style="display: block; margin-bottom: 0.25rem; color: var(--siab1-text);">Izinkan APK Resmi
+                            <strong style="display: block; margin-bottom: 0.25rem; color: var(--text-primary);">Izinkan APK Resmi
                                 Android</strong>
                             <p style="margin: 0; font-size: 0.875rem; color: var(--text-secondary);">Runtime utama ujian siswa; SEB PC hanya legacy opsional</p>
                         </div>
@@ -591,7 +591,7 @@
 
             <!-- Server Maintenance Mode Section -->
             <div class="card siab1-surface" style="margin-bottom: 1.5rem;">
-                <h3 style="margin-bottom: 1rem; color: var(--siab1-text);">
+                <h3 style="margin-bottom: 1rem; color: var(--text-primary);">
                     <i class="fas fa-tools" style="color: var(--danger);"></i> Mode Pemeliharaan Server
                 </h3>
 
@@ -613,7 +613,7 @@
                 <!-- Toggle Switch -->
                 <div class="form-group">
                     <div
-                        style="display: flex; align-items: center; gap: 1rem; padding: 1rem; background: var(--siab1-surface-muted); border: 1px solid var(--siab1-border); border-radius: 0.75rem;">
+                        style="display: flex; align-items: center; gap: 1rem; padding: 1rem; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-color); border-radius: 0.75rem;">
                         <label class="toggle-switch"
                             style="display: flex; align-items: center; cursor: pointer; margin: 0;">
                             <input type="checkbox" id="maintenance-mode" onclick="handleMaintenanceModeClick(event)"
@@ -621,7 +621,7 @@
                             <span class="slider"></span>
                         </label>
                         <div style="flex: 1; margin-left: 1.5rem;">
-                            <strong style="display: block; margin-bottom: 0.25rem; color: var(--siab1-text);">Blokir akses
+                            <strong style="display: block; margin-bottom: 0.25rem; color: var(--text-primary);">Blokir akses
                                 non-admin/developer</strong>
                             <p style="margin: 0; font-size: 0.875rem; color: var(--text-secondary);">Untuk pemeliharaan
                                 dan keamanan sistem</p>
@@ -651,7 +651,7 @@
                     <i class="fas fa-snowflake"></i> RAHASIA
                 </div>
 
-                <h3 style="margin-bottom: 1rem; color: var(--siab1-text);">
+                <h3 style="margin-bottom: 1rem; color: var(--text-primary);">
                     <i class="fas fa-snowflake" style="color: #f43f5e;"></i> Emergency Freeze Mode
                 </h3>
 
@@ -670,7 +670,7 @@
 
                 <div class="form-group">
                     <div
-                        style="display: flex; align-items: center; gap: 1rem; padding: 1rem; background: var(--siab1-surface-muted); border: 1px solid var(--siab1-border); border-radius: 0.75rem;">
+                        style="display: flex; align-items: center; gap: 1rem; padding: 1rem; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-color); border-radius: 0.75rem;">
                         <label class="toggle-switch"
                             style="display: flex; align-items: center; cursor: pointer; margin: 0;">
                             <input type="checkbox" id="freeze-mode" onclick="handleFreezeModeClick(event)"
@@ -678,7 +678,7 @@
                             <span class="slider"></span>
                         </label>
                         <div style="flex: 1; margin-left: 1.5rem;">
-                            <strong style="display: block; margin-bottom: 0.25rem; color: var(--siab1-text);">Kunci semua aktivitas
+                            <strong style="display: block; margin-bottom: 0.25rem; color: var(--text-primary);">Kunci semua aktivitas
                                 non-developer</strong>
                             <p style="margin: 0; font-size: 0.875rem; color: var(--text-secondary);">
                                 Hanya akun developer-exempt yang tetap bisa bertindak.
@@ -710,7 +710,7 @@
 
             <!-- Backup Section -->
             <div class="card siab1-surface" style="margin-bottom: 1.5rem;">
-                <h3 style="margin-bottom: 1.5rem; color: var(--siab1-text);">
+                <h3 style="margin-bottom: 1.5rem; color: var(--text-primary);">
                     <i class="fas fa-database" style="color: var(--success);"></i> Backup Data
                 </h3>
 
@@ -724,7 +724,7 @@
                         <input type="radio" name="backup-type" value="all" checked>
                         <div class="icon all"><i class="fas fa-globe"></i></div>
                         <div>
-                            <strong style="color: var(--siab1-text);">Semua Data</strong>
+                            <strong style="color: var(--text-primary);">Semua Data</strong>
                             <div style="font-size: 0.8rem; color: var(--text-secondary);">User, Ujian, Soal</div>
                         </div>
                     </label>
@@ -732,7 +732,7 @@
                         <input type="radio" name="backup-type" value="teachers">
                         <div class="icon teachers"><i class="fas fa-chalkboard-user"></i></div>
                         <div>
-                            <strong style="color: var(--siab1-text);">Guru Saja</strong>
+                            <strong style="color: var(--text-primary);">Guru Saja</strong>
                             <div style="font-size: 0.8rem; color: var(--text-secondary);">Akun guru/teacher</div>
                         </div>
                     </label>
@@ -740,7 +740,7 @@
                         <input type="radio" name="backup-type" value="students">
                         <div class="icon students"><i class="fas fa-user-graduate"></i></div>
                         <div>
-                            <strong style="color: var(--siab1-text);">Siswa Saja</strong>
+                            <strong style="color: var(--text-primary);">Siswa Saja</strong>
                             <div style="font-size: 0.8rem; color: var(--text-secondary);">Akun siswa/student</div>
                         </div>
                     </label>
@@ -748,7 +748,7 @@
                         <input type="radio" name="backup-type" value="exams">
                         <div class="icon exams"><i class="fas fa-file-lines"></i></div>
                         <div>
-                            <strong style="color: var(--siab1-text);">Ujian Saja</strong>
+                            <strong style="color: var(--text-primary);">Ujian Saja</strong>
                             <div style="font-size: 0.8rem; color: var(--text-secondary);">Ujian tanpa user</div>
                         </div>
                     </label>
@@ -773,7 +773,7 @@
 
             <!-- Restore Section -->
             <div class="card siab1-surface" style="margin-bottom: 1.5rem;">
-                <h3 style="margin-bottom: 1.5rem; color: var(--siab1-text);">
+                <h3 style="margin-bottom: 1.5rem; color: var(--text-primary);">
                     <i class="fas fa-upload" style="color: var(--info);"></i> Restore Backup
                 </h3>
 
@@ -781,13 +781,13 @@
                     <input type="file" id="backup-file" accept=".json" style="display: none;"
                         onchange="handleFileSelect(event)">
                     <i class="fas fa-cloud-upload-alt"></i>
-                    <h4 style="margin-bottom: 0.5rem; color: var(--siab1-text);">Drop file backup disini</h4>
+                    <h4 style="margin-bottom: 0.5rem; color: var(--text-primary);">Drop file backup disini</h4>
                     <p style="color: var(--text-secondary);">atau klik untuk memilih file (.json)</p>
                 </div>
 
                 <div id="import-preview" style="display: none; margin-top: 1.5rem;">
-                    <div class="card siab1-surface" style="background: var(--siab1-surface-muted); border: 1px solid var(--siab1-border); padding: 1rem;">
-                        <h4 style="margin-bottom: 1rem; color: var(--siab1-text);"><i class="fas fa-eye"></i> Preview Data</h4>
+                    <div class="card siab1-surface" style="background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-color); padding: 1rem;">
+                        <h4 style="margin-bottom: 1rem; color: var(--text-primary);"><i class="fas fa-eye"></i> Preview Data</h4>
                         <div style="display: flex; gap: 2rem; flex-wrap: wrap;">
                             <div><span style="color: var(--text-secondary);">Users:</span> <strong
                                     id="preview-users">0</strong></div>
@@ -819,7 +819,7 @@
 
             <!-- Telegram Broadcast Section -->
             <div class="card siab1-surface" style="margin-bottom: 1.5rem;">
-                <h3 style="margin-bottom: 1rem; color: var(--siab1-text);">
+                <h3 style="margin-bottom: 1rem; color: var(--text-primary);">
                     <i class="fas fa-paper-plane" style="color: #17a2b8;"></i> Telegram Broadcast
                 </h3>
 
@@ -842,7 +842,7 @@
                         <label class="form-label">Preview</label>
                         <div id="broadcast-preview" style="
                             padding: 1.25rem;
-                            background: var(--siab1-navy-950);
+                            background: var(--dark-bg);
                             border: 1px solid rgba(191, 219, 254, 0.2);
                             border-radius: 0.75rem;
                             min-height: 100px;
@@ -875,7 +875,7 @@
 
             <!-- Cache Section -->
             <div class="card siab1-surface">
-                <h3 style="margin-bottom: 1rem; color: var(--siab1-text);"><i class="fas fa-broom"
+                <h3 style="margin-bottom: 1rem; color: var(--text-primary);"><i class="fas fa-broom"
                         style="color: var(--warning);"></i> Pembersihan
                 </h3>
 
@@ -888,10 +888,10 @@
         </main>
     </div>
 
-    <script src="/static/js/api.js?v=20260616-siab1-ui2"></script>
-    <script src="/static/js/auth.js?v=20260616-siab1-ui2"></script>
+    <script src="/static/js/api.js?v=20260617-siab1-legacy-ui1"></script>
+    <script src="/static/js/auth.js?v=20260617-siab1-legacy-ui1"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
-    <script src="/static/js/sidebar-loader.js?v=20260616-siab1-ui2"></script>
+    <script src="/static/js/sidebar-loader.js?v=20260617-siab1-legacy-ui1"></script>
     <script>
         auth.requireAuth(['admin', 'developer']);
 

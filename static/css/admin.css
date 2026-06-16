@@ -745,13 +745,13 @@ select option {
     background: rgba(15, 23, 42, 0.8);
 }
 
-/* Dark-surface Chrome autofill background. Light SIAB1 surfaces override this in siab1-theme.css. */
-.siab1-dark-surface input:-webkit-autofill,
-.siab1-dark-surface input:-webkit-autofill:hover,
-.siab1-dark-surface input:-webkit-autofill:focus,
-.siab1-dark-surface input:-webkit-autofill:active {
+/* Fix for Chrome Autofill background */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
     -webkit-box-shadow: 0 0 0 30px rgba(15, 23, 42, 0.9) inset !important;
-    -webkit-text-fill-color: #ffffff !important;
+    -webkit-text-fill-color: var(--text-primary) !important;
     transition: background-color 5000s ease-in-out 0s;
     caret-color: white;
 }
@@ -1291,10 +1291,7 @@ td {
     visibility: visible;
 }
 
-.modal.siab1-surface,
-.modal.siab1-dark-surface,
-.modal.siab1-brand-surface,
-.modal.siab1-warning-surface {
+.modal {
     background: var(--dark-lighter);
     width: 100%;
     max-width: 500px;
@@ -1617,10 +1614,7 @@ td {
         gap: 1rem;
     }
 
-    .modal.siab1-surface,
-    .modal.siab1-dark-surface,
-    .modal.siab1-brand-surface,
-    .modal.siab1-warning-surface {
+    .modal {
         width: 95vw !important;
         max-width: none;
         margin: 1rem;
@@ -2124,10 +2118,7 @@ td {
     .card,
     .stat-card,
     .sidebar,
-    .modal.siab1-surface,
-    .modal.siab1-dark-surface,
-    .modal.siab1-brand-surface,
-    .modal.siab1-warning-surface,
+    .modal,
     .toast,
     .dropdown-menu,
     .login-card {
