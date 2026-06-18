@@ -4,7 +4,7 @@ Routes stay under ``/api/exams`` but are separated from the large exam module.
 """
 
 import hashlib
-import re
+import logging
 from datetime import datetime
 from typing import Optional
 
@@ -19,7 +19,8 @@ from app.config import settings
 from app.core.exam_access_policy import (
     is_exam_participant_role as _is_exam_participant_role,
 )
-from app.core.feature_flags import require_feature_enabled
+from app.core.export_utils import attachment_headers, safe_ascii_filename
+from app.core.feature_flags import HEAVY_EXPORT_DISABLED_MESSAGE, require_feature_enabled
 from app.core.roles import ROLE_DEVELOPER, is_developer_exam_hidden_for_viewer
 from app.core.security import get_current_teacher, get_current_user, is_pengawas_user
 from app.database import get_db, get_db_read
@@ -28,6 +29,7 @@ from app.models.session import ExamSession
 from app.models.user import User
 
 router = APIRouter(prefix="/api/exams", tags=["Exam Exports"])
+logger = logging.getLogger(__name__)
 
 
 async def _get_exam_creator_role(db: AsyncSession, creator_id: Optional[int]) -> Optional[str]:
@@ -87,7 +89,7 @@ async def get_exam_analytics_pdf(
         settings.heavy_exports_active,
         "heavy_export",
         status_code=503,
-        message="PDF analytics sedang dinonaktifkan selama mode ujian/puncak.",
+        message=HEAVY_EXPORT_DISABLED_MESSAGE,
     )
     from app.api.analytics import (
         _build_class_performance_payload,
@@ -102,7 +104,7 @@ async def get_exam_analytics_pdf(
     if not REPORTLAB_AVAILABLE:
         raise HTTPException(
             status_code=501,
-            detail="PDF export tidak tersedia. Install ReportLab: pip install reportlab",
+            detail="Dependency PDF tidak tersedia",
         )
 
     exam_result = await db.execute(
@@ -184,16 +186,19 @@ async def get_exam_analytics_pdf(
         "generated_at": exported_at,
     }
 
-    pdf_bytes = generate_exam_analytics_pdf(payload)
+    try:
+        pdf_bytes = generate_exam_analytics_pdf(payload)
+    except Exception as exc:
+        logger.exception("Failed generating exam analytics PDF", extra={"exam_id": exam_id})
+        raise HTTPException(status_code=500, detail="PDF gagal dibuat") from exc
 
-    safe_title = re.sub(r"[^\w\s-]", "", exam.title or "ujian").strip()
-    safe_title = re.sub(r"\s+", "_", safe_title) or "ujian"
+    safe_title = safe_ascii_filename(exam.title or "ujian", fallback="ujian")
     filename = f"analitik_ujian_{safe_title}_{datetime.now().strftime('%Y%m%d')}.pdf"
 
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers=attachment_headers(filename, fallback="analitik_ujian.pdf"),
     )
 
 
@@ -208,14 +213,14 @@ async def get_exam_results_pdf(
         settings.heavy_exports_active,
         "heavy_export",
         status_code=503,
-        message="PDF hasil ujian sedang dinonaktifkan selama mode ujian/puncak.",
+        message=HEAVY_EXPORT_DISABLED_MESSAGE,
     )
     from app.core.pdf_generator import REPORTLAB_AVAILABLE, generate_exam_results_pdf
 
     if not REPORTLAB_AVAILABLE:
         raise HTTPException(
             status_code=501,
-            detail="PDF export tidak tersedia. Install ReportLab: pip install reportlab",
+            detail="Dependency PDF tidak tersedia",
         )
 
     result = await db.execute(
@@ -286,20 +291,25 @@ async def get_exam_results_pdf(
     }
 
     exam_date = exam.start_time.strftime("%d %B %Y") if exam.start_time else "N/A"
-    pdf_bytes = generate_exam_results_pdf(
-        exam_title=exam.title,
-        exam_date=exam_date,
-        results=results,
-        summary=summary,
-        creator_name=creator_name,
-    )
+    try:
+        pdf_bytes = generate_exam_results_pdf(
+            exam_title=exam.title,
+            exam_date=exam_date,
+            results=results,
+            summary=summary,
+            creator_name=creator_name,
+        )
+    except Exception as exc:
+        logger.exception("Failed generating exam results PDF", extra={"exam_id": exam_id})
+        raise HTTPException(status_code=500, detail="PDF gagal dibuat") from exc
 
-    filename = f"hasil_ujian_{exam.title.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.pdf"
+    safe_title = safe_ascii_filename(exam.title or "ujian", fallback="ujian")
+    filename = f"hasil_ujian_{safe_title}_{datetime.now().strftime('%Y%m%d')}.pdf"
 
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers=attachment_headers(filename, fallback="hasil_ujian.pdf"),
     )
 
 
@@ -315,14 +325,14 @@ async def get_session_certificate(
         settings.heavy_exports_active,
         "heavy_export",
         status_code=503,
-        message="Sertifikat PDF sedang dinonaktifkan selama mode ujian/puncak.",
+        message=HEAVY_EXPORT_DISABLED_MESSAGE,
     )
     from app.core.pdf_generator import REPORTLAB_AVAILABLE, generate_certificate_pdf
 
     if not REPORTLAB_AVAILABLE:
         raise HTTPException(
             status_code=501,
-            detail="PDF export tidak tersedia. Install ReportLab: pip install reportlab",
+            detail="Dependency PDF tidak tersedia",
         )
 
     stmt = (
@@ -360,18 +370,27 @@ async def get_session_certificate(
 
     completion_date = session.end_time.strftime("%d %B %Y") if session.end_time else "N/A"
 
-    pdf_bytes = generate_certificate_pdf(
-        student_name=session.user.full_name or session.user.username,
-        exam_title=session.exam.title,
-        score=score,
-        completion_date=completion_date,
-        certificate_id=f"CERT-{certificate_id}",
-    )
+    try:
+        pdf_bytes = generate_certificate_pdf(
+            student_name=session.user.full_name or session.user.username,
+            exam_title=session.exam.title,
+            score=score,
+            completion_date=completion_date,
+            certificate_id=f"CERT-{certificate_id}",
+        )
+    except Exception as exc:
+        logger.exception(
+            "Failed generating certificate PDF",
+            extra={"exam_id": exam_id, "session_id": session_id},
+        )
+        raise HTTPException(status_code=500, detail="PDF gagal dibuat") from exc
 
-    filename = f"sertifikat_{session.user.username}_{session.exam.title.replace(' ', '_')}.pdf"
+    safe_username = safe_ascii_filename(session.user.username or "siswa", fallback="siswa")
+    safe_title = safe_ascii_filename(session.exam.title or "ujian", fallback="ujian")
+    filename = f"sertifikat_{safe_username}_{safe_title}.pdf"
 
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers=attachment_headers(filename, fallback="sertifikat.pdf"),
     )

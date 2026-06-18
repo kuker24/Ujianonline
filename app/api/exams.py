@@ -90,7 +90,8 @@ from app.core.roles import (
 )
 from app.core.session_recovery import evaluate_session_recovery
 from app.config import settings
-from app.core.feature_flags import require_feature_enabled
+from app.core.export_utils import attachment_headers, safe_ascii_filename
+from app.core.feature_flags import HEAVY_EXPORT_DISABLED_MESSAGE, require_feature_enabled
 from app.core.rate_limiter import RateLimiters, check_rate_limit
 from app.services.exam_service import ExamService
 from app.services.exam_submission_service import finalize_exam_session_submission
@@ -1039,7 +1040,7 @@ async def export_exam_participation_summary(
         settings.heavy_exports_active,
         "heavy_export",
         status_code=503,
-        message="Ekspor partisipasi sedang dinonaktifkan selama mode ujian/puncak.",
+        message=HEAVY_EXPORT_DISABLED_MESSAGE,
     )
     exam_result = await db.execute(
         select(
@@ -1222,8 +1223,7 @@ async def export_exam_participation_summary(
     if export_format == "excel":
         export_format = "xls"
 
-    safe_title = re.sub(r"[^\w\s-]", "", exam["title"] or "ujian").strip()
-    safe_title = re.sub(r"\s+", "_", safe_title) or "ujian"
+    safe_title = safe_ascii_filename(exam["title"] or "ujian", fallback="ujian")
     filename_base = f"kehadiran_ujian_{safe_title}_{datetime.now().strftime('%Y%m%d')}"
 
     if export_format == "csv":
@@ -1238,7 +1238,7 @@ async def export_exam_participation_summary(
         return Response(
             content="\ufeff" + output.getvalue(),
             media_type="text/csv; charset=utf-8",
-            headers={"Content-Disposition": f'attachment; filename="{filename_base}.csv"'},
+            headers=attachment_headers(f"{filename_base}.csv", fallback="kehadiran_ujian.csv"),
         )
 
     if export_format == "xls":
@@ -1272,7 +1272,7 @@ async def export_exam_participation_summary(
         return Response(
             content="\ufeff" + html_content,
             media_type="application/vnd.ms-excel; charset=utf-8",
-            headers={"Content-Disposition": f'attachment; filename="{filename_base}.xls"'},
+            headers=attachment_headers(f"{filename_base}.xls", fallback="kehadiran_ujian.xls"),
         )
 
     if export_format == "pdf":
@@ -1316,11 +1316,15 @@ async def export_exam_participation_summary(
             ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
         ]))
         story.append(pdf_table)
-        doc.build(story)
+        try:
+            doc.build(story)
+        except Exception as exc:
+            logger.exception("Failed generating participation summary PDF", extra={"exam_id": exam_id})
+            raise HTTPException(status_code=500, detail="PDF gagal dibuat") from exc
         return Response(
             content=buffer.getvalue(),
             media_type="application/pdf",
-            headers={"Content-Disposition": f'attachment; filename="{filename_base}.pdf"'},
+            headers=attachment_headers(f"{filename_base}.pdf", fallback="kehadiran_ujian.pdf"),
         )
 
     if export_format == "docx":
@@ -1353,11 +1357,15 @@ async def export_exam_participation_summary(
             for idx, value in enumerate(row):
                 cells[idx].text = str(value if value is not None else "")
         buffer = io.BytesIO()
-        document.save(buffer)
+        try:
+            document.save(buffer)
+        except Exception as exc:
+            logger.exception("Failed generating participation summary DOCX", extra={"exam_id": exam_id})
+            raise HTTPException(status_code=500, detail="DOCX gagal dibuat") from exc
         return Response(
             content=buffer.getvalue(),
             media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            headers={"Content-Disposition": f'attachment; filename="{filename_base}.docx"'},
+            headers=attachment_headers(f"{filename_base}.docx", fallback="kehadiran_ujian.docx"),
         )
 
     raise HTTPException(status_code=400, detail="Format export tidak didukung")

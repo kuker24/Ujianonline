@@ -15,7 +15,8 @@ from sqlalchemy import select, func, update, delete, or_
 from sqlalchemy.exc import IntegrityError
 
 from app.config import settings
-from app.core.feature_flags import require_feature_enabled
+from app.core.export_utils import attachment_headers
+from app.core.feature_flags import HEAVY_EXPORT_DISABLED_MESSAGE, require_feature_enabled
 from app.database import get_db, get_db_read
 from app.models.user import User
 from app.models.activity_log import UserActivityLog
@@ -761,7 +762,7 @@ async def export_users(
         settings.heavy_exports_active,
         "heavy_export",
         status_code=503,
-        message="Export pengguna sedang dinonaktifkan selama mode ujian/puncak.",
+        message=HEAVY_EXPORT_DISABLED_MESSAGE,
     )
     # Reuse filter logic but explicitly exclude privileged control-plane accounts.
     # Keep the export projection lightweight to avoid User selectin relationship cascades.
@@ -812,10 +813,11 @@ async def export_users(
             ])
 
         output.seek(0)
+        filename = f"users_export_{datetime.now().strftime('%Y%m%d')}.csv"
         return StreamingResponse(
             iter([output.getvalue()]),
             media_type="text/csv",
-            headers={"Content-Disposition": f"attachment; filename=users_export_{datetime.now().strftime('%Y%m%d')}.csv"}
+            headers=attachment_headers(filename, fallback="users_export.csv")
         )
     else:
         raise HTTPException(400, "Only CSV format currently supported")
@@ -841,7 +843,7 @@ async def download_user_template(current_user: User = Depends(get_current_active
     return StreamingResponse(
         iter([output.getvalue()]),
         media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=template_users.csv"}
+        headers=attachment_headers("template_users.csv", fallback="template_users.csv")
     )
 
 @router.post("/bulk-upload")

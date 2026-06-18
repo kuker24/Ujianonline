@@ -15,7 +15,8 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.core.feature_flags import require_feature_enabled
+from app.core.export_utils import attachment_headers
+from app.core.feature_flags import HEAVY_EXPORT_DISABLED_MESSAGE, require_feature_enabled
 from app.database import get_db_read, get_db_write
 from app.models.user import User
 from app.models.exam import Exam
@@ -435,7 +436,7 @@ async def export_violations_dashboard(
         settings.heavy_exports_active,
         "heavy_export",
         status_code=503,
-        message="Ekspor berat sedang dinonaktifkan selama mode ujian/puncak.",
+        message=HEAVY_EXPORT_DISABLED_MESSAGE,
     )
     effective_from, effective_to = _coerce_violations_date_range(date_from, date_to)
     include_warning_only = not bool(counted_only)
@@ -464,15 +465,16 @@ async def export_violations_dashboard(
     from app.core.pdf_generator import REPORTLAB_AVAILABLE, generate_violations_report_pdf
 
     if not REPORTLAB_AVAILABLE:
-        raise HTTPException(status_code=503, detail="Ekspor PDF belum tersedia di server ini")
-    content = generate_violations_report_pdf(payload)
+        raise HTTPException(status_code=501, detail="Dependency PDF tidak tersedia")
+    try:
+        content = generate_violations_report_pdf(payload)
+    except Exception as exc:
+        logger.exception("Failed generating violations export PDF")
+        raise HTTPException(status_code=500, detail="PDF gagal dibuat") from exc
+
     media_type = "application/pdf"
     filename = _build_violations_export_filename()
-
-    headers = {
-        "Content-Disposition": f'attachment; filename="{filename}"',
-        "Cache-Control": "no-store",
-    }
+    headers = attachment_headers(filename, fallback="violations_report.pdf", cache_control="no-store")
     return Response(content=content, media_type=media_type, headers=headers)
 
 

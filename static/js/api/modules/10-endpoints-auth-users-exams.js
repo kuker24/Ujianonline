@@ -75,21 +75,14 @@
 
     async exportUsers(filters = {}, format = 'csv') {
         const endpoint = `/users/export?format=${encodeURIComponent(format)}`;
-        const config = {
-            method: 'POST',
-            headers: this.getHeaders(),
-            body: JSON.stringify(filters || {})
-        };
 
         try {
-            const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
+            const response = await this.requestRaw('POST', endpoint, {
+                data: filters || {},
+                timeoutMs: 120000
+            });
             if (!response.ok) {
-                let detail = 'Export failed';
-                try {
-                    const errorBody = await response.json();
-                    detail = errorBody.detail || errorBody.message || detail;
-                } catch (_) {}
-                throw new Error(detail);
+                throw new Error(await readApiErrorMessage(response, 'Export failed'));
             }
 
             const blob = await response.blob();
@@ -99,8 +92,8 @@
             a.download = `users_export_${new Date().toISOString().slice(0, 10)}.${format}`;
             document.body.appendChild(a);
             a.click();
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
+            setTimeout(() => window.URL.revokeObjectURL(url), 30000);
+            setTimeout(() => a.remove(), 0);
             return { success: true };
         } catch (error) {
             console.error('Export error:', error);
@@ -198,8 +191,7 @@
         });
 
         if (!response.ok) {
-            const err = await response.json();
-            throw new Error(err.detail || 'Upload failed');
+            throw new Error(await readApiErrorMessage(response, 'Upload failed'));
         }
         return response.json();
     }

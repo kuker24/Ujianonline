@@ -1684,23 +1684,13 @@
 
         async function downloadViolationsExport() {
             const params = getFiltersQueryParams();
-            const url = `${window.location.origin}/api/monitoring/violations/export?${params.toString()}`;
+            const endpoint = `/monitoring/violations/export?${params.toString()}`;
 
             try {
-                const response = await fetch(url, {
-                    method: 'GET',
-                    headers: api.getHeaders()
-                });
+                const response = await api.requestRaw('GET', endpoint, { timeoutMs: 120000 });
 
                 if (!response.ok) {
-                    let errorMessage = `HTTP ${response.status}`;
-                    try {
-                        const errorPayload = await response.json();
-                        errorMessage = errorPayload.detail || errorMessage;
-                    } catch (parseError) {
-                        errorMessage = response.statusText || errorMessage;
-                    }
-                    throw new Error(errorMessage);
+                    throw new Error(await readApiErrorMessage(response, `HTTP ${response.status}`));
                 }
 
                 const blob = await response.blob();
@@ -1714,10 +1704,10 @@
                 document.body.appendChild(link);
                 link.click();
                 link.remove();
-                window.URL.revokeObjectURL(objectUrl);
+                setTimeout(() => window.URL.revokeObjectURL(objectUrl), 30000);
                 showAlert('Export PDF berhasil dibuat.', 'success');
             } catch (error) {
-                const errorMessage = error instanceof Error ? error.message : String(error);
+                const errorMessage = extractApiErrorMessage(error, 'Terjadi kesalahan');
                 showAlert(`Gagal export PDF: ${errorMessage}`, 'danger');
             }
         }

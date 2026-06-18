@@ -20,7 +20,10 @@ from app.models.user import User
 from app.models.exam import Exam
 from app.models.question import Question
 from app.models.session import ExamSession, Answer
+from app.config import settings
 from app.core.analytics_helpers import build_local_day_windows, display_question_number
+from app.core.export_utils import attachment_headers, safe_ascii_filename
+from app.core.feature_flags import HEAVY_EXPORT_DISABLED_MESSAGE, require_feature_enabled
 from app.core.security import get_current_teacher
 from app.core.roles import (
     ROLE_DEVELOPER,
@@ -1121,6 +1124,13 @@ async def export_exam_assessment_docx(
     """
     Export Analisis Hasil Asesmen as DOCX using PAN/PAP templates.
     """
+    require_feature_enabled(
+        settings.heavy_exports_active,
+        "heavy_export",
+        status_code=503,
+        message=HEAVY_EXPORT_DISABLED_MESSAGE,
+    )
+
     from app.core.assessment_docx_generator import (
         AssessmentTemplateValidationError,
         DOCX_AVAILABLE,
@@ -1131,7 +1141,7 @@ async def export_exam_assessment_docx(
     if not DOCX_AVAILABLE:
         raise HTTPException(
             status_code=501,
-            detail="Export DOCX tidak tersedia. Install python-docx terlebih dahulu.",
+            detail="Dependency DOCX tidak tersedia",
         )
 
     payload = await _build_assessment_analysis_payload(
@@ -1146,25 +1156,22 @@ async def export_exam_assessment_docx(
     try:
         file_bytes = generate_assessment_docx(normalized_model, payload)
     except FileNotFoundError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        logger.exception("Assessment DOCX template missing")
+        raise HTTPException(status_code=500, detail="DOCX gagal dibuat") from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except AssessmentTemplateValidationError as exc:
         logger.exception("Assessment template fill validation failed")
-        raise HTTPException(
-            status_code=500,
-            detail="Template export asesmen belum terisi sempurna.",
-        ) from exc
+        raise HTTPException(status_code=500, detail="DOCX gagal dibuat") from exc
     except RuntimeError as exc:
-        raise HTTPException(status_code=501, detail=str(exc)) from exc
+        logger.exception("Assessment DOCX dependency/runtime error")
+        raise HTTPException(status_code=501, detail="Dependency DOCX tidak tersedia") from exc
     except Exception as exc:  # pragma: no cover - guarded runtime errors
         logger.exception("Failed generating assessment docx")
-        raise HTTPException(status_code=500, detail="Gagal membuat dokumen asesmen") from exc
+        raise HTTPException(status_code=500, detail="DOCX gagal dibuat") from exc
 
-    safe_title = re.sub(r"[^\w\s-]", "", str(payload["exam"]["title"])).strip()
-    safe_title = re.sub(r"\s+", "_", safe_title) or f"exam_{exam_id}"
-    safe_class = re.sub(r"[^\w\s-]", "", str(payload["class_name"])).strip()
-    safe_class = re.sub(r"\s+", "_", safe_class) or "kelas"
+    safe_title = safe_ascii_filename(str(payload["exam"]["title"]), fallback=f"exam_{exam_id}")
+    safe_class = safe_ascii_filename(str(payload["class_name"]), fallback="kelas")
     filename = (
         f"analisis_asesmen_{normalized_model}_{safe_title}_{safe_class}_"
         f"{datetime.now().strftime('%Y%m%d')}.docx"
@@ -1173,7 +1180,7 @@ async def export_exam_assessment_docx(
     return Response(
         content=file_bytes,
         media_type=DOCX_MIME_TYPE,
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers=attachment_headers(filename, fallback="analisis_asesmen.docx"),
     )
 
 
