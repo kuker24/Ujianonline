@@ -1218,13 +1218,13 @@
             };
             try {
                 const query = new URLSearchParams({ format: normalizedFormat });
-                const response = await fetch(`/api/exams/${currentExam.id}/participation-summary/export?${query.toString()}`, {
-                    method: 'GET',
-                    headers: api.getHeaders()
-                });
+                const response = await api.requestRaw(
+                    'GET',
+                    `/exams/${currentExam.id}/participation-summary/export?${query.toString()}`,
+                    { timeoutMs: 120000 }
+                );
                 if (!response.ok) {
-                    const errorData = await response.json().catch(() => ({}));
-                    throw new Error(errorData.detail || `HTTP ${response.status}`);
+                    throw new Error(await readApiErrorMessage(response, `HTTP ${response.status}`));
                 }
                 const blob = await response.blob();
                 const ext = extensionMap[normalizedFormat] || 'csv';
@@ -1233,7 +1233,7 @@
                 showAlert(`Export kehadiran ${normalizedFormat.toUpperCase()} berhasil didownload`, 'success');
             } catch (error) {
                 console.error('Export kehadiran gagal:', error);
-                showAlert(`Export kehadiran gagal: ${error.message}`, 'danger');
+                showAlert(`Export kehadiran gagal: ${extractApiErrorMessage(error, 'Terjadi kesalahan')}`, 'danger');
             }
         }
 
@@ -1409,20 +1409,20 @@
                     return;
                 }
                 try {
-                    const response = await fetch(`/api/exams/${currentExam.id}/results/pdf`, {
-                        method: 'GET',
-                        headers: api.getHeaders()
-                    });
+                    const response = await api.requestRaw(
+                        'GET',
+                        `/exams/${currentExam.id}/results/pdf`,
+                        { timeoutMs: 120000 }
+                    );
                     if (!response.ok) {
-                        const errorData = await response.json().catch(() => ({}));
-                        throw new Error(errorData.detail || `HTTP ${response.status}`);
+                        throw new Error(await readApiErrorMessage(response, `HTTP ${response.status}`));
                     }
                     const blob = await response.blob();
                     downloadBlob(blob, `${filename}.pdf`);
                     showAlert('PDF resmi berhasil didownload', 'success');
                 } catch (error) {
                     console.error('PDF export endpoint gagal:', error);
-                    showAlert(`Export PDF gagal: ${error.message}`, 'danger');
+                    showAlert(`Export PDF gagal: ${extractApiErrorMessage(error, 'Terjadi kesalahan')}`, 'danger');
                 }
             }
         }
@@ -1561,7 +1561,7 @@
             } catch (error) {
                 if (reservedPrintWindow && !reservedPrintWindow.closed) reservedPrintWindow.close();
                 console.error('Export error:', error);
-                showAlert('Gagal export: ' + error.message, 'danger');
+                showAlert('Gagal export: ' + extractApiErrorMessage(error, 'Terjadi kesalahan'), 'danger');
             }
         }
 
@@ -1860,9 +1860,9 @@
                     console.log('[DELETE] Reloading exam results...');
                     await loadResults(currentExam.id);
                 } else {
-                    const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
-                    console.error('[DELETE] Error response:', error);
-                    showAlert(`${error.detail || 'Gagal menghapus hasil'}`, 'danger');
+                    const errorMessage = await readApiErrorMessage(response, 'Gagal menghapus hasil');
+                    console.error('[DELETE] Error response:', errorMessage);
+                    showAlert(`${errorMessage}`, 'danger');
                 }
             } catch (error) {
                 console.error('[DELETE] Exception:', error);

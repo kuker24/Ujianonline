@@ -1940,14 +1940,10 @@
                 if (format === 'pdf') {
                     const query = new URLSearchParams();
                     if (selectedClass) query.append('class_name', selectedClass);
-                    const url = `/api/exams/${currentExamId}/analytics/pdf${query.toString() ? `?${query.toString()}` : ''}`;
-                    const response = await fetch(url, {
-                        method: 'GET',
-                        headers: api.getHeaders()
-                    });
+                    const endpoint = `/exams/${currentExamId}/analytics/pdf${query.toString() ? `?${query.toString()}` : ''}`;
+                    const response = await api.requestRaw('GET', endpoint, { timeoutMs: 120000 });
                     if (!response.ok) {
-                        const errorData = await response.json().catch(() => ({}));
-                        throw new Error(errorData.detail || `HTTP ${response.status}`);
+                        throw new Error(await readApiErrorMessage(response, `HTTP ${response.status}`));
                     }
                     const blob = await response.blob();
                     downloadBlob(blob, `${filenameBase}.pdf`);
@@ -1981,7 +1977,7 @@
                 }
             } catch (error) {
                 console.error('Export analytics error:', error);
-                notifyAlert(`Gagal export: ${error.message || error}`, 'danger');
+                notifyAlert(`Gagal export: ${extractApiErrorMessage(error, 'Terjadi kesalahan')}`, 'danger');
             }
         }
 
@@ -2039,13 +2035,7 @@
                 });
 
                 if (!response.ok) {
-                    const contentType = String(response.headers.get('content-type') || '').toLowerCase();
-                    if (contentType.includes('application/json')) {
-                        const errorData = await response.json().catch(() => ({}));
-                        throw new Error(errorData.detail || `HTTP ${response.status}`);
-                    }
-                    const errorText = await response.text().catch(() => '');
-                    throw new Error(errorText || `HTTP ${response.status}`);
+                    throw new Error(await readApiErrorMessage(response, `HTTP ${response.status}`));
                 }
 
                 const blob = await response.blob();
@@ -2061,7 +2051,7 @@
                 notifyAlert(`Export Analisis Asesmen ${normalizedModel.toUpperCase()} berhasil`, 'success');
             } catch (error) {
                 console.error('Export assessment error:', error);
-                notifyAlert(`Gagal export Analisis Asesmen: ${error.message || error}`, 'danger');
+                notifyAlert(`Gagal export Analisis Asesmen: ${extractApiErrorMessage(error, 'Terjadi kesalahan')}`, 'danger');
             }
         }
 

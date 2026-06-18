@@ -88,6 +88,80 @@ function apiDebug(...args) {
     }
 }
 
+function stringifyApiValue(value) {
+    if (value === null || value === undefined) return '';
+    if (typeof value === 'string') return value;
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+    try {
+        return JSON.stringify(value);
+    } catch (_) {
+        return String(value);
+    }
+}
+
+function formatValidationIssue(issue) {
+    if (!issue || typeof issue !== 'object') return stringifyApiValue(issue);
+    const location = Array.isArray(issue.loc) ? issue.loc.filter(Boolean).join('.') : '';
+    const message = issue.msg || issue.message || issue.error || stringifyApiValue(issue);
+    return location ? `${location}: ${message}` : String(message);
+}
+
+function extractApiErrorMessage(payload, fallback = 'Request failed') {
+    if (payload === null || payload === undefined) return fallback;
+    if (payload instanceof Error) return payload.message || fallback;
+    if (typeof payload === 'string') return payload || fallback;
+
+    if (Array.isArray(payload)) {
+        const messages = payload.map(formatValidationIssue).filter(Boolean);
+        return messages.join('; ') || fallback;
+    }
+
+    if (typeof payload === 'object') {
+        const detail = payload.detail;
+        if (typeof detail === 'string') return detail || fallback;
+        if (Array.isArray(detail)) {
+            const messages = detail.map(formatValidationIssue).filter(Boolean);
+            return messages.join('; ') || fallback;
+        }
+        if (detail && typeof detail === 'object') {
+            const nested = detail.message || detail.msg || detail.error || detail.description;
+            if (nested) return String(nested);
+            return stringifyApiValue(detail) || fallback;
+        }
+
+        const direct = payload.message || payload.msg || payload.error || payload.description;
+        if (direct) return String(direct);
+        return stringifyApiValue(payload) || fallback;
+    }
+
+    return stringifyApiValue(payload) || fallback;
+}
+
+async function readApiErrorMessage(response, fallback = null) {
+    const safeFallback = fallback || `HTTP ${response?.status || ''}`.trim() || 'Request failed';
+    if (!response) return safeFallback;
+
+    let text = '';
+    try {
+        text = await response.clone().text();
+    } catch (_) {
+        text = '';
+    }
+
+    if (text) {
+        try {
+            return extractApiErrorMessage(JSON.parse(text), safeFallback);
+        } catch (_) {
+            return text || response.statusText || safeFallback;
+        }
+    }
+
+    return response.statusText || safeFallback;
+}
+
+window.extractApiErrorMessage = extractApiErrorMessage;
+window.readApiErrorMessage = readApiErrorMessage;
+
 class ApiClient {
     // Retry configuration constants
     static MAX_RETRIES = 2;
@@ -336,10 +410,10 @@ class ApiClient {
                             return { success: true };
                         }
 
-                        const retryResult = await retryResponse.json();
+                        const retryResult = await retryResponse.json().catch(() => ({}));
 
                         if (!retryResponse.ok) {
-                            throw new Error(retryResult.detail || 'Request failed');
+                            throw new Error(extractApiErrorMessage(retryResult, 'Request failed'));
                         }
 
                         return retryResult;
@@ -379,19 +453,7 @@ class ApiClient {
                         payload: data,
                         error: result
                     });
-                    // Extract error message - handle various formats
-                    let errorMessage = 'Request failed';
-                    if (typeof result.detail === 'string') {
-                        errorMessage = result.detail;
-                    } else if (Array.isArray(result.detail)) {
-                        // FastAPI validation error format
-                        errorMessage = result.detail.map(e => e.msg || e.message || JSON.stringify(e)).join(', ');
-                    } else if (result.detail && typeof result.detail === 'object') {
-                        errorMessage = result.detail.message || result.detail.msg || JSON.stringify(result.detail);
-                    } else if (result.message) {
-                        errorMessage = result.message;
-                    }
-                    throw new Error(errorMessage);
+                    throw new Error(extractApiErrorMessage(result, 'Request failed'));
                 }
 
                 return result;
@@ -424,11 +486,15 @@ class ApiClient {
 
     async requestRaw(method, endpoint, options = {}) {
         const headers = { ...this.getHeaders(), ...(options.headers || {}) };
-        const config = { method, headers };
+        const normalizedMethod = String(method || 'GET').toUpperCase();
+        if (normalizedMethod === 'GET' && !options.data && !options.body) {
+            delete headers['Content-Type'];
+        }
+        const config = { method: normalizedMethod, headers };
 
-        if (options.data !== undefined && method !== 'GET') {
+        if (options.data !== undefined && normalizedMethod !== 'GET') {
             config.body = JSON.stringify(options.data);
-        } else if (options.body !== undefined && method !== 'GET') {
+        } else if (options.body !== undefined && normalizedMethod !== 'GET') {
             config.body = options.body;
             if (typeof FormData !== 'undefined' && options.body instanceof FormData) {
                 delete config.headers['Content-Type'];
