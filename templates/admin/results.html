@@ -462,31 +462,31 @@
 
             // Content
             dropdown.innerHTML = `
-                <a href="#" class="dropdown-item" onclick="exportResults('csv'); closeExportDropdownGlobal();">
+                <a href="#" class="dropdown-item" onclick="event.preventDefault(); exportResults('csv'); closeExportDropdownGlobal();">
                     <i class="fas fa-file-csv" style="color: #22c55e;"></i> Export CSV
                 </a>
-                <a href="#" class="dropdown-item" onclick="exportResults('excel'); closeExportDropdownGlobal();">
+                <a href="#" class="dropdown-item" onclick="event.preventDefault(); exportResults('excel'); closeExportDropdownGlobal();">
                     <i class="fas fa-file-excel" style="color: #10b981;"></i> Export Excel
                 </a>
-                <a href="#" class="dropdown-item" onclick="exportResults('pdf'); closeExportDropdownGlobal();">
+                <a href="#" class="dropdown-item" onclick="event.preventDefault(); exportResults('pdf'); closeExportDropdownGlobal();">
                     <i class="fas fa-file-pdf" style="color: #ef4444;"></i> Export PDF
                 </a>
                 <div style="border-top: 1px solid rgba(255, 255, 255, 0.1); margin: 0.5rem 0;"></div>
-                <a href="#" class="dropdown-item" onclick="exportSummary(); closeExportDropdownGlobal();">
+                <a href="#" class="dropdown-item" onclick="event.preventDefault(); exportSummary(); closeExportDropdownGlobal();">
                     <i class="fas fa-chart-pie" style="color: #8b5cf6;"></i> Statistik
                 </a>
-                <a href="#" class="dropdown-item" onclick="printResults(); closeExportDropdownGlobal();">
+                <a href="#" class="dropdown-item" onclick="event.preventDefault(); printResults(); closeExportDropdownGlobal();">
                     <i class="fas fa-print" style="color: #6366f1;"></i> Print
                 </a>
                 <div style="border-top: 1px solid rgba(255, 255, 255, 0.1); margin: 0.5rem 0;"></div>
                 <div style="padding: 0.25rem 1rem; font-size: 0.75rem; color: #64748b; font-weight: 600;">EXPORT SOAL</div>
-                <a href="#" class="dropdown-item" onclick="exportCurrentExamQuestions('pdf'); closeExportDropdownGlobal();">
+                <a href="#" class="dropdown-item" onclick="event.preventDefault(); exportCurrentExamQuestions('pdf'); closeExportDropdownGlobal();">
                     <i class="fas fa-file-pdf" style="color: #f97316;"></i> Soal PDF
                 </a>
-                <a href="#" class="dropdown-item" onclick="exportCurrentExamQuestions('docx'); closeExportDropdownGlobal();">
+                <a href="#" class="dropdown-item" onclick="event.preventDefault(); exportCurrentExamQuestions('docx'); closeExportDropdownGlobal();">
                     <i class="fas fa-file-word" style="color: #3b82f6;"></i> Soal DOCX
                 </a>
-                <a href="#" class="dropdown-item" onclick="exportCurrentExamQuestions('excel'); closeExportDropdownGlobal();">
+                <a href="#" class="dropdown-item" onclick="event.preventDefault(); exportCurrentExamQuestions('excel'); closeExportDropdownGlobal();">
                     <i class="fas fa-file-excel" style="color: #22c55e;"></i> Soal Excel
                 </a>
             `;
@@ -503,7 +503,7 @@
             const dropdown = document.getElementById('global-export-dropdown');
             const btn = document.getElementById('export-btn');
             // If internal call (e undefined) or click outside
-            if (dropdown && (!e || (!dropdown.contains(e.target) && !btn.contains(e.target)))) {
+            if (dropdown && (!e || (!dropdown.contains(e.target) && (!btn || !btn.contains(e.target))))) {
                 dropdown.remove();
                 document.removeEventListener('click', closeExportDropdownGlobal);
             }
@@ -1279,6 +1279,7 @@
                 let csv = '';
                 if (currentExam) {
                     csv += `Institusi,${toCsvCell(EXPORT_BRANDING.schoolName)}\n`;
+                    csv += `Sistem,${toCsvCell(EXPORT_BRANDING.reportSubtitle)}\n`;
                     csv += `Judul Ujian,${toCsvCell(currentExam.title)}\n`;
                     csv += `Guru Pelaksana,${toCsvCell(creatorName)}\n`;
                     csv += `KKM / Passing Score,${toCsvCell(currentExam?.passing_score || 70)}\n`;
@@ -1384,10 +1385,10 @@
                         if (i === 7) styleClass = 'score';
                         if (i === 9) styleClass = 'center';
                         if (i === 8) {
-                            if (v === 'Lulus') html += `<td class="lulus">${v}</td>`;
-                            else html += `<td class="tidak-lulus">${v}</td>`;
+                            if (v === 'Lulus') html += `<td class="lulus">${escapeHtml(v)}</td>`;
+                            else html += `<td class="tidak-lulus">${escapeHtml(v)}</td>`;
                         } else {
-                            html += `<td class="${styleClass}">${v}</td>`;
+                            html += `<td class="${styleClass}">${escapeHtml(v)}</td>`;
                         }
                     });
                     html += '</tr>';
@@ -1426,23 +1427,26 @@
             }
         }
 
-        function downloadBlob(blob, filename) {
-            const url = URL.createObjectURL(blob);
+        function triggerDownload(url, filename) {
             const anchor = document.createElement('a');
             anchor.href = url;
             anchor.download = filename;
+            anchor.rel = 'noopener';
+            anchor.style.display = 'none';
+            document.body.appendChild(anchor);
             anchor.click();
-            URL.revokeObjectURL(url);
+            setTimeout(() => anchor.remove(), 0);
+        }
+
+        function downloadBlob(blob, filename) {
+            const url = URL.createObjectURL(blob);
+            triggerDownload(url, filename);
+            setTimeout(() => URL.revokeObjectURL(url), 30000);
         }
 
         function downloadFile(content, filename, mimeType) {
             const blob = new Blob(['\ufeff' + content], { type: mimeType });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            a.click();
-            URL.revokeObjectURL(url);
+            downloadBlob(blob, filename);
         }
 
         function calculateStats() {
@@ -1526,11 +1530,17 @@
                 return;
             }
 
+            let reservedPrintWindow = null;
+            if (format === 'pdf') {
+                reservedPrintWindow = openQuestionPdfWindow();
+            }
+
             try {
                 showAlert('Sedang memuat soal...', 'info');
 
                 const questions = await api.getQuestions(currentExam.id);
                 if (!questions || questions.length === 0) {
+                    if (reservedPrintWindow && !reservedPrintWindow.closed) reservedPrintWindow.close();
                     showAlert('Tidak ada soal untuk diexport', 'warning');
                     return;
                 }
@@ -1538,7 +1548,7 @@
                 const logoDataUrl = await getExportLogoDataUrl();
                 switch (format) {
                     case 'pdf':
-                        exportQuestionsPDF(currentExam, questions, logoDataUrl);
+                        exportQuestionsPDF(currentExam, questions, logoDataUrl, reservedPrintWindow);
                         break;
                     case 'docx':
                         exportQuestionsDOCX(currentExam, questions, logoDataUrl);
@@ -1549,6 +1559,7 @@
                 }
 
             } catch (error) {
+                if (reservedPrintWindow && !reservedPrintWindow.closed) reservedPrintWindow.close();
                 console.error('Export error:', error);
                 showAlert('Gagal export: ' + error.message, 'danger');
             }
@@ -1701,9 +1712,27 @@
             return html;
         }
 
-        function exportQuestionsPDF(exam, questions, logoDataUrl) {
-            const content = buildQuestionExportHTML(exam, questions, logoDataUrl);
+        function openQuestionPdfWindow() {
             const printWindow = window.open('', '_blank');
+            if (!printWindow) return null;
+            printWindow.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Menyiapkan PDF Soal</title></head><body style="font-family:Arial,sans-serif;padding:2rem;color:#0f172a;"><h2>SIAB1</h2><p>Menyiapkan dokumen soal...</p></body></html>`);
+            printWindow.document.close();
+            return printWindow;
+        }
+
+        function exportQuestionsPDF(exam, questions, logoDataUrl, reservedPrintWindow = null) {
+            const content = buildQuestionExportHTML(exam, questions, logoDataUrl);
+            const printWindow = reservedPrintWindow || window.open('', '_blank');
+            if (!printWindow) {
+                downloadFile(
+                    content,
+                    `soal_dan_kunci_${slugifyFilename(exam.title)}_${new Date().toISOString().slice(0, 10)}.html`,
+                    'text/html;charset=utf-8;'
+                );
+                showAlert('Popup PDF diblokir browser. File HTML soal diunduh; buka file lalu Print / Save as PDF.', 'warning');
+                return;
+            }
+            printWindow.document.open();
             printWindow.document.write(content);
             printWindow.document.close();
             printWindow.onload = function () { printWindow.print(); };
@@ -1712,15 +1741,11 @@
 
         function exportQuestionsDOCX(exam, questions, logoDataUrl) {
             const content = buildQuestionExportHTML(exam, questions, logoDataUrl);
-            const blob = new Blob(['\ufeff' + content], { type: 'application/msword' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `soal_dan_kunci_${slugifyFilename(exam.title)}_${new Date().toISOString().slice(0, 10)}.doc`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            downloadFile(
+                content,
+                `soal_dan_kunci_${slugifyFilename(exam.title)}_${new Date().toISOString().slice(0, 10)}.doc`,
+                'application/msword'
+            );
             showAlert('Dokumen Word soal + kunci berhasil didownload', 'success');
         }
 
@@ -1768,15 +1793,11 @@
             });
 
             html += `</table></body></html>`;
-            const blob = new Blob(['\ufeff' + html], { type: 'application/vnd.ms-excel' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `soal_dan_kunci_${slugifyFilename(exam.title)}_${new Date().toISOString().slice(0, 10)}.xls`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            downloadFile(
+                html,
+                `soal_dan_kunci_${slugifyFilename(exam.title)}_${new Date().toISOString().slice(0, 10)}.xls`,
+                'application/vnd.ms-excel'
+            );
             showAlert('Excel soal + kunci berhasil didownload', 'success');
         }
 

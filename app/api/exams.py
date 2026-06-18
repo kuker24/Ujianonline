@@ -100,6 +100,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/exams", tags=["Exams"])
 public_router = APIRouter(prefix="/api/exams", tags=["Exams"])
 
+EXPORT_SYSTEM_NAME = "SIAB1 — Sistem Informasi Asesmen Berintegritas"
+
 # Admin Audit Logging Helper
 async def log_admin_action(
     db: AsyncSession,
@@ -1129,6 +1131,7 @@ async def export_exam_participation_summary(
 
     target_with_session_ids = target_ids & set(sessions_by_user.keys())
     summary_rows = [
+        ("Sistem", EXPORT_SYSTEM_NAME),
         ("Exam ID", exam_id),
         ("Nama Ujian", exam["title"]),
         ("Mata Pelajaran", exam["subject"] or "-"),
@@ -1260,7 +1263,8 @@ async def export_exam_participation_summary(
             th, td {{ border: 1px solid #000; padding: 6px; vertical-align: top; }}
         </style></head>
         <body>
-            <h2>Laporan Kehadiran Ujian</h2>
+            <h2>Laporan Kehadiran Ujian SIAB1</h2>
+            <p><strong>{html.escape(EXPORT_SYSTEM_NAME)}</strong></p>
             <table>{summary_html}</table>
             <table><thead><tr>{header_html}</tr></thead><tbody>{body_html}</tbody></table>
         </body></html>
@@ -1283,7 +1287,11 @@ async def export_exam_participation_summary(
         buffer = io.BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), rightMargin=18, leftMargin=18, topMargin=18, bottomMargin=18)
         styles = getSampleStyleSheet()
-        story = [Paragraph("Laporan Kehadiran Ujian", styles["Title"]), Spacer(1, 8)]
+        story = [
+            Paragraph("Laporan Kehadiran Ujian SIAB1", styles["Title"]),
+            Paragraph(EXPORT_SYSTEM_NAME, styles["Heading2"]),
+            Spacer(1, 8),
+        ]
         summary_table = Table([[str(label), str(value)] for label, value in summary_rows], colWidths=[150, 420])
         summary_table.setStyle(TableStyle([
             ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
@@ -1329,7 +1337,8 @@ async def export_exam_participation_summary(
         section.page_width, section.page_height = section.page_height, section.page_width
         section.left_margin = Inches(0.45)
         section.right_margin = Inches(0.45)
-        document.add_heading("Laporan Kehadiran Ujian", level=1)
+        document.add_heading("Laporan Kehadiran Ujian SIAB1", level=1)
+        document.add_paragraph(EXPORT_SYSTEM_NAME)
         for label, value in summary_rows:
             paragraph = document.add_paragraph()
             paragraph.add_run(f"{label}: ").bold = True
