@@ -23,7 +23,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 BASE_COMMIT = "67fca39f4b3ec9509381f68917caaa4477d19ca9"
 THEME_HREF = "/static/css/siab1-theme.css"
 BRANDING_HREF = "/static/css/siab1-branding.css"
-RELEASE_TOKEN = "20260617-siab1-form-controls1"
+RELEASE_TOKEN = "20260619-export-errors1"
 CONTROLLED_RUNTIME_ASSETS = (
     "/static/css/admin.css",
     "/static/css/student.css",
